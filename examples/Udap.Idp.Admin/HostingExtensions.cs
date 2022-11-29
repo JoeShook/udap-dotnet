@@ -7,9 +7,11 @@
 */
 
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.DependencyInjection;
 using MudBlazor.Services;
 using Polly;
 using Serilog;
+using System.Security.Cryptography.X509Certificates;
 using Udap.Idp.Admin.Data;
 using Udap.Idp.Admin.Services;
 using Udap.Idp.Admin.Services.DataBase;
@@ -55,6 +57,21 @@ public static class HostingExtensions
         {
             client.BaseAddress = new Uri(Environment.GetEnvironmentVariable("ASPNETCORE_URLS").Split(';').First());
         });
+
+        
+        httpClientBuilder.ConfigurePrimaryHttpMessageHandler(x => new HttpClientHandler()
+        {
+            ServerCertificateCustomValidationCallback = (message, cert, chain, _) =>
+            {
+                //chain.ChainPolicy.TrustMode = X509ChainTrustMode.CustomRootTrust;
+                // chain.ChainPolicy.CustomTrustStore.Add(/* your custom root, add as many roots as you need */);
+                // chain.ChainPolicy.ExtraStore.Add(/* add any additional intermediate certs */);
+                // any additional chain building settings you want
+                var success = chain.Build(cert);
+                return success;
+            }
+        });
+
         if (! builder.Environment.IsDevelopment())
         {
             httpClientBuilder.AddTransientHttpErrorPolicy(builder => builder.WaitAndRetryAsync(new[]

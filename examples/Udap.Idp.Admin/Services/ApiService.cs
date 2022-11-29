@@ -7,18 +7,18 @@ namespace Udap.Idp.Admin.Services
 {
     public class ApiService
     {
-        public HttpClient HttpClient;
-        IMapper _mapper;
+        private readonly HttpClient _httpClient;
+        private readonly IMapper _mapper;
 
         public ApiService(HttpClient client, IMapper mapper)
         {
-            HttpClient = client;
+            _httpClient = client;
             _mapper = mapper;
         }
 
         public async Task<ICollection<Community>> GetCommunities()
         {
-            var response = await HttpClient.GetFromJsonAsync<ICollection<Common.Models.Community>>("api/community");
+            var response = await _httpClient.GetFromJsonAsync<ICollection<Common.Models.Community>>("api/community");
 
             var communities = _mapper.Map<ICollection<Community>>(response);
 
@@ -30,7 +30,7 @@ namespace Udap.Idp.Admin.Services
             var anchor = _mapper.Map<Common.Models.Anchor>(anchorView);
             
 
-            var response = await HttpClient.PostAsJsonAsync("api/anchor", anchor).ConfigureAwait(false);
+            var response = await _httpClient.PostAsJsonAsync("api/anchor", anchor).ConfigureAwait(false);
             
             if (response.IsSuccessStatusCode)
             {
@@ -47,7 +47,7 @@ namespace Udap.Idp.Admin.Services
 
         public async Task<bool> Delete(long anchorId, CancellationToken token = default)
         {
-            var response = await HttpClient.DeleteAsync($"/api/anchor/{anchorId}");
+            var response = await _httpClient.DeleteAsync($"/api/anchor/{anchorId}");
             
             if (response.IsSuccessStatusCode)
             {
