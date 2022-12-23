@@ -82,6 +82,7 @@ public class UdapDbContext<TContext> : DbContext, IUdapDbAdminContext, IUdapDbCo
         }
         
         modelBuilder.ConfigureUdapContext(UdapStoreOptions);
+        modelBuilder.UseIdentityAlwaysColumns();
 
         //
         // Need these mappings to correct things like the table names

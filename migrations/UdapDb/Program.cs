@@ -13,7 +13,7 @@ builder.Services.AddSingleton(new UdapConfigurationStoreOptions());
 builder.Services.AddUdapDbContext(options =>
     {
         options.UdapDbContext = b =>
-            b.UseSqlite(connectionString, dbOpts => dbOpts.MigrationsAssembly(typeof(Program).Assembly.FullName));
+            b.UseNpgsql(connectionString, dbOpts => dbOpts.MigrationsAssembly(typeof(Program).Assembly.FullName));
     });
 
 var app = builder.Build();

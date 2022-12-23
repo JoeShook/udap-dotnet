@@ -1,0 +1,43 @@
+version: '3.4'
+
+services:
+  udap.idp:
+    image: udapidp
+    build:
+      context: .
+      dockerfile: examples/Udap.Idp/Dockerfile
+
+  udap.idp.admin:
+    image: udapidpadmin
+    build:
+      context: .
+      dockerfile: examples/Udap.Idp.Admin/Dockerfile
+
+  postgresql_database:
+    container_name: postgres_udap_container
+    image: postgres:latest
+    environment:
+      - POSTGRES_USER=admin
+      - POSTGRES_PASSWORD=admin1234
+      - POSTGRES_DB=Udap.Idp.db
+    ports:
+      - "5432:5432"
+    restart: "no"
+    volumes:
+      - database-data:/var/lib/postgresql/data/
+     
+  pgadmin:
+    image: dpage/pgadmin4
+    container_name: pgadmin4_udap_container
+    environment:
+      - PGADMIN_DEFAULT_EMAIL=pgadmin4@pgadmin.org
+      - PGADMIN_DEFAULT_PASSWORD=admin1234
+    ports:
+      - "5050:80"
+    restart: "no"
+    volumes:
+      - pgadmin:/root/.pgadmin
+ 
+volumes:
+  database-data:
+  pgadmin:

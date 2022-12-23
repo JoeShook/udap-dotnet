@@ -3,8 +3,7 @@
 FROM mcr.microsoft.com/dotnet/aspnet:7.0 AS base
 RUN mkdir -p /temp/_UDAP
 WORKDIR /app
-EXPOSE 80
-EXPOSE 443
+
 
 FROM mcr.microsoft.com/dotnet/sdk:7.0 AS build
 
@@ -17,7 +16,7 @@ COPY ["Udap.Common/Udap.Common.csproj", "Udap.Common/"]
 COPY ["Udap.Metadata.Server/Udap.Metadata.Server.csproj", "Udap.Metadata.Server""]
 COPY [".docker/udap-sandbox-surescripts.p12", ".docker/udap-sandbox-surescripts.p12"]
 RUN dotnet restore -f  "examples/FhirLabsApi/FhirLabsApi.csproj"
-COPY . .
+
 WORKDIR "/src/examples/FhirLabsApi"
 RUN dotnet build "FhirLabsApi.csproj" -c Release -f  -o /app/build
 
@@ -27,5 +26,5 @@ RUN dotnet publish "FhirLabsApi.csproj" -c Release -f -o /app/publish /p:UseAppH
 FROM base AS final
 WORKDIR /app
 COPY --from=publish /app/publish .
-
+ENV ASPNETCORE_URLS=http://*:${PORT}
 ENTRYPOINT ["dotnet", "FhirLabsApi.dll"]

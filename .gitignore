@@ -215,3 +215,4 @@ _tests/Udap.PKI.Generator/Resources/ProjectDirectory.txt
 NuGet.Config
 *.db
 .tye/process_store
+examples/FhirLabsApi/.tye/process_store

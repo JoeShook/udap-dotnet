@@ -32,9 +32,6 @@
 
   <ItemGroup>
     <!-- SureFhir Community -->
-    <None Include="../../_tests/Udap.PKI.Generator/certstores/Kestrel/FhirLabs/fhirlabs.net.pfx" Link="fhirlabs.net.pfx">
-      <CopyToOutputDirectory>Always</CopyToOutputDirectory>
-    </None>
     <None Include="../../_tests/Udap.PKI.Generator/certstores/surefhirlabs_community/anchors/SureFhirLabs_Anchor.cer" Link="CertStore/anchors/SureFhirLabs_Anchor.cer">
       <CopyToOutputDirectory>Always</CopyToOutputDirectory>
     </None>

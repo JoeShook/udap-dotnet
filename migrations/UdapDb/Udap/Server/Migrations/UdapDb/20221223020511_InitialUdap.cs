@@ -1,5 +1,6 @@
 ﻿using System;
 using Microsoft.EntityFrameworkCore.Migrations;
+using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 
 #nullable disable
 
@@ -15,11 +16,11 @@ namespace Udap.Server.Migrations.UdapDb
                 name: "UdapCommunities",
                 columns: table => new
                 {
-                    Id = table.Column<long>(type: "INTEGER", nullable: false)
-                        .Annotation("Sqlite:Autoincrement", true),
-                    Name = table.Column<string>(type: "TEXT", maxLength: 200, nullable: false),
-                    Enabled = table.Column<bool>(type: "INTEGER", nullable: false),
-                    Default = table.Column<bool>(type: "INTEGER", nullable: false)
+                    Id = table.Column<int>(type: "integer", nullable: false)
+                        .Annotation("Npgsql:ValueGenerationStrategy", NpgsqlValueGenerationStrategy.IdentityAlwaysColumn),
+                    Name = table.Column<string>(type: "character varying(200)", maxLength: 200, nullable: false),
+                    Enabled = table.Column<int>(type: "integer", nullable: false),
+                    Default = table.Column<int>(type: "integer", nullable: false)
                 },
                 constraints: table =>
                 {
@@ -30,14 +31,14 @@ namespace Udap.Server.Migrations.UdapDb
                 name: "UdapRootCertificates",
                 columns: table => new
                 {
-                    Id = table.Column<long>(type: "INTEGER", nullable: false)
-                        .Annotation("Sqlite:Autoincrement", true),
-                    Enabled = table.Column<bool>(type: "INTEGER", nullable: false),
-                    Name = table.Column<string>(type: "TEXT", nullable: false),
-                    X509Certificate = table.Column<string>(type: "TEXT", nullable: false),
-                    Thumbprint = table.Column<string>(type: "TEXT", nullable: false),
-                    BeginDate = table.Column<DateTime>(type: "TEXT", nullable: false),
-                    EndDate = table.Column<DateTime>(type: "TEXT", nullable: false)
+                    Id = table.Column<int>(type: "integer", nullable: false)
+                        .Annotation("Npgsql:ValueGenerationStrategy", NpgsqlValueGenerationStrategy.IdentityAlwaysColumn),
+                    Enabled = table.Column<bool>(type: "boolean", nullable: false),
+                    Name = table.Column<string>(type: "text", nullable: false),
+                    X509Certificate = table.Column<string>(type: "text", nullable: false),
+                    Thumbprint = table.Column<string>(type: "text", nullable: false),
+                    BeginDate = table.Column<DateTime>(type: "timestamp with time zone", nullable: false),
+                    EndDate = table.Column<DateTime>(type: "timestamp with time zone", nullable: false)
                 },
                 constraints: table =>
                 {
@@ -48,15 +49,15 @@ namespace Udap.Server.Migrations.UdapDb
                 name: "UdapAnchors",
                 columns: table => new
                 {
-                    Id = table.Column<long>(type: "INTEGER", nullable: false)
-                        .Annotation("Sqlite:Autoincrement", true),
-                    Enabled = table.Column<bool>(type: "INTEGER", nullable: false),
-                    Name = table.Column<string>(type: "TEXT", nullable: false),
-                    X509Certificate = table.Column<string>(type: "TEXT", nullable: false),
-                    Thumbprint = table.Column<string>(type: "TEXT", nullable: false),
-                    BeginDate = table.Column<DateTime>(type: "TEXT", nullable: false),
-                    EndDate = table.Column<DateTime>(type: "TEXT", nullable: false),
-                    CommunityId = table.Column<long>(type: "INTEGER", nullable: false)
+                    Id = table.Column<int>(type: "integer", nullable: false)
+                        .Annotation("Npgsql:ValueGenerationStrategy", NpgsqlValueGenerationStrategy.IdentityAlwaysColumn),
+                    Enabled = table.Column<bool>(type: "boolean", nullable: false),
+                    Name = table.Column<string>(type: "text", nullable: false),
+                    X509Certificate = table.Column<string>(type: "text", nullable: false),
+                    Thumbprint = table.Column<string>(type: "text", nullable: false),
+                    BeginDate = table.Column<DateTime>(type: "timestamp with time zone", nullable: false),
+                    EndDate = table.Column<DateTime>(type: "timestamp with time zone", nullable: false),
+                    CommunityId = table.Column<int>(type: "integer", nullable: false)
                 },
                 constraints: table =>
                 {
@@ -73,10 +74,10 @@ namespace Udap.Server.Migrations.UdapDb
                 name: "UdapCertifications",
                 columns: table => new
                 {
-                    Id = table.Column<long>(type: "INTEGER", nullable: false)
-                        .Annotation("Sqlite:Autoincrement", true),
-                    Name = table.Column<string>(type: "TEXT", maxLength: 200, nullable: false),
-                    CommunityId = table.Column<long>(type: "INTEGER", nullable: true)
+                    Id = table.Column<int>(type: "integer", nullable: false)
+                        .Annotation("Npgsql:ValueGenerationStrategy", NpgsqlValueGenerationStrategy.IdentityAlwaysColumn),
+                    Name = table.Column<string>(type: "character varying(200)", maxLength: 200, nullable: false),
+                    CommunityId = table.Column<int>(type: "integer", nullable: true)
                 },
                 constraints: table =>
                 {
@@ -92,8 +93,8 @@ namespace Udap.Server.Migrations.UdapDb
                 name: "UdapAnchorCertification",
                 columns: table => new
                 {
-                    AnchorId = table.Column<long>(type: "INTEGER", nullable: false),
-                    CertificationId = table.Column<long>(type: "INTEGER", nullable: false)
+                    AnchorId = table.Column<int>(type: "integer", nullable: false),
+                    CertificationId = table.Column<int>(type: "integer", nullable: false)
                 },
                 constraints: table =>
                 {
@@ -116,8 +117,8 @@ namespace Udap.Server.Migrations.UdapDb
                 name: "UdapCommunityCertification",
                 columns: table => new
                 {
-                    CommunityId = table.Column<long>(type: "INTEGER", nullable: false),
-                    CertificationId = table.Column<long>(type: "INTEGER", nullable: false)
+                    CommunityId = table.Column<int>(type: "integer", nullable: false),
+                    CertificationId = table.Column<int>(type: "integer", nullable: false)
                 },
                 constraints: table =>
                 {

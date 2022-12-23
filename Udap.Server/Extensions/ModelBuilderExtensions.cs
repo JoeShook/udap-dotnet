@@ -58,7 +58,11 @@ namespace Udap.Server.Extensions
             modelBuilder.Entity<Community>(community =>
             {
                 community.ToTable(storeOptions.Community);
+
                 community.HasKey(x => x.Id);
+                community.Property(a => a.Id)
+                    .UseIdentityAlwaysColumn();
+                    
                 community.Property(x => x.Name).HasMaxLength(200);
 
                 community.HasMany(c => c.CommunityCertifications)
@@ -67,7 +71,7 @@ namespace Udap.Server.Extensions
                     .HasForeignKey(a => a.CommunityId)
                     .HasConstraintName("FK_CommunityCertification_Community");
             });
-            
+
             modelBuilder.Entity<Certification>(certification =>
             {
                 certification.ToTable(storeOptions.Certification);

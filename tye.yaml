@@ -29,7 +29,7 @@ services:
   bindings:
   - protocol: https
     name: https
-    host: fhirlabs.net
+    # host: fhirlabs.net
     port: 7016
     routes: 
      - /fhir/r4/.well-known/udap
@@ -50,4 +50,11 @@ services:
     name: https
     port: 7087
 
-
+- name: postgres
+  image:  postgres
+  env:
+  - name: POSTGRES_PASSWORD
+    value: "pass@word1"
+  bindings:
+  - port: 5432
+    connectionString: Server=${host};Port=${port};User Id=postgres;Password=${env:POSTGRES_PASSWORD};

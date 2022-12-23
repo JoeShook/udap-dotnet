@@ -11,13 +11,13 @@ namespace Udap.Server.Entities;
 
 public class Community
 {
-    public long Id { get; set; }
+    public int Id { get; set; }
 
     public string Name { get; set; }
 
-    public bool Enabled { get; set; }
+    public int Enabled { get; set; }
 
-    public bool Default { get; set; }
+    public int Default { get; set; }
 
     /// <summary>
     /// Generally a community has one Anchor.

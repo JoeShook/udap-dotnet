@@ -5,8 +5,10 @@
     <ImplicitUsings>enable</ImplicitUsings>
     <UserSecretsId>e17eb5d1-fcd6-4149-b420-26b7e7d50e28</UserSecretsId>
     <DockerDefaultTargetOS>Linux</DockerDefaultTargetOS>
+    <!-- <DockerfileContext>..\..</DockerfileContext> -->
+    <DockerfileRunArguments>-p "5002:8080" </DockerfileRunArguments>
     <DockerfileContext>..\..</DockerfileContext>
-    <DockerfileRunArguments>-p "5002:5002" </DockerfileRunArguments>
+    <DockerComposeProjectPath>..\..\docker-compose.dcproj</DockerComposeProjectPath>
   </PropertyGroup>
   
   <ItemGroup>
@@ -28,10 +30,14 @@
     <PackageReference Include="OpenTelemetry.Instrumentation.SqlClient" Version="1.0.0-rc9.9" />
     <PackageReference Include="Serilog.AspNetCore" Version="6.0.1" />
   </ItemGroup>
-  
-  <ItemGroup>
-    <ProjectReference Include="../../Udap.Server/Udap.Server.csproj" />
+
+  <ItemGroup Condition="true">
+    <PackageReference Include="Udap.Server" Version="0.0.3-preview*" />
   </ItemGroup>
+
+  <!-- <ItemGroup Condition="false"> -->
+  <!--   <ProjectReference Include="../../Udap.Server/Udap.Server.csproj" /> -->
+  <!-- </ItemGroup> -->
   
   <ItemGroup>
     <None Update="securedcontrols.net.pfx">

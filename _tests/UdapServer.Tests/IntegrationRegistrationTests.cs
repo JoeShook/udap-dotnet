@@ -145,8 +145,8 @@ namespace UdapServer.Tests
         private Task SeedData(UdapDbContext context)
         {
             var community = new Community { Name = "http://localhost" };
-            community.Enabled = true;
-            community.Default = true;
+            community.Enabled = 1;
+            community.Default = 1;
             context.Communities.Add(community);
             
             context.Anchors.Add(new Anchor

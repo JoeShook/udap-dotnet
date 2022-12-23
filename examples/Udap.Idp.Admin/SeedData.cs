@@ -45,20 +45,23 @@ public static class SeedData
 
         services.AddOperationalDbContext(options =>
         {
-            options.ConfigureDbContext = db => db.UseSqlite(connectionString,
-                sql => sql.MigrationsAssembly(typeof(SeedData).Assembly.FullName));
+            options.ConfigureDbContext = db => db.UseNpgsql(connectionString,
+                sql => sql.MigrationsAssembly(typeof(SeedData).Assembly.FullName))
+                .EnableSensitiveDataLogging();
         });
         services.AddConfigurationDbContext(options =>
         {
-            options.ConfigureDbContext = db => db.UseSqlite(connectionString,
-                sql => sql.MigrationsAssembly(typeof(SeedData).Assembly.FullName));
+            options.ConfigureDbContext = db => db.UseNpgsql(connectionString,
+                sql => sql.MigrationsAssembly(typeof(SeedData).Assembly.FullName))
+                .EnableSensitiveDataLogging();
         });
 
         services.AddScoped<IUdapClientRegistrationStore, UdapClientRegistrationStore>();
         services.AddUdapDbContext(options =>
         {
-            options.UdapDbContext = db => db.UseSqlite(connectionString,
-                sql => sql.MigrationsAssembly(typeof(UdapDiscoveryEndpoint).Assembly.FullName));
+            options.UdapDbContext = db => db.UseNpgsql(connectionString,
+                sql => sql.MigrationsAssembly(typeof(UdapDiscoveryEndpoint).Assembly.FullName))
+                .EnableSensitiveDataLogging();
         });
 
         using var serviceProvider = services.BuildServiceProvider();
@@ -77,8 +80,8 @@ public static class SeedData
         if (!udapContext.Communities.Any(c => c.Name == "http://localhost"))
         {
             var community = new Community { Name = "http://localhost" };
-            community.Enabled = true;
-            community.Default = false;
+            community.Enabled = 1;
+            community.Default = 0;
             udapContext.Communities.Add(community);
             udapContext.SaveChanges();
         }
@@ -86,8 +89,8 @@ public static class SeedData
         if (!udapContext.Communities.Any(c => c.Name == "udap://surefhir.labs"))
         {
             var community = new Community { Name = "udap://surefhir.labs" };
-            community.Enabled = true;
-            community.Default = true;
+            community.Enabled = 1;
+            community.Default = 1;
             udapContext.Communities.Add(community);
             udapContext.SaveChanges();
         }
@@ -102,8 +105,8 @@ public static class SeedData
 
             udapContext.RootCertificates.Add(new RootCertificate
             {
-                BeginDate = rootCert.NotBefore,
-                EndDate = rootCert.NotAfter,
+                BeginDate = rootCert.NotBefore.ToUniversalTime(),
+                EndDate = rootCert.NotAfter.ToUniversalTime(),
                 Name = rootCert.Subject,
                 X509Certificate = rootCert.ToPemFormat(),
                 Thumbprint = rootCert.Thumbprint,
@@ -122,8 +125,8 @@ public static class SeedData
         
             udapContext.Anchors.Add(new Anchor
             {
-                BeginDate = anchorLocalhostCert.NotBefore,
-                EndDate = anchorLocalhostCert.NotAfter,
+                BeginDate = anchorLocalhostCert.NotBefore.ToUniversalTime(),
+                EndDate = anchorLocalhostCert.NotAfter.ToUniversalTime(),
                 Name = anchorLocalhostCert.Subject,
                 Community = community,
                 X509Certificate = anchorLocalhostCert.ToPemFormat(),
@@ -144,8 +147,8 @@ public static class SeedData
         
             udapContext.Anchors.Add(new Anchor
             {
-                BeginDate = sureFhirLabsAnchor.NotBefore,
-                EndDate = sureFhirLabsAnchor.NotAfter,
+                BeginDate = sureFhirLabsAnchor.NotBefore.ToUniversalTime(),
+                EndDate = sureFhirLabsAnchor.NotAfter.ToUniversalTime(),
                 Name = sureFhirLabsAnchor.Subject,
                 Community = commnity,
                 X509Certificate = sureFhirLabsAnchor.ToPemFormat(),

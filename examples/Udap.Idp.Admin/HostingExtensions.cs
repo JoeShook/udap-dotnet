@@ -42,7 +42,7 @@ public static class HostingExtensions
         
         builder.Services.AddUdapDbContext<UdapDbContext>(options =>
         {
-            options.UdapDbContext = b => b.UseSqlite(connectionString)
+            options.UdapDbContext = b => b.UseNpgsql(connectionString)
                 .LogTo(Console.WriteLine, LogLevel.Information);
         });
 

@@ -31,10 +31,10 @@ internal static class HostingExtensions
 {
     public static WebApplication ConfigureServices(this WebApplicationBuilder builder)
     {
-        if (! int.TryParse(Environment.GetEnvironmentVariable("ASPNETCORE_HTTPS_PORT"), out int sslPort))
-        {
-            sslPort = 5002;
-        }
+        // if (! int.TryParse(Environment.GetEnvironmentVariable("ASPNETCORE_HTTPS_PORT"), out int sslPort))
+        // {
+        //     sslPort = 5002;
+        // }
 
         //
         // Running localhost:5002 when UseKestrel confiratio below is commented

@@ -76,8 +76,8 @@ public static class SeedData
         if (!udapContext.Communities.Any(c => c.Name == "http://localhost"))
         {
             var community = new Community { Name = "http://localhost" };
-            community.Enabled = true;
-            community.Default = true;
+            community.Enabled = 1;
+            community.Default = 1;
             udapContext.Communities.Add(community);
             udapContext.SaveChanges();
         }
@@ -85,7 +85,7 @@ public static class SeedData
         if (!udapContext.Communities.Any(c => c.Name == "udap://surefhir.labs"))
         {
             var community = new Community { Name = "udap://surefhir.labs" };
-            community.Enabled = true;
+            community.Enabled = 1;
             udapContext.Communities.Add(community);
             udapContext.SaveChanges();
         }
