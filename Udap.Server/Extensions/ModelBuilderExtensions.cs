@@ -29,6 +29,28 @@ namespace Udap.Server.Extensions
             if (!string.IsNullOrWhiteSpace(storeOptions.DefaultSchema))
                 modelBuilder.HasDefaultSchema(storeOptions.DefaultSchema);
 
+            modelBuilder.Entity<UdapClientSecrets>(udapClientSecrets =>
+            {
+                udapClientSecrets.ToTable(storeOptions.UdapClientSecrets);
+                udapClientSecrets.HasKey(s => s.Id);
+
+                udapClientSecrets.HasOne(s => s.Client)
+                    .WithMany(c => c.UdapClientSecrets)
+                    .IsRequired()
+                    .HasForeignKey(s => s.ClientId)
+                    .HasConstraintName("FK_UdapClientSecrets_Clients");
+            });
+
+            modelBuilder.Entity<UdapClient>(client =>
+            {
+                client.HasMany(x => x.UdapClientSecrets)
+                    .WithOne(x => x.Client)
+                    .HasForeignKey(x => x.ClientId)
+                    .IsRequired()
+                    .OnDelete(DeleteBehavior.Cascade);
+            });
+
+
             modelBuilder.Entity<Anchor>(anchor =>
             {
                 anchor.ToTable(storeOptions.Anchor);

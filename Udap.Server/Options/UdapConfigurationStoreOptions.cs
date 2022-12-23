@@ -71,5 +71,7 @@ namespace Udap.Server.Options
         /// The client.
         /// </value>
         public TableConfiguration CommunityCertificationAssociate { get; set; } = new TableConfiguration("UdapCommunityCertification");
+
+        public TableConfiguration UdapClientSecrets { get; set; } = new TableConfiguration("UdapClientSecrets");
     }
 }

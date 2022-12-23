@@ -22,6 +22,12 @@ public static class Tracing
         TraceNames.Validation,
         ServiceVersion);
 
+    /// <summary>
+    /// Store ActivitySource
+    /// </summary>
+    public static ActivitySource StoreActivitySource { get; } = new(
+        TraceNames.Store,
+        ServiceVersion);
 
     /// <summary>
     /// Service version
@@ -40,5 +46,16 @@ public static class Tracing
         /// Service name for detailed validation traces
         /// </summary>
         public static string Validation => Basic + ".Validation";
+
+        /// <summary>
+        /// Service name for store traces
+        /// </summary>
+        public static string Store => Basic + ".Stores";
+
+    }
+
+    public static class Properties
+    {
+        public const string ClientId = "client_id";
     }
 }

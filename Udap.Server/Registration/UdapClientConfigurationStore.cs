@@ -7,7 +7,6 @@
 // */
 #endregion
 
-using Duende.IdentityServer.EntityFramework.Mappers;
 using Microsoft.EntityFrameworkCore;
 using Udap.Common.Models;
 using Udap.Server.DbContexts;

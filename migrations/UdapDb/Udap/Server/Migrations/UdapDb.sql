@@ -11,8 +11,61 @@ GO
 BEGIN TRANSACTION;
 GO
 
+CREATE TABLE [Client] (
+    [Id] int NOT NULL IDENTITY,
+    [Enabled] bit NOT NULL,
+    [ClientId] nvarchar(max) NULL,
+    [ProtocolType] nvarchar(max) NULL,
+    [RequireClientSecret] bit NOT NULL,
+    [ClientName] nvarchar(max) NULL,
+    [Description] nvarchar(max) NULL,
+    [ClientUri] nvarchar(max) NULL,
+    [LogoUri] nvarchar(max) NULL,
+    [RequireConsent] bit NOT NULL,
+    [AllowRememberConsent] bit NOT NULL,
+    [AlwaysIncludeUserClaimsInIdToken] bit NOT NULL,
+    [RequirePkce] bit NOT NULL,
+    [AllowPlainTextPkce] bit NOT NULL,
+    [RequireRequestObject] bit NOT NULL,
+    [AllowAccessTokensViaBrowser] bit NOT NULL,
+    [FrontChannelLogoutUri] nvarchar(max) NULL,
+    [FrontChannelLogoutSessionRequired] bit NOT NULL,
+    [BackChannelLogoutUri] nvarchar(max) NULL,
+    [BackChannelLogoutSessionRequired] bit NOT NULL,
+    [AllowOfflineAccess] bit NOT NULL,
+    [IdentityTokenLifetime] int NOT NULL,
+    [AllowedIdentityTokenSigningAlgorithms] nvarchar(max) NULL,
+    [AccessTokenLifetime] int NOT NULL,
+    [AuthorizationCodeLifetime] int NOT NULL,
+    [ConsentLifetime] int NULL,
+    [AbsoluteRefreshTokenLifetime] int NOT NULL,
+    [SlidingRefreshTokenLifetime] int NOT NULL,
+    [RefreshTokenUsage] int NOT NULL,
+    [UpdateAccessTokenClaimsOnRefresh] bit NOT NULL,
+    [RefreshTokenExpiration] int NOT NULL,
+    [AccessTokenType] int NOT NULL,
+    [EnableLocalLogin] bit NOT NULL,
+    [IncludeJwtId] bit NOT NULL,
+    [AlwaysSendClientClaims] bit NOT NULL,
+    [ClientClaimsPrefix] nvarchar(max) NULL,
+    [PairWiseSubjectSalt] nvarchar(max) NULL,
+    [UserSsoLifetime] int NULL,
+    [UserCodeType] nvarchar(max) NULL,
+    [DeviceCodeLifetime] int NOT NULL,
+    [CibaLifetime] int NULL,
+    [PollingInterval] int NULL,
+    [CoordinateLifetimeWithUserSession] bit NULL,
+    [Created] datetime2 NOT NULL,
+    [Updated] datetime2 NULL,
+    [LastAccessed] datetime2 NULL,
+    [NonEditable] bit NOT NULL,
+    [Discriminator] nvarchar(max) NOT NULL,
+    CONSTRAINT [PK_Client] PRIMARY KEY ([Id])
+);
+GO
+
 CREATE TABLE [UdapCommunities] (
-    [Id] bigint NOT NULL IDENTITY,
+    [Id] int NOT NULL IDENTITY,
     [Name] nvarchar(200) NOT NULL,
     [Enabled] bit NOT NULL,
     [Default] bit NOT NULL,
@@ -21,7 +74,7 @@ CREATE TABLE [UdapCommunities] (
 GO
 
 CREATE TABLE [UdapRootCertificates] (
-    [Id] bigint NOT NULL IDENTITY,
+    [Id] int NOT NULL IDENTITY,
     [Enabled] bit NOT NULL,
     [Name] nvarchar(max) NOT NULL,
     [X509Certificate] nvarchar(max) NOT NULL,
@@ -32,32 +85,45 @@ CREATE TABLE [UdapRootCertificates] (
 );
 GO
 
+CREATE TABLE [UdapClientSecrets] (
+    [Id] int NOT NULL IDENTITY,
+    [Description] nvarchar(max) NOT NULL,
+    [Value] nvarchar(max) NOT NULL,
+    [Expiration] datetime2 NULL,
+    [Type] nvarchar(max) NOT NULL,
+    [Created] datetime2 NOT NULL,
+    [ClientId] int NOT NULL,
+    CONSTRAINT [PK_UdapClientSecrets] PRIMARY KEY ([Id]),
+    CONSTRAINT [FK_UdapClientSecrets_Clients] FOREIGN KEY ([ClientId]) REFERENCES [Client] ([Id]) ON DELETE CASCADE
+);
+GO
+
 CREATE TABLE [UdapAnchors] (
-    [Id] bigint NOT NULL IDENTITY,
+    [Id] int NOT NULL IDENTITY,
     [Enabled] bit NOT NULL,
     [Name] nvarchar(max) NOT NULL,
     [X509Certificate] nvarchar(max) NOT NULL,
     [Thumbprint] nvarchar(max) NOT NULL,
     [BeginDate] datetime2 NOT NULL,
     [EndDate] datetime2 NOT NULL,
-    [CommunityId] bigint NOT NULL,
+    [CommunityId] int NOT NULL,
     CONSTRAINT [PK_UdapAnchors] PRIMARY KEY ([Id]),
     CONSTRAINT [FK_Anchor_Communities] FOREIGN KEY ([CommunityId]) REFERENCES [UdapCommunities] ([Id]) ON DELETE CASCADE
 );
 GO
 
 CREATE TABLE [UdapCertifications] (
-    [Id] bigint NOT NULL IDENTITY,
+    [Id] int NOT NULL IDENTITY,
     [Name] nvarchar(200) NOT NULL,
-    [CommunityId] bigint NULL,
+    [CommunityId] int NULL,
     CONSTRAINT [PK_UdapCertifications] PRIMARY KEY ([Id]),
     CONSTRAINT [FK_UdapCertifications_UdapCommunities_CommunityId] FOREIGN KEY ([CommunityId]) REFERENCES [UdapCommunities] ([Id])
 );
 GO
 
 CREATE TABLE [UdapAnchorCertification] (
-    [AnchorId] bigint NOT NULL,
-    [CertificationId] bigint NOT NULL,
+    [AnchorId] int NOT NULL,
+    [CertificationId] int NOT NULL,
     CONSTRAINT [PK_UdapAnchorCertification] PRIMARY KEY ([AnchorId], [CertificationId]),
     CONSTRAINT [FK_AnchorCertification_Anchor] FOREIGN KEY ([AnchorId]) REFERENCES [UdapAnchors] ([Id]) ON DELETE CASCADE,
     CONSTRAINT [FK_AnchorCertification_Certification] FOREIGN KEY ([CertificationId]) REFERENCES [UdapCertifications] ([Id]) ON DELETE CASCADE
@@ -65,8 +131,8 @@ CREATE TABLE [UdapAnchorCertification] (
 GO
 
 CREATE TABLE [UdapCommunityCertification] (
-    [CommunityId] bigint NOT NULL,
-    [CertificationId] bigint NOT NULL,
+    [CommunityId] int NOT NULL,
+    [CertificationId] int NOT NULL,
     CONSTRAINT [PK_UdapCommunityCertification] PRIMARY KEY ([CommunityId], [CertificationId]),
     CONSTRAINT [FK_CommunityCertification_Certification] FOREIGN KEY ([CertificationId]) REFERENCES [UdapCertifications] ([Id]) ON DELETE CASCADE,
     CONSTRAINT [FK_CommunityCertification_Community] FOREIGN KEY ([CommunityId]) REFERENCES [UdapCommunities] ([Id])
@@ -82,11 +148,14 @@ GO
 CREATE INDEX [IX_UdapCertifications_CommunityId] ON [UdapCertifications] ([CommunityId]);
 GO
 
+CREATE INDEX [IX_UdapClientSecrets_ClientId] ON [UdapClientSecrets] ([ClientId]);
+GO
+
 CREATE INDEX [IX_UdapCommunityCertification_CertificationId] ON [UdapCommunityCertification] ([CertificationId]);
 GO
 
 INSERT INTO [__EFMigrationsHistory] ([MigrationId], [ProductVersion])
-VALUES (N'20221223081321_InitialUdap', N'7.0.1');
+VALUES (N'20221223191934_InitialUdap', N'7.0.1');
 GO
 
 COMMIT;

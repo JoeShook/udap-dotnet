@@ -9,7 +9,6 @@
 
 using System.Security.Cryptography.X509Certificates;
 using System.Text;
-using Duende.IdentityServer.EntityFramework.Mappers;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
 using Udap.Common.Models;

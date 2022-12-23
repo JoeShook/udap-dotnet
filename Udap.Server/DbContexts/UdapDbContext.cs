@@ -7,9 +7,10 @@
 // */
 #endregion
 
-using Duende.IdentityServer.EntityFramework.Entities;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
+using System.Net.Sockets;
+using Duende.IdentityServer.EntityFramework.Entities;
 using Udap.Server.Entities;
 using Udap.Server.Extensions;
 using Udap.Server.Options;
@@ -18,11 +19,12 @@ namespace Udap.Server.DbContexts;
 
 public interface IUdapDbAdminContext : IDisposable
 {
-    DbSet<Duende.IdentityServer.EntityFramework.Entities.Client> Clients { get; set; }
+    DbSet<UdapClient> Clients { get; set; }
     DbSet<Anchor> Anchors { get; set; }
     DbSet<RootCertificate> RootCertificates { get; set; }
     DbSet<Community> Communities { get; set; }
     DbSet<Certification> Certifications { get; set; }
+    DbSet<UdapClientSecrets> UdapClientSecrets { get; set; }
     /// <summary>
     /// Saves the changes.
     /// </summary>
@@ -32,11 +34,12 @@ public interface IUdapDbAdminContext : IDisposable
 
 public interface IUdapDbContext : IDisposable
 {
-    DbSet<Duende.IdentityServer.EntityFramework.Entities.Client> Clients { get; set; }
+    DbSet<UdapClient> Clients { get; set; }
     DbSet<Anchor> Anchors { get; set; }
     DbSet<RootCertificate> RootCertificates { get; set; }
     DbSet<Community> Communities { get; set; }
     DbSet<Certification> Certifications { get; set; }
+    DbSet<UdapClientSecrets> UdapClientSecrets { get; set; }
 }
 
 public class UdapDbContext : UdapDbContext<UdapDbContext>
@@ -60,9 +63,10 @@ public class UdapDbContext<TContext> : DbContext, IUdapDbAdminContext, IUdapDbCo
     public DbSet<Anchor> Anchors { get; set; }
     public DbSet<RootCertificate> RootCertificates { get; set; }
 
-    public DbSet<Duende.IdentityServer.EntityFramework.Entities.Client> Clients { get; set; }
+    public DbSet<UdapClient> Clients { get; set; }
     public DbSet<Community> Communities { get; set; }
     public DbSet<Certification> Certifications { get; set; }
+    public DbSet<UdapClientSecrets> UdapClientSecrets { get; set; }
 
     public UdapDbContext(DbContextOptions<TContext> options) : base(options)
     {
@@ -95,7 +99,7 @@ public class UdapDbContext<TContext> : DbContext, IUdapDbAdminContext, IUdapDbCo
         // Do not want to own the ConfigurationDbContext from Identity Server, so exclude them
         // from EF migration.
         //
-        modelBuilder.Entity<Duende.IdentityServer.EntityFramework.Entities.Client>().ToTable("Clients", t => t.ExcludeFromMigrations());
+        // modelBuilder.Entity<Duende.IdentityServer.EntityFramework.Entities.Client>().ToTable("Clients", t => t.ExcludeFromMigrations());
         modelBuilder.Entity<ClientClaim>().ToTable("ClientClaims", t => t.ExcludeFromMigrations());
         modelBuilder.Entity<ClientCorsOrigin>().ToTable("ClientCorsOrigins", t => t.ExcludeFromMigrations());
         modelBuilder.Entity<ClientGrantType>().ToTable("ClientGrantTypes", t => t.ExcludeFromMigrations());

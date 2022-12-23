@@ -12,7 +12,7 @@ using Udap.Server.DbContexts;
 namespace Udap.Server.Migrations.UdapDb
 {
     [DbContext(typeof(UdapDbContext))]
-    [Migration("20221223081321_InitialUdap")]
+    [Migration("20221223191934_InitialUdap")]
     partial class InitialUdap
     {
         /// <inheritdoc />
@@ -102,6 +102,10 @@ namespace Udap.Server.Migrations.UdapDb
                     b.Property<int>("DeviceCodeLifetime")
                         .HasColumnType("int");
 
+                    b.Property<string>("Discriminator")
+                        .IsRequired()
+                        .HasColumnType("nvarchar(max)");
+
                     b.Property<bool>("EnableLocalLogin")
                         .HasColumnType("bit");
 
@@ -173,10 +177,11 @@ namespace Udap.Server.Migrations.UdapDb
 
                     b.HasKey("Id");
 
-                    b.ToTable("Clients", null, t =>
-                        {
-                            t.ExcludeFromMigrations();
-                        });
+                    b.ToTable("Client");
+
+                    b.HasDiscriminator<string>("Discriminator").HasValue("Client");
+
+                    b.UseTphMappingStrategy();
                 });
 
             modelBuilder.Entity("Duende.IdentityServer.EntityFramework.Entities.ClientClaim", b =>
@@ -415,17 +420,17 @@ namespace Udap.Server.Migrations.UdapDb
 
             modelBuilder.Entity("Udap.Server.Entities.Anchor", b =>
                 {
-                    b.Property<long>("Id")
+                    b.Property<int>("Id")
                         .ValueGeneratedOnAdd()
-                        .HasColumnType("bigint");
+                        .HasColumnType("int");
 
-                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<long>("Id"));
+                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("Id"));
 
                     b.Property<DateTime>("BeginDate")
                         .HasColumnType("datetime2");
 
-                    b.Property<long>("CommunityId")
-                        .HasColumnType("bigint");
+                    b.Property<int>("CommunityId")
+                        .HasColumnType("int");
 
                     b.Property<bool>("Enabled")
                         .HasColumnType("bit");
@@ -454,11 +459,11 @@ namespace Udap.Server.Migrations.UdapDb
 
             modelBuilder.Entity("Udap.Server.Entities.AnchorCertification", b =>
                 {
-                    b.Property<long>("AnchorId")
-                        .HasColumnType("bigint");
+                    b.Property<int>("AnchorId")
+                        .HasColumnType("int");
 
-                    b.Property<long>("CertificationId")
-                        .HasColumnType("bigint");
+                    b.Property<int>("CertificationId")
+                        .HasColumnType("int");
 
                     b.HasKey("AnchorId", "CertificationId");
 
@@ -469,14 +474,14 @@ namespace Udap.Server.Migrations.UdapDb
 
             modelBuilder.Entity("Udap.Server.Entities.Certification", b =>
                 {
-                    b.Property<long>("Id")
+                    b.Property<int>("Id")
                         .ValueGeneratedOnAdd()
-                        .HasColumnType("bigint");
+                        .HasColumnType("int");
 
-                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<long>("Id"));
+                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("Id"));
 
-                    b.Property<long?>("CommunityId")
-                        .HasColumnType("bigint");
+                    b.Property<int?>("CommunityId")
+                        .HasColumnType("int");
 
                     b.Property<string>("Name")
                         .IsRequired()
@@ -492,11 +497,11 @@ namespace Udap.Server.Migrations.UdapDb
 
             modelBuilder.Entity("Udap.Server.Entities.Community", b =>
                 {
-                    b.Property<long>("Id")
+                    b.Property<int>("Id")
                         .ValueGeneratedOnAdd()
-                        .HasColumnType("bigint");
+                        .HasColumnType("int");
 
-                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<long>("Id"));
+                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("Id"));
 
                     b.Property<bool>("Default")
                         .HasColumnType("bit");
@@ -516,11 +521,11 @@ namespace Udap.Server.Migrations.UdapDb
 
             modelBuilder.Entity("Udap.Server.Entities.CommunityCertification", b =>
                 {
-                    b.Property<long>("CommunityId")
-                        .HasColumnType("bigint");
+                    b.Property<int>("CommunityId")
+                        .HasColumnType("int");
 
-                    b.Property<long>("CertificationId")
-                        .HasColumnType("bigint");
+                    b.Property<int>("CertificationId")
+                        .HasColumnType("int");
 
                     b.HasKey("CommunityId", "CertificationId");
 
@@ -531,11 +536,11 @@ namespace Udap.Server.Migrations.UdapDb
 
             modelBuilder.Entity("Udap.Server.Entities.RootCertificate", b =>
                 {
-                    b.Property<long>("Id")
+                    b.Property<int>("Id")
                         .ValueGeneratedOnAdd()
-                        .HasColumnType("bigint");
+                        .HasColumnType("int");
 
-                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<long>("Id"));
+                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("Id"));
 
                     b.Property<DateTime>("BeginDate")
                         .HasColumnType("datetime2");
@@ -561,6 +566,49 @@ namespace Udap.Server.Migrations.UdapDb
                     b.HasKey("Id");
 
                     b.ToTable("UdapRootCertificates", (string)null);
+                });
+
+            modelBuilder.Entity("Udap.Server.Entities.UdapClientSecrets", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int");
+
+                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("Id"));
+
+                    b.Property<int>("ClientId")
+                        .HasColumnType("int");
+
+                    b.Property<DateTime>("Created")
+                        .HasColumnType("datetime2");
+
+                    b.Property<string>("Description")
+                        .IsRequired()
+                        .HasColumnType("nvarchar(max)");
+
+                    b.Property<DateTime?>("Expiration")
+                        .HasColumnType("datetime2");
+
+                    b.Property<string>("Type")
+                        .IsRequired()
+                        .HasColumnType("nvarchar(max)");
+
+                    b.Property<string>("Value")
+                        .IsRequired()
+                        .HasColumnType("nvarchar(max)");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("ClientId");
+
+                    b.ToTable("UdapClientSecrets", (string)null);
+                });
+
+            modelBuilder.Entity("Udap.Server.Entities.UdapClient", b =>
+                {
+                    b.HasBaseType("Duende.IdentityServer.EntityFramework.Entities.Client");
+
+                    b.HasDiscriminator().HasValue("UdapClient");
                 });
 
             modelBuilder.Entity("Duende.IdentityServer.EntityFramework.Entities.ClientClaim", b =>
@@ -718,6 +766,18 @@ namespace Udap.Server.Migrations.UdapDb
                     b.Navigation("Community");
                 });
 
+            modelBuilder.Entity("Udap.Server.Entities.UdapClientSecrets", b =>
+                {
+                    b.HasOne("Udap.Server.Entities.UdapClient", "Client")
+                        .WithMany("UdapClientSecrets")
+                        .HasForeignKey("ClientId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired()
+                        .HasConstraintName("FK_UdapClientSecrets_Clients");
+
+                    b.Navigation("Client");
+                });
+
             modelBuilder.Entity("Duende.IdentityServer.EntityFramework.Entities.Client", b =>
                 {
                     b.Navigation("AllowedCorsOrigins");
@@ -758,6 +818,11 @@ namespace Udap.Server.Migrations.UdapDb
                     b.Navigation("Certifications");
 
                     b.Navigation("CommunityCertifications");
+                });
+
+            modelBuilder.Entity("Udap.Server.Entities.UdapClient", b =>
+                {
+                    b.Navigation("UdapClientSecrets");
                 });
 #pragma warning restore 612, 618
         }
