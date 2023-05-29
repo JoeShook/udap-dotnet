@@ -18,7 +18,7 @@
     <PackageVersion Include="AutoMapper" Version="12.0.1" />
     <PackageVersion Include="Duende.IdentityServer" Version="6.2.3" />
     <PackageVersion Include="Duende.IdentityServer.AspNetIdentity" Version="6.2.3" />
-    <PackageVersion Include="Duende.IdentityServer.EntityFramework.Storage" Version="6.2.3" />
+    <PackageVersion Include="Duende.IdentityServer.EntityFramework.Storage" Version="6.3.1" />
     <PackageVersion Include="IdentityModel.AspNetCore.OAuth2Introspection" Version="6.2.0" />
     <PackageVersion Include="Microsoft.AspNetCore.Mvc" Version="2.2.0" />
     <PackageVersion Include="Microsoft.EntityFrameworkCore" Version="7.0.5" />
@@ -54,7 +54,7 @@
   <!--   <PackageVersion Include="AutoMapper" Version="12.0.1" /> -->
   <!--   <PackageVersion Include="Duende.IdentityServer" Version="6.2.3" /> -->
   <!--   <PackageVersion Include="Duende.IdentityServer.AspNetIdentity" Version="6.2.3" /> -->
-  <!--   <PackageVersion Include="Duende.IdentityServer.EntityFramework.Storage" Version="6.2.3" /> -->
+  <!--   <PackageVersion Include="Duende.IdentityServer.EntityFramework.Storage" Version="6.3.1" /> -->
   <!--   <PackageVersion Include="IdentityModel.AspNetCore.OAuth2Introspection" Version="6.2.0" /> -->
   <!--   <PackageVersion Include="Microsoft.AspNetCore.Authentication.JwtBearer" Version="6.0.16" /> -->
   <!--   <PackageVersion Include="Microsoft.AspNetCore.Mvc" Version="2.2.0" /> -->
