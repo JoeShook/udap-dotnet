@@ -3,7 +3,7 @@
     <ManagePackageVersionsCentrally>true</ManagePackageVersionsCentrally>
   </PropertyGroup>
   <ItemGroup >
-    <PackageVersion Include="Duende.IdentityServer" Version="6.2.3" />
+    <PackageVersion Include="Duende.IdentityServer" Version="6.3.2" />
     <PackageVersion Include="Duende.IdentityServer.AspNetIdentity" Version="6.2.3" />
     <PackageVersion Include="Duende.IdentityServer.EntityFramework" Version="6.2.3" />
     <PackageVersion Include="Google.Cloud.SecretManager.V1" Version="2.1.0" />
