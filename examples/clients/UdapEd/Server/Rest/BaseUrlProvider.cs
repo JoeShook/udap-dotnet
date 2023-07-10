@@ -8,6 +8,7 @@
 #endregion
 
 using Hl7.Fhir.Utility;
+using Microsoft.AspNetCore.Http.Extensions;
 using Udap.Client.Rest;
 using UdapEd.Shared;
 
@@ -25,7 +26,11 @@ public class BaseUrlProvider : IBaseUrlProvider
     public Uri GetBaseUrl()
     {
         var baseUrl = _httpContextAccessor.HttpContext?.Session.GetString(UdapEdConstants.BASE_URL);
-        
+        if (baseUrl == null)
+        {
+            return new Uri(_httpContextAccessor.HttpContext?.Request.GetDisplayUrl());
+        }
+       
         return new Uri(baseUrl.EnsureEndsWith("/"));
     }
 }

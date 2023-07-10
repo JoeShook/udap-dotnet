@@ -7,14 +7,12 @@
 // */
 #endregion
 
+using Org.BouncyCastle.Asn1.X509;
+using Org.BouncyCastle.Asn1;
 using System.Security.Cryptography;
 using System.Security.Cryptography.X509Certificates;
 using System.Text;
 using System.Text.Json;
-using Microsoft.AspNetCore.Mvc;
-using Microsoft.AspNetCore.RateLimiting;
-using Org.BouncyCastle.Asn1;
-using Org.BouncyCastle.Asn1.X509;
 using Udap.Client.Client;
 using Udap.Client.Internal;
 using Udap.Common.Certificates;
@@ -22,101 +20,52 @@ using Udap.Common.Extensions;
 using Udap.Common.Models;
 using Udap.Model;
 using Udap.Util.Extensions;
-using UdapEd.Server.Extensions;
 using UdapEd.Shared;
 using UdapEd.Shared.Model;
 using UdapEd.Shared.Model.Discovery;
 using X509Extensions = Org.BouncyCastle.Asn1.X509.X509Extensions;
 
-namespace UdapEd.Server.Controllers;
+namespace UdapEd.Server.Services;
 
-[Route("[controller]")]
-[EnableRateLimiting(RateLimitExtensions.Policy)]
-public class MetadataController : Controller
+public class DiscoveryService
 {
     private readonly IUdapClient _udapClient;
-    private readonly ILogger<MetadataController> _logger;
-    private readonly HttpClient _httpClient;
+    readonly HttpClient _httpClient;
+    private readonly IHttpContextAccessor _httpContextAccessor;
+    private readonly ILogger<DiscoveryService> _logger;
 
-    public MetadataController(IUdapClient udapClient, HttpClient httpClient, ILogger<MetadataController> logger)
+    public DiscoveryService(IUdapClient udapClient, HttpClient httpClient, IHttpContextAccessor httpContextAccessor, ILogger<DiscoveryService> logger)
     {
         _udapClient = udapClient;
         _httpClient = httpClient;
+        _httpContextAccessor = httpContextAccessor;
         _logger = logger;
     }
 
-    // get fully validated metadata from .well-known/udap  
-    [HttpGet]
-    public async Task<IActionResult> Get([FromQuery] string metadataUrl, [FromQuery] string community)
+    public async Task<MetadataVerificationModel?> GetMetadataVerificationModel(string metadataUrl, string? community, CancellationToken token)
     {
-        var baseUrl = metadataUrl.EnsureTrailingSlash() + UdapConstants.Discovery.DiscoveryEndpoint;
-        var anchorString = HttpContext.Session.GetString(UdapEdConstants.ANCHOR_CERTIFICATE);
-
-        if (anchorString != null)
+        try
         {
-            var result = new MetadataVerificationModel();
+            var loadedStatus = AnchorCertificateLoadStatus();
 
-            var certBytes = Convert.FromBase64String(anchorString);
-            var anchorCert = new X509Certificate2(certBytes);
-            var trustAnchorStore = new TrustAnchorMemoryStore()
+            if (loadedStatus != null && (loadedStatus.CertLoaded == CertLoadedEnum.Positive))
             {
-                AnchorCertificates = new HashSet<Anchor>
-                {
-                    new Anchor(anchorCert)
-                }
-            };
-
-            
-            _udapClient.Problem += element =>
-                result.Notifications.Add(element.ChainElementStatus.Summarize(TrustChainValidator.DefaultProblemFlags));
-            _udapClient.Untrusted += certificate2 => result.Notifications.Add("Untrusted: " + certificate2.Subject);
-            _udapClient.TokenError += message => result.Notifications.Add("TokenError: " + message);
-
-            await _udapClient.ValidateResource(
-                baseUrl.GetBaseUrlFromMetadataUrl(), 
-                trustAnchorStore,
-                community);
-            
-            result.UdapServerMetaData = _udapClient.UdapServerMetaData;
-            HttpContext.Session.SetString(UdapEdConstants.BASE_URL, baseUrl.GetBaseUrlFromMetadataUrl());
-
-            return Ok(result);
-        }
-
-        return BadRequest("Missing anchor");
-    }
-
-    // get metadata from .well-known/udap  that is not validated and trust is not validated
-    [HttpGet("UnValidated")]
-    public async Task<IActionResult> GetUnValidated([FromQuery] string metadataUrl, [FromQuery] string community)
-    {
-        var baseUrl = metadataUrl.EnsureTrailingSlash() + UdapConstants.Discovery.DiscoveryEndpoint;
-        if (!string.IsNullOrEmpty(community))
-        {
-            baseUrl += $"?{UdapConstants.Community}={community}";
-        }
-
-        _logger.LogDebug(baseUrl);
-        var response = await _httpClient.GetStringAsync(baseUrl);
-        var result = JsonSerializer.Deserialize<UdapMetadata>(response);
-        HttpContext.Session.SetString(UdapEdConstants.BASE_URL, baseUrl.GetBaseUrlFromMetadataUrl());
-
-        var model = new MetadataVerificationModel
-        {
-            UdapServerMetaData = result,
-            Notifications = new List<string>
-            {
-                "No anchor loaded.  Un-Validated resource server."
+                return await GetMetadata(metadataUrl, community);
             }
-        };
 
-        return Ok(model);
+            return await GetUnvalidatedMetadata(metadataUrl, community);
+
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Failed GetMetadataVerificationModel");
+            return null;
+        }
     }
 
-    [HttpPost("UploadAnchorCertificate")]
-    public IActionResult UploadAnchorCertificate([FromBody] string base64String)
+    public CertificateStatusViewModel UploadAnchorCertificate(string base64String)
     {
-        var result =  new CertificateStatusViewModel { CertLoaded = CertLoadedEnum.Negative };
+        var result = new CertificateStatusViewModel { CertLoaded = CertLoadedEnum.Negative };
 
         try
         {
@@ -125,24 +74,23 @@ public class MetadataController : Controller
             result.DistinguishedName = certificate.SubjectName.Name;
             result.Thumbprint = certificate.Thumbprint;
             result.CertLoaded = CertLoadedEnum.Positive;
-            HttpContext.Session.SetString(UdapEdConstants.ANCHOR_CERTIFICATE, base64String);
+            _httpContextAccessor.HttpContext?.Session.SetString(UdapEdConstants.ANCHOR_CERTIFICATE, base64String);
 
-            return Ok(result);
+            return result;
         }
         catch (Exception ex)
         {
             _logger.LogError(ex,
                 $"Failed loading certificate from {nameof(base64String)} {base64String}");
 
-            return BadRequest(result);
+            return result;
         }
     }
 
-    [HttpPut("LoadUdapOrgAnchor")]
-    public async Task<IActionResult> LoadUdapOrgAnchor([FromBody] string anchorCertificate)
+    public async Task<CertificateStatusViewModel?> LoadUdapOrgAnchor()
     {
         var result = new CertificateStatusViewModel { CertLoaded = CertLoadedEnum.Negative };
-
+        var anchorCertificate = "http://certs.emrdirect.com/certs/EMRDirectTestCA.crt";
         try
         {
             var response = await _httpClient.GetAsync(new Uri(anchorCertificate));
@@ -152,21 +100,20 @@ public class MetadataController : Controller
             result.DistinguishedName = certificate.SubjectName.Name;
             result.Thumbprint = certificate.Thumbprint;
             result.CertLoaded = CertLoadedEnum.Positive;
-            HttpContext.Session.SetString(UdapEdConstants.ANCHOR_CERTIFICATE, Convert.ToBase64String(certBytes));
+            _httpContextAccessor.HttpContext?.Session.SetString(UdapEdConstants.ANCHOR_CERTIFICATE, Convert.ToBase64String(certBytes));
 
-            return Ok(result);
+            return result;
         }
         catch (Exception ex)
         {
             _logger.LogError(ex,
                 $"Failed loading certificate from {nameof(anchorCertificate)} {anchorCertificate}");
 
-            return BadRequest(result);
+            return result;
         }
     }
 
-    [HttpGet("IsAnchorCertificateLoaded")]
-    public IActionResult IsAnchorCertificateLoaded()
+    public CertificateStatusViewModel? AnchorCertificateLoadStatus()
     {
         var result = new CertificateStatusViewModel
         {
@@ -175,7 +122,7 @@ public class MetadataController : Controller
 
         try
         {
-            var base64String = HttpContext.Session.GetString(UdapEdConstants.ANCHOR_CERTIFICATE);
+            var base64String = _httpContextAccessor.HttpContext?.Session.GetString(UdapEdConstants.ANCHOR_CERTIFICATE);
 
             if (base64String != null)
             {
@@ -190,62 +137,123 @@ public class MetadataController : Controller
                 result.CertLoaded = CertLoadedEnum.Negative;
             }
 
-            return Ok(result);
+            return result;
         }
         catch (Exception ex)
         {
             _logger.LogWarning(ex.Message);
 
-            return Ok(result);
+            return result;
         }
     }
 
-    [HttpPut]
-    public IActionResult SetBaseFhirUrl([FromBody] string baseFhirUrl, [FromQuery] bool resetToken)
+    public void SetBaseFhirUrl(string baseFhirUrl, bool resetToken = false)
     {
-        HttpContext.Session.SetString(UdapEdConstants.BASE_URL, baseFhirUrl);
+        _httpContextAccessor.HttpContext?.Session.SetString(UdapEdConstants.BASE_URL, baseFhirUrl);
 
         if (resetToken)
         {
-            HttpContext.Session.Remove(UdapEdConstants.TOKEN);
+            _httpContextAccessor.HttpContext?.Session.Remove(UdapEdConstants.TOKEN);
+        }
+    }
+
+    public CertificateViewModel GetCertificateData(IEnumerable<string> base64EncodedCertificate)
+    {
+        try
+        {
+            var certBytes = Convert.FromBase64String(base64EncodedCertificate.First());
+            var cert = new X509Certificate2(certBytes);
+            var result = BuildCertificateDisplayData(cert);
+
+            return result;
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Failed GetCertificateData from list");
+            return null;
+        }
+    }
+
+    public CertificateViewModel GetCertificateData(string base64EncodedCertificate)
+    {
+        try
+        {
+            var certBytes = Convert.FromBase64String(base64EncodedCertificate);
+            var cert = new X509Certificate2(certBytes);
+            var result = BuildCertificateDisplayData(cert);
+
+            return result;
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Failed GetCertificateData");
+            return null;
+        }
+    }
+
+
+    private async Task<MetadataVerificationModel?> GetMetadata(string metadataUrl, string? community)
+    {
+        var baseUrl = metadataUrl.EnsureTrailingSlash() + UdapConstants.Discovery.DiscoveryEndpoint;
+        var anchorString = _httpContextAccessor.HttpContext?.Session.GetString(UdapEdConstants.ANCHOR_CERTIFICATE);
+
+        if (anchorString != null)
+        {
+            var model = new MetadataVerificationModel();
+
+            var certBytes = Convert.FromBase64String(anchorString);
+            var anchorCert = new X509Certificate2(certBytes);
+            var trustAnchorStore = new TrustAnchorMemoryStore()
+            {
+                AnchorCertificates = new HashSet<Anchor>
+                {
+                    new Anchor(anchorCert)
+                }
+            };
+
+
+            _udapClient.Problem += element =>
+                model.Notifications.Add(element.ChainElementStatus.Summarize(TrustChainValidator.DefaultProblemFlags));
+            _udapClient.Untrusted += certificate2 => model.Notifications.Add("Untrusted: " + certificate2.Subject);
+            _udapClient.TokenError += message => model.Notifications.Add("TokenError: " + message);
+
+            await _udapClient.ValidateResource(
+                baseUrl.GetBaseUrlFromMetadataUrl(),
+                trustAnchorStore,
+                community);
+
+            model.UdapServerMetaData = _udapClient.UdapServerMetaData;
+            _httpContextAccessor.HttpContext?.Session.SetString(UdapEdConstants.BASE_URL, baseUrl.GetBaseUrlFromMetadataUrl());
+
+            return model;
         }
 
-        return Ok();
+        return null;
     }
 
-    [HttpGet("MyIp")]
-    public IActionResult Get()
+    private async Task<MetadataVerificationModel?> GetUnvalidatedMetadata(string metadataUrl, string? community)
     {
-        return Ok(Environment.GetEnvironmentVariable("MyIp"));
-    }
+        var baseUrl = metadataUrl.EnsureTrailingSlash() + UdapConstants.Discovery.DiscoveryEndpoint;
+        if (!string.IsNullOrEmpty(community))
+        {
+            baseUrl += $"?{UdapConstants.Community}={community}";
+        }
 
-    [HttpGet("FhirLabsCommunityList")]
-    public async Task<IActionResult> GetFhirLabsCommunityList()
-    {
-        var response = await _httpClient.GetStringAsync("https://fhirlabs.net/fhir/r4/.well-known/udap/communities/ashtml");
-        
-        return Ok(response);
-    }
+        _logger.LogDebug(baseUrl);
+        var response = await _httpClient.GetStringAsync(baseUrl);
+        var result = JsonSerializer.Deserialize<UdapMetadata>(response);
+        _httpContextAccessor.HttpContext?.Session.SetString(UdapEdConstants.BASE_URL, baseUrl.GetBaseUrlFromMetadataUrl());
 
-    [HttpPost("CertificateDisplayFromJwtHeader")]
-    public IActionResult BuildCertificateDisplay([FromBody] List<string> certificates)
-    {
-        var certBytes = Convert.FromBase64String(certificates.First());
-        var cert = new X509Certificate2(certBytes);
-        var result = BuildCertificateDisplayData(cert);
+        var model = new MetadataVerificationModel
+        {
+            UdapServerMetaData = result,
+            Notifications = new List<string>
+            {
+                "No anchor loaded.  Un-Validated resource server."
+            }
+        };
 
-        return Ok(result);
-    }
-
-    [HttpPost("CertificateDisplay")]
-    public IActionResult BuildCertificateDisplay([FromBody] string certificate)
-    {
-        var certBytes = Convert.FromBase64String(certificate);
-        var cert = new X509Certificate2(certBytes);
-        var result = BuildCertificateDisplayData(cert);
-
-        return Ok(result);
-
+        return model;
     }
 
     private CertificateViewModel BuildCertificateDisplayData(X509Certificate2 cert)
@@ -294,7 +302,7 @@ public class MetadataController : Controller
 
     private string GetPublicKeyAlgorithm(X509Certificate2 cert)
     {
-        string keyAlgOid = cert.GetKeyAlgorithm(); 
+        string keyAlgOid = cert.GetKeyAlgorithm();
         var oid = new Oid(keyAlgOid);
 
         var key = cert.GetRSAPublicKey() as AsymmetricAlgorithm ?? cert.GetECDsaPublicKey();
@@ -316,7 +324,7 @@ public class MetadataController : Controller
         {
             sb.AppendLine($"{tuple.Item1} : {tuple.Item2}");
         }
-        
+
         return sb.ToString();
     }
 
@@ -400,7 +408,7 @@ public class MetadataController : Controller
         {
             return string.Empty;
         }
-        
+
         var distPoints = CrlDistPoint.GetInstance(ext);
         var retVal = new List<string>();
 
@@ -410,7 +418,7 @@ public class MetadataController : Controller
                 && distPoint.DistributionPointName.PointType == DistributionPointName.FullName)
             {
                 var names = GeneralNames.GetInstance(distPoint.DistributionPointName.Name);
-                
+
                 foreach (var generalName in names.GetNames())
                 {
                     var name = generalName.Name.ToString();

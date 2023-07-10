@@ -1,5 +1,6 @@
 ﻿using Hl7.Fhir.Rest;
 using Hl7.Fhir.Specification;
+using System.Net.Http;
 
 
 namespace Udap.Client.Rest;
@@ -14,8 +15,10 @@ public class FhirClientWithUrlProvider : FhirClient
     {
         var requester = new HttpClientRequester(baseUrlProvider.GetBaseUrl(), Settings, httpClient);
         Requester = requester;
-
+        HttpVersion = requester.Client.DefaultRequestVersion;
         // Expose default request headers to user.
         RequestHeaders = requester.Client.DefaultRequestHeaders;
     }
+
+    public Version HttpVersion { get; }
 }

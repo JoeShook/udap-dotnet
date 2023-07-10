@@ -205,7 +205,7 @@ public class UdapDcrBuilderForClientCredentials
         return this;
     }
 
-    public UdapDcrBuilderForClientCredentials WithContacts(ICollection<string> contacts)
+    public UdapDcrBuilderForClientCredentials WithContacts(ICollection<string>? contacts)
     {
         _document.Contacts = contacts;
         return this;

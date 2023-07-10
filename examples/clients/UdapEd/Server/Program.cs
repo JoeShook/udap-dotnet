@@ -7,6 +7,9 @@
 // */
 #endregion
 
+using Blazored.LocalStorage;
+using BQuery;
+using MudBlazor.Services;
 using Serilog;
 using Serilog.Events;
 using Serilog.Sinks.SystemConsole.Themes;
@@ -17,6 +20,8 @@ using Udap.Common.Certificates;
 using UdapEd.Server.Authentication;
 using UdapEd.Server.Extensions;
 using UdapEd.Server.Rest;
+using UdapEd.Server.Services;
+
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -41,9 +46,32 @@ builder.Services.AddSession(options =>
     options.Cookie.IsEssential = true;
 });
 
-builder.Services.AddControllersWithViews();
+//
+// builder.Services.AddControllersWithViews();
 
 builder.Services.AddRazorPages();
+builder.Services.AddServerSideBlazor();
+
+
+
+
+builder.Services.AddScoped(sp => new HttpClient
+{
+    BaseAddress = new Uri("https://localhost:7041")//Todo remove after migrated from WebAssembly to server
+});
+
+builder.Services.AddMudServices();
+builder.Services.AddBlazoredLocalStorage(config =>
+    config.JsonSerializerOptions.WriteIndented = true
+);
+
+builder.Services.AddScoped<UdapClientState>(); //Singleton in Blazor wasm and Scoped in Blazor Server
+builder.Services.AddScoped<RegisterService>();
+builder.Services.AddScoped<DiscoveryService>();
+builder.Services.AddScoped<AccessService>();
+builder.Services.AddScoped<FhirService>();
+
+
 // builder.Services.AddBff();
 
 //
@@ -97,17 +125,20 @@ builder.AddRateLimiting();
 // Configure OpenTelemetry
 builder.AddOpenTelemetry();
 
+builder.Services.AddDistributedMemoryCache();
+builder.Services.AddSession(options =>
+{
+    options.Cookie.IsEssential = true;
+});
+
 var app = builder.Build();
 
+app.UseSession();
 app.UseSerilogRequestLogging();
 
 
 // Configure the HTTP request pipeline.
-if (app.Environment.IsDevelopment())
-{
-    app.UseWebAssemblyDebugging();
-}
-else
+if (!app.Environment.IsDevelopment())
 {
     app.UseExceptionHandler("/Error");
     // The default HSTS value is 30 days. You may want to change this for production scenarios, see https://aka.ms/aspnetcore-hsts.
@@ -116,18 +147,33 @@ else
 
 // app.UseHttpsRedirection();
 
-app.UseBlazorFrameworkFiles();
+// app.UseBlazorFrameworkFiles();
 app.UseStaticFiles();
 
+//begin Set() hack
+// https://stackoverflow.com/a/71446689/6115838
+app.Use(async delegate (HttpContext Context, Func<Task> Next)
+{
+    //this throwaway session variable will "prime" the Set() method
+    //to allow it to be called after the response has started
+    var TempKey = Guid.NewGuid().ToString(); //create a random key
+    Context.Session.Set(TempKey, Array.Empty<byte>()); //set the throwaway session variable
+    Context.Session.Remove(TempKey); //remove the throwaway session variable
+    await Next(); //continue on with the request
+});
+//end Set() hack
+
+
 app.UseRouting();
+
+
+app.MapBlazorHub();
+app.MapFallbackToPage("/_Host");
+
 app.UseRateLimiter(); //after routing
 
-app.UseSession();
-app.MapRazorPages();
-app.MapControllers()
-    .RequireRateLimiting(RateLimitExtensions.Policy)
-    ;
+// app.MapRazorPages(); // todo do I need this
 
-app.MapFallbackToFile("index.html");
+app.UseBQuery();
 
 app.Run();

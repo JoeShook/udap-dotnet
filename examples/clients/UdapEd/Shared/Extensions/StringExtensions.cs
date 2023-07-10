@@ -10,9 +10,9 @@
 namespace UdapEd.Shared.Extensions;
 public static class StringExtensions
 {
-    public static string TrimForDisplay(this string input, int length, string? suffix)
+    public static string TrimForDisplay(this string? input, int length, string? suffix)
     {
-        if (input.Length > length)
+        if (input?.Length > length)
         {
             input = input.Substring(0, length);
             if (suffix != null)
@@ -21,6 +21,6 @@ public static class StringExtensions
             }
         }
 
-        return input;
+        return input ?? string.Empty;
     }
 }

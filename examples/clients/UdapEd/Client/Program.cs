@@ -35,3 +35,13 @@ builder.Services.AddScoped<AccessService>();
 builder.Services.AddScoped<FhirService>();
 
 await builder.Build().UseBQuery().RunAsync();
+
+
+
+//
+// Accessible to unit tests
+//
+namespace UdapEd.Client
+{
+    public partial class Program { }
+}
