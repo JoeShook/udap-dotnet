@@ -172,7 +172,7 @@ public class UdapIdentityServerPipeline
             .AddInMemoryApiResources(ApiResources)
             .AddInMemoryApiScopes(ApiScopes)
             .AddTestUsers(Users)
-            .AddDeveloperSigningCredential(persistKey: false)
+            // .AddDeveloperSigningCredential(persistKey: false)
             .AddUdapServerAsIdentityProvider(baseUrl: BaseUrl)
             .AddInMemoryUdapCertificates(Communities);
 

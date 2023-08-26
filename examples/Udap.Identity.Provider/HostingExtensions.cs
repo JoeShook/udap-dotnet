@@ -67,14 +67,22 @@ internal static class HostingExtensions
         builder.Services.AddMemoryCache();
         builder.Services.AddHttpContextAccessor();
         builder.Services.AddRazorPages();
-        
+
+        //
+        // Udap Key Management
+        //
+        builder.Services.AddUdapKeyManagement();
+
+        //
+        // Identity Server 
+        //
         builder.Services.AddIdentityServer(options =>
             {
                 // https://docs.duendesoftware.com/identityserver/v6/fundamentals/resources/api_scopes#authorization-based-on-scopes
                 options.EmitStaticAudienceClaim = true;
-                options.InputLengthRestrictions.Scope =
-                    7000; //TODO: Very large!  Again I need to solve the policy/community/certification concept
+                options.KeyManagement.Enabled = false;
             })
+            
             .AddServerSideSessions()
             .AddConfigurationStore(options =>
                 _ = provider switch

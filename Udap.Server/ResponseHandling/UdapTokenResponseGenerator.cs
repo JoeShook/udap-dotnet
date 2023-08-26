@@ -22,9 +22,11 @@ public class UdapTokenResponseGenerator : TokenResponseGenerator
     private readonly IProfileService _profile;
 
     /// <summary>
-    /// Initializes a new instance of the <see cref="T:Duende.IdentityServer.ResponseHandling.TokenResponseGenerator" /> class.
+    /// Initializes and override new instance of the <see cref="T:Duende.IdentityServer.ResponseHandling.TokenResponseGenerator" /> class.
+    /// This override uses the additional profile service to add claims to the token.  The claims come from the UDAP Tiered OAuth
+    /// IdP identity token.  Specifically in this case the hl7_identifier is augmented to the authorization servers (data holders) id_token.
     /// </summary>
-    /// <param name="profile"></param>
+    /// <param name="profile">Access to user store</param>
     /// <param name="clock">The clock.</param>
     /// <param name="tokenService">The token service.</param>
     /// <param name="refreshTokenService">The refresh token service.</param>

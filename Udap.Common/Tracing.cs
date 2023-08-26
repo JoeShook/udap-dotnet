@@ -34,6 +34,14 @@ public static class Tracing
 
 
     /// <summary>
+    /// Service ActivitySource
+    /// </summary>
+    public static ActivitySource ServiceActivitySource { get; } = new(
+        TraceNames.Services,
+        ServiceVersion);
+
+
+    /// <summary>
     /// Service version
     /// </summary>
     public static string ServiceVersion => $"{AssemblyVersion.Major}.{AssemblyVersion.Minor}.{AssemblyVersion.Build}";
@@ -51,6 +59,10 @@ public static class Tracing
         /// </summary>
         public static string Store => Basic + ".Stores";
 
+        /// <summary>
+        /// Service name for caching traces
+        /// </summary>
+        public static string Services => Basic + ".Services";
 
         /// <summary>
         /// Service name for detailed validation traces

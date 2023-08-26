@@ -8,10 +8,15 @@
 #endregion
 
 using Duende.IdentityServer.Configuration;
+using Duende.IdentityServer.Services;
+using Duende.IdentityServer.Services.KeyManagement;
+using Duende.IdentityServer.Stores;
 using IdentityModel;
 using Microsoft.Extensions.DependencyInjection.Extensions;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
+using System.Net;
+using Microsoft.IdentityModel.Tokens;
 using Udap.Client.Client;
 using Udap.Client.Configuration;
 using Udap.Common;
@@ -22,8 +27,10 @@ using Udap.Server;
 using Udap.Server.Configuration;
 using Udap.Server.DbContexts;
 using Udap.Server.Extensions;
+using Udap.Server.KeyManagement;
 using Udap.Server.Mappers;
 using Udap.Server.Options;
+using Udap.Server.ResponseHandling;
 using Udap.Server.Stores;
 using static Udap.Server.Constants;
 
@@ -101,6 +108,19 @@ public static class IdentityServerBuilderExtensions
         builder.AddUdapServerConfiguration();
         builder.AddUdapConfigurationStore<UdapDbContext>(storeOptionAction);
         builder.AddUdapJwtBearerClientAuthentication();
+         
+
+
+        builder.Services.AddSingleton<ISigningCredentialStore>(resolver =>
+        {
+            var certStore = resolver.GetRequiredService<IPrivateCertificateStore>();
+            var key = new X509SecurityKey(certStore.IssuedCertificates.First().Certificate);
+            var credential = new SigningCredentials(key, SecurityAlgorithms.RsaSha256);
+            return new InMemorySigningCredentialsStore(credential);
+        });
+
+
+
 
         return builder;
     }
@@ -189,5 +209,46 @@ public static class IdentityServerBuilderExtensions
             EndpointNames.Discovery,
             ProtocolRoutePaths.DiscoveryConfiguration.EnsureLeadingSlash());
     }
-}
 
+    public static IServiceCollection AddUdapKeyManagement(this IServiceCollection services)
+    {
+        // Need this so I can pick the kid to map to community
+        services.TryAddTransient<ITokenCreationService, UdapTokenCreationService>();
+
+
+
+        //Replace with UDAP version.
+        //Nothing more than a client cert issued from a PKI
+        //But it will have provisions for multiple communities
+        //services.TryAddTransient<IAutomaticKeyManagerKeyStore, AutomaticKeyManagerKeyStore>();
+
+
+
+        services.TryAddTransient<IAutomaticKeyManagerKeyStore, UdapAutomaticKeyManagerStore>();
+
+        
+
+
+        // TODO: Temp:: Might only need to replace  AutomaticKeyManagerKeyStore                                                                                              
+        //services.TryAddTransient<IKeyManager, KeyManager>(); 
+        // This manages key rotation. If I replace AutomaticKeyManagerKeyStore above then I might not use this.
+        // I might want to keep this active for non-UDAP clients.
+
+        // services.TryAddTransient<IKeyManager, UdapKeyManager>();
+
+
+
+
+        services.TryAddTransient<ISigningKeyProtector, DataProtectionKeyProtector>();
+        services.TryAddSingleton<ISigningKeyStoreCache, InMemoryKeyStoreCache>();
+        services.TryAddTransient(provider => provider.GetRequiredService<IdentityServerOptions>().KeyManagement);
+
+        services.TryAddSingleton<ISigningKeyStore>(x =>
+        {
+            var opts = x.GetRequiredService<IdentityServerOptions>();
+            return new FileSystemKeyStore(opts.KeyManagement.KeyPath, x.GetRequiredService<ILogger<FileSystemKeyStore>>());
+        });
+
+        return services;
+    }
+}
