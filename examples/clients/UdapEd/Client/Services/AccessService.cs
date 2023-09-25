@@ -8,8 +8,11 @@
 #endregion
 
 using System.IdentityModel.Tokens.Jwt;
+using System.Net;
 using System.Net.Http.Json;
 using System.Text.Json;
+using System.Web;
+using Microsoft.AspNetCore.Components;
 using Microsoft.IdentityModel.Tokens;
 using Udap.Model.Access;
 using UdapEd.Shared.Model;
@@ -19,19 +22,22 @@ namespace UdapEd.Client.Services;
 public class AccessService
 {
     readonly HttpClient _httpClient;
+    private readonly NavigationManager _navigationManager;
     private readonly ILogger<AccessService> _logger;
 
-    public AccessService(HttpClient httpClient, ILogger<AccessService> logger)
+    public AccessService(HttpClient httpClient, NavigationManager navigationManager, ILogger<AccessService> logger)
     {
         _httpClient = httpClient;
+        _navigationManager = navigationManager;
         _logger = logger;
     }
 
     public async Task<AccessCodeRequestResult?> Get(string authorizeQuery)
     {
-        var response = await _httpClient
-            .GetFromJsonAsync<AccessCodeRequestResult>(
-                $"/Access/{Base64UrlEncoder.Encode(authorizeQuery)}");
+        var redirectHandler = new HttpClientHandler() { AllowAutoRedirect = false };
+        var httpClient = new HttpClient(redirectHandler);
+        httpClient.BaseAddress = _httpClient.BaseAddress;
+        var response = await httpClient.GetFromJsonAsync<AccessCodeRequestResult>($"Access?authorizeQuery={HttpUtility.UrlEncode(authorizeQuery)}");
         
         return response;
     }

@@ -7,6 +7,7 @@
 // */
 #endregion
 
+using System;
 using System.IdentityModel.Tokens.Jwt;
 using System.Text;
 using System.Text.Json;
@@ -397,8 +398,13 @@ public partial class UdapBusinessToBusiness
     private async Task LaunchAuthorize()
     {
         BuildAuthorizeLink();
-
-        await JSRuntime.InvokeVoidAsync("open", @AuthCodeRequestLink, "_self");
+        
+        //
+        // Builds an anchor href link the user clicks to initiate a user login page at the authorization server
+        //
+        var result = await AccessService.Get(@AuthCodeRequestLink);
+        NavManager.NavigateTo(result.RedirectUrl, new NavigationOptions());
+        //await JSRuntime.InvokeVoidAsync("open", @AuthCodeRequestLink, "_self");
     }
 
     private string? GetJwtHeader(string? tokenString)
