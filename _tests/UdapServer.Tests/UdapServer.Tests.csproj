@@ -69,6 +69,7 @@
   </ItemGroup>
 
   <ItemGroup>
+    <PackageReference Include="Duende.IdentityServer.Configuration" />
     <PackageReference Include="FluentAssertions" />
     <PackageReference Include="Hl7.Fhir.Specification.R4B" />
     <PackageReference Include="IdentityModel" />

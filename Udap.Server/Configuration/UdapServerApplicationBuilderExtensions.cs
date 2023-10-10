@@ -7,6 +7,7 @@
 // */
 #endregion
 
+using Duende.IdentityServer.Configuration;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
 using Udap.Server.Hosting;
@@ -68,6 +69,9 @@ public static class UdapServerApplicationBuilderExtensions
             .Produces(StatusCodes.Status200OK)
             .Produces(StatusCodes.Status204NoContent)
             .Produces(StatusCodes.Status400BadRequest);
+
+        app.MapDynamicClientRegistration() // ("/connect/register")
+            .AllowAnonymous();
 
         return app;
     }

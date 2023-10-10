@@ -206,7 +206,7 @@ public class UdapDynamicClientRegistrationEndpoint
 
 
     //
-    // RFC7591 DCR, states, 
+    // RFC7591 DCR section 3.2.1 states, 
     // If a software statement was used as part of the registration, its
     // value MUST be returned unmodified in the response along with other
     // metadata using the "software_statement" member name.  Client metadata

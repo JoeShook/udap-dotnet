@@ -70,6 +70,7 @@ public class UdapAuthServerPipeline
     public const string EndSessionCallbackEndpoint = BaseUrl + "/connect/endsession/callback";
     public const string CheckSessionEndpoint = BaseUrl + "/connect/checksession";
     public const string RegistrationEndpoint = BaseUrl + "/connect/register";
+    public const string DCREndpoint = BaseUrl + "/connect/dcr";
 
     public const string FederatedSignOutPath = "/signout-oidc";
     public const string FederatedSignOutUrl = BaseUrl + FederatedSignOutPath;
@@ -268,6 +269,11 @@ public class UdapAuthServerPipeline
             path.Run(async ctx => await OnExternalLoginCallback(ctx,  new Mock<ILogger>().Object));
         });
 
+        app.Map("/connect/dcr", path =>
+        {
+            path.Run(ctx => OnDCR(ctx));
+        });
+
         OnPostConfigure(app);
     }
     
@@ -286,6 +292,18 @@ public class UdapAuthServerPipeline
         var regEndpoint = ctx.RequestServices.GetRequiredService<UdapDynamicClientRegistrationEndpoint>();
         await regEndpoint.Process(ctx, CancellationToken.None);
     }
+
+    private async Task OnDCR(HttpContext ctx)
+    {
+        await DCR(ctx);
+    }
+
+    private async Task DCR(HttpContext ctx)
+    {
+        var regEndpoint = ctx.RequestServices.GetRequiredService<DynamicClientRegistrationEndpoint>();
+        await regEndpoint.Process(ctx);
+    }
+
 
     private async Task OnExternalLoginChallenge(HttpContext ctx)
     {
