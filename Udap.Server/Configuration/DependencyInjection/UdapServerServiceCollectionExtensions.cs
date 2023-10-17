@@ -90,6 +90,7 @@ public static class UdapServerServiceCollectionExtensions
         builder.Services.AddSingleton<ISigningCredentialStore>(resolver =>
         {
             var certStore = resolver.GetRequiredService<IPrivateCertificateStore>();
+            certStore.Resolve();
             var key = new X509SecurityKey(certStore.IssuedCertificates.First().Certificate);
             var credential = new SigningCredentials(key, SecurityAlgorithms.RsaSha256);
             return new InMemorySigningCredentialsStore(credential);

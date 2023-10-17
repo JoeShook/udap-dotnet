@@ -55,7 +55,14 @@ public class HL7ApiTestFixture : WebApplicationFactory<Udap.Auth.Server.Program>
         Environment.SetEnvironmentVariable("UdapIdpBaseUrl", "http://localhost"); 
         Environment.SetEnvironmentVariable("provider", "Sqlite");
         builder.UseEnvironment("Development");
-        
+
+        // builder.ConfigureAppConfiguration(configure =>
+        // {
+        //     
+        //     configure.Sources.Clear();
+        //     configure.AddJsonFile("appsettings.Test.json");
+        // });
+
         builder.ConfigureServices((hostContext, services) =>
         {
             services.AddSingleton<IHostLifetime, NoopHostLifetime>();
