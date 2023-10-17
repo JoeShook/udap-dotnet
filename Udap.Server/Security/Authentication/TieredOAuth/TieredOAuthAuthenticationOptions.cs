@@ -10,10 +10,12 @@
 using Microsoft.AspNetCore.Authentication.OAuth;
 using Microsoft.IdentityModel.Tokens;
 using System.IdentityModel.Tokens.Jwt;
+using IdentityModel;
 
 namespace Udap.Server.Security.Authentication.TieredOAuth;
 
-public class TieredOAuthAuthenticationOptions : OAuthOptions{
+public class TieredOAuthAuthenticationOptions : OAuthOptions
+{
 
     private readonly JwtSecurityTokenHandler _defaultHandler = new JwtSecurityTokenHandler();
 
@@ -25,14 +27,22 @@ public class TieredOAuthAuthenticationOptions : OAuthOptions{
         // AuthorizationEndpoint = TieredOAuthAuthenticationDefaults.AuthorizationEndpoint;
         // TokenEndpoint = TieredOAuthAuthenticationDefaults.TokenEndpoint;
         SignInScheme = TieredOAuthAuthenticationDefaults.AuthenticationScheme;
-        
-        // DCR at Tiered OAuth only is asking for these two. 
-        Scope.Add("openid");
-        Scope.Add("fhirUser");
-        // Scope.Add("email");
-        // Scope.Add("profile");
+
+        // TODO:  configurable for the non-dynamic AddTieredOAuthForTests call. 
+        Scope.Add(OidcConstants.StandardScopes.OpenId);
+        // Scope.Add(UdapConstants.StandardScopes.FhirUser);
+        Scope.Add(OidcConstants.StandardScopes.Email);
+        Scope.Add(OidcConstants.StandardScopes.Profile);
 
         SecurityTokenValidator = _defaultHandler;
+
+        //
+        // Defaults to survive the IIdentityProviderConfigurationValidator
+        // All of these are set during the GET /externallogin/challenge by
+        // placing them in the AuthenticationProperties.Parameters
+        //
+        AuthorizationEndpoint = "/connect/authorize";
+        TokenEndpoint = "/connect/token";
     }
 
     /// <summary>
@@ -52,4 +62,6 @@ public class TieredOAuthAuthenticationOptions : OAuthOptions{
     /// <see cref="http://hl7.org/fhir/us/udap-security/user.html#client-authorization-request-to-data-holder"/>
     /// </summary>
     public string IdPBaseUrl { get; set; }
+
+    public string Community { get; set; }
 }

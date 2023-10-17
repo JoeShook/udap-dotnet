@@ -6,12 +6,14 @@
 //  See LICENSE in the project root for license information.
 // */
 #endregion
-#pragma warning disable 
+
+#pragma warning disable
 
 
 using System.Net;
 using System.Security.Claims;
 using System.Security.Cryptography.X509Certificates;
+using System.Web;
 using Duende.IdentityServer;
 using Duende.IdentityServer.Configuration;
 using Duende.IdentityServer.Events;
@@ -20,6 +22,7 @@ using Duende.IdentityServer.ResponseHandling;
 using Duende.IdentityServer.Services;
 using Duende.IdentityServer.Test;
 using FluentAssertions;
+using Google.Api;
 using IdentityModel;
 using IdentityModel.Client;
 using Microsoft.AspNetCore.Authentication;
@@ -33,19 +36,21 @@ using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using Moq;
+using Udap.Auth.Server.Pages;
+using Udap.Client.Client;
 using Udap.Common;
 using Udap.Common.Certificates;
 using Udap.Common.Models;
-using Udap.Auth.Server.Pages;
+using Udap.Model;
+using Udap.Server.Configuration.DependencyInjection;
+using Udap.Server.Hosting.DynamicProviders.Oidc;
+using Udap.Server.Hosting.DynamicProviders.Store;
 using Udap.Server.Registration;
+using Udap.Server.ResponseHandling;
 using Udap.Server.Security.Authentication.TieredOAuth;
 using UnitTests.Common;
-using Constants = Udap.Server.Constants;
-using Microsoft.AspNetCore.Authentication.Cookies;
-using Duende.IdentityServer.Stores;
-using Microsoft.Extensions.DependencyInjection.Extensions;
-using Udap.Server.ResponseHandling;
 using AuthorizeResponse = IdentityModel.Client.AuthorizeResponse;
+using Constants = Udap.Server.Constants;
 
 namespace UdapServer.Tests.Common;
 
@@ -78,6 +83,7 @@ public class UdapAuthServerPipeline
 
     public IdentityServerOptions Options { get; set; }
     public List<Client> Clients { get; set; } = new List<Client>();
+    public List<OidcProvider> OidcProviders { get; set; } = new List<OidcProvider>();
     public List<IdentityResource> IdentityScopes { get; set; } = new List<IdentityResource>();
     public List<ApiResource> ApiResources { get; set; } = new List<ApiResource>();
     public List<ApiScope> ApiScopes { get; set; } = new List<ApiScope>();
@@ -121,7 +127,7 @@ public class UdapAuthServerPipeline
             }
         });
 
-        builder.ConfigureAppConfiguration(configure => configure.AddJsonFile("appsettings.json"));
+        builder.ConfigureAppConfiguration(configure => configure.AddJsonFile("appsettings.Auth.json"));
 
         if (enableLogging)
         {
@@ -147,6 +153,8 @@ public class UdapAuthServerPipeline
         
         OnPreConfigureServices(builder, services);
 
+        services.AddSingleton<DynamicIdp>();
+
         // services.AddAuthentication(opts =>
         // {
         //     opts.AddScheme("external", scheme =>
@@ -165,11 +173,16 @@ public class UdapAuthServerPipeline
         services.AddSingleton<ITrustAnchorStore>(sp =>
             new TrustAnchorFileStore(
                 sp.GetRequiredService<IOptionsMonitor<UdapFileCertStoreManifest>>(),
-                new Mock<ILogger<TrustAnchorFileStore>>().Object,
-                "FhirLabsApi")); //Note: FhirLabsApi is the key to pick the correct data from appsettings.json
+                new Mock<ILogger<TrustAnchorFileStore>>().Object));
 
-        // Replace pluggable service with generator that will augment the IdToken with the hl7_identifier 
-        services.AddTransient<ITokenResponseGenerator, UdapTokenResponseGenerator>();
+
+        services.AddUdapServer(BaseUrl, "FhirLabsApi")
+            .AddUdapInMemoryApiScopes(ApiScopes)
+            .AddInMemoryUdapCertificates(Communities)
+            .AddUdapResponseGenerators();
+            // .AddTieredOAuthDynamicProvider();
+            //.AddSmartV2Expander();
+
 
         services.AddIdentityServer(options =>
             {
@@ -183,14 +196,16 @@ public class UdapAuthServerPipeline
                 options.KeyManagement.Enabled = false;
                 Options = options;
             })
+
             .AddInMemoryClients(Clients)
             .AddInMemoryIdentityResources(IdentityScopes)
             .AddInMemoryApiResources(ApiResources)
-            .AddInMemoryApiScopes(ApiScopes)
             .AddTestUsers(Users)
-            .AddDeveloperSigningCredential(persistKey: false)
-            .AddUdapServer(BaseUrl, "FhirLabsApi")
-            .AddInMemoryUdapCertificates(Communities);
+            .AddInMemoryOidcProviders(OidcProviders)
+            .AddInMemoryCaching()
+            .AddIdentityProviderStoreCache<UdapInMemoryIdentityProviderStore>()
+            .AddDeveloperSigningCredential(persistKey: false);
+            
 
         // BackChannelMessageHandler is used by .AddTieredOAuthForTest()
         // services.AddHttpClient(IdentityServerConstants.HttpClients.BackChannelLogoutHttpClient)
@@ -296,7 +311,7 @@ public class UdapAuthServerPipeline
             throw new Exception("invalid return URL");
         }
 
-        var scheme = ctx.Request.Query["scheme"].FirstOrDefault();
+        var scheme = ctx.Request.Query["scheme"];
         ;
         var props = new AuthenticationProperties
         {
@@ -308,9 +323,39 @@ public class UdapAuthServerPipeline
                 { "scheme", scheme },
             }
         };
+        
+        var _udapClient = ctx.RequestServices.GetRequiredService<IUdapClient>();
+        var originalRequestParams = HttpUtility.ParseQueryString(returnUrl);
+        var idp = (originalRequestParams.GetValues("idp") ?? throw new InvalidOperationException()).Last();
+
+        var parts = idp.Split(new[] { '?' }, StringSplitOptions.RemoveEmptyEntries);
+
+        if (parts.Length > 1)
+        {
+            props.Parameters.Add(UdapConstants.Community, parts[1]); 
+        }
+        
+        var idpUri = new Uri(idp);
+        var idpBaseUrl = idpUri.Scheme + Uri.SchemeDelimiter + idpUri.Host + idpUri.LocalPath;
+        var request = new DiscoveryDocumentRequest
+        {
+            Address = idpBaseUrl,
+            Policy = new IdentityModel.Client.DiscoveryPolicy()
+            {
+                EndpointValidationExcludeList = new List<string> { OidcConstants.Discovery.RegistrationEndpoint }
+            }
+        };
+
+        var openIdConfig = await _udapClient.ResolveOpenIdConfig(request);
+
+        // TODO: Properties will be protected in state in the BuildchallengeUrl.  Need to trim out some of these
+        // during the protect process.
+        props.Parameters.Add(UdapConstants.Discovery.AuthorizationEndpoint, openIdConfig.AuthorizeEndpoint);
+        props.Parameters.Add(UdapConstants.Discovery.TokenEndpoint, openIdConfig.TokenEndpoint);
+        props.Parameters.Add("idpBaseUrl", idpBaseUrl.TrimEnd('/'));
 
         // When calling ChallengeAsync your handler will be called if it is registered.
-        await ctx.ChallengeAsync(TieredOAuthAuthenticationDefaults.AuthenticationScheme, props);
+        await ctx.ChallengeAsync(scheme, props);
     }
 
     private async Task OnExternalLoginCallback(HttpContext ctx, ILogger logger)
@@ -467,8 +512,8 @@ public class UdapAuthServerPipeline
     }
 
     public bool ConsentWasCalled { get; set; }
-    public AuthorizationRequest ConsentRequest { get; set; }
-    public ConsentResponse ConsentResponse { get; set; }
+    public AuthorizationRequest? ConsentRequest { get; set; }
+    public ConsentResponse? ConsentResponse { get; set; }
 
     private async Task OnConsent(HttpContext ctx)
     {
@@ -645,4 +690,9 @@ public class UdapAuthServerPipeline
         queryParams.TryGetValue("state", out var state);
         return state.SingleOrDefault();
     }
+}
+
+public class DynamicIdp
+{
+    public string Name { get; set; }
 }

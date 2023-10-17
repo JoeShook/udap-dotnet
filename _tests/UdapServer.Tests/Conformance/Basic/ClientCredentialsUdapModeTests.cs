@@ -27,6 +27,7 @@ using Udap.Model.Access;
 using Udap.Model.Registration;
 using Udap.Model.Statement;
 using Udap.Server.Configuration;
+using Udap.Server.Validation;
 using Udap.Util.Extensions;
 using UdapServer.Tests.Common;
 using Xunit.Abstractions;
@@ -144,8 +145,8 @@ public class ClientCredentialsUdapModeTests
 
         _mockPipeline.IdentityScopes.Add(new IdentityResources.OpenId());
         _mockPipeline.IdentityScopes.Add(new IdentityResources.Profile());
-        _mockPipeline.ApiScopes.Add(new ApiScope("system/Patient.rs"));
-        _mockPipeline.ApiScopes.Add(new ApiScope(" system/Appointment.rs"));
+        _mockPipeline.ApiScopes.AddRange(new HL7SmartScopeExpander().ExpandToApiScopes("system/Patient.rs"));
+        _mockPipeline.ApiScopes.AddRange(new HL7SmartScopeExpander().ExpandToApiScopes(" system/Appointment.rs"));
     }
 
     [Fact]
@@ -405,7 +406,7 @@ public class ClientCredentialsUdapModeTests
 
         regResponse.StatusCode.Should().Be(HttpStatusCode.OK);
         regDocumentResult = await regResponse.Content.ReadFromJsonAsync<UdapDynamicClientRegistrationDocument>();
-        regDocumentResult!.Scope.Should().Be("system/Patient.rs system/Appointment.rs");
+        regDocumentResult!.Scope.Should().Be("system/Appointment.rs system/Patient.rs");
 
         regDocumentResult!.ClientId.Should().Be(clientIdWithDefaultSubAltName);
 
@@ -448,7 +449,7 @@ public class ClientCredentialsUdapModeTests
         regResponse.StatusCode.Should().Be(HttpStatusCode.Created, await regResponse.Content.ReadAsStringAsync());
         var regDocumentResultForSelectedSubAltName =
             await regResponse.Content.ReadFromJsonAsync<UdapDynamicClientRegistrationDocument>();
-        regDocumentResultForSelectedSubAltName!.Scope.Should().Be("system/Patient.rs system/Appointment.rs");
+        regDocumentResultForSelectedSubAltName!.Scope.Should().Be("system/Appointment.rs system/Patient.rs");
         var clientIdWithSelectedSubAltName = regDocumentResultForSelectedSubAltName.ClientId;
         clientIdWithSelectedSubAltName.Should().NotBe(clientIdWithDefaultSubAltName);
 
@@ -635,7 +636,7 @@ public class ClientCredentialsUdapModeTests
         regResponse.StatusCode.Should().Be(HttpStatusCode.Created, await regResponse.Content.ReadAsStringAsync());
         var regDocumentResultForSelectedSubAltName =
             await regResponse.Content.ReadFromJsonAsync<UdapDynamicClientRegistrationDocument>();
-        regDocumentResultForSelectedSubAltName!.Scope.Should().Be("system/Patient.rs system/Appointment.rs");
+        regDocumentResultForSelectedSubAltName!.Scope.Should().Be("system/Appointment.rs system/Patient.rs");
         var clientIdWithSelectedSubAltName = regDocumentResultForSelectedSubAltName.ClientId;
         clientIdWithSelectedSubAltName.Should().NotBe(clientIdWithDefaultSubAltName);
 
@@ -955,7 +956,7 @@ public class ClientCredentialsUdapModeTests
         regResponse.StatusCode.Should().Be(HttpStatusCode.Created, await regResponse.Content.ReadAsStringAsync());
         var regDocumentResultForSelectedSubAltName =
             await regResponse.Content.ReadFromJsonAsync<UdapDynamicClientRegistrationDocument>();
-        regDocumentResultForSelectedSubAltName!.Scope.Should().Be("system/Patient.rs system/Appointment.rs");
+        regDocumentResultForSelectedSubAltName!.Scope.Should().Be("system/Appointment.rs system/Patient.rs");
         var clientIdWithSelectedSubAltName = regDocumentResultForSelectedSubAltName.ClientId;
         clientIdWithSelectedSubAltName.Should().NotBe(clientIdWithDefaultSubAltName);
 
