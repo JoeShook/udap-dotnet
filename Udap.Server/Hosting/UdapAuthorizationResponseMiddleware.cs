@@ -167,26 +167,9 @@ internal class UdapAuthorizationResponseMiddleware
     {
         var errorMessage = await interactionService.GetErrorContextAsync(errorId);
 
-        if (errorMessage.Error == AuthorizeErrors.UnsupportedResponseType)
+        if (errorMessage?.Error == AuthorizeErrors.UnsupportedResponseType)
         {
-            //
-            // Include error in redirect
-            //
-
-            if (context.Request.Query.TryGetValue(
-                    AuthorizeRequest.RedirectUri,
-                    out StringValues redirectUri))
-            {
-                var url = BuildRedirectUrl(
-                    context, 
-                    redirectUri, 
-                    AuthorizeErrors.InvalidRequest,
-                    errorMessage.ErrorDescription);
-
-                context.Response.Redirect(url);
-            }
-
-            return;
+            errorMessage.Error = AuthorizeErrors.InvalidRequest;
         }
 
         //
@@ -209,9 +192,6 @@ internal class UdapAuthorizationResponseMiddleware
 
         sb.Append(AuthorizeResponse.Error)
             .Append("=")
-            // Transform error of unsupported_response_type to invalid_request
-            // Seems reasonable if you read RFC 6749
-            // TODO: PR to Duende?
             .Append(error);
 
         sb.Append("&")

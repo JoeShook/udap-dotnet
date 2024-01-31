@@ -13,7 +13,6 @@ using Duende.IdentityServer.ResponseHandling;
 using Duende.IdentityServer.Services;
 using Duende.IdentityServer.Stores;
 using Duende.IdentityServer.Validation;
-using Microsoft.AspNetCore.Authentication;
 using Microsoft.Extensions.Logging;
 using Udap.Model;
 
@@ -34,8 +33,8 @@ public class UdapTokenResponseGenerator : TokenResponseGenerator
     /// <param name="clients">The clients.</param>
     /// <param name="logger">The logger.</param>
     public UdapTokenResponseGenerator(
-        IProfileService profile, 
-        ISystemClock clock, 
+        IProfileService profile,
+        IClock clock, 
         ITokenService tokenService, 
         IRefreshTokenService refreshTokenService, 
         IScopeParser scopeParser, 

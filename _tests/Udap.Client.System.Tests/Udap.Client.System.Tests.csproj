@@ -1,7 +1,7 @@
 ﻿<Project Sdk="Microsoft.NET.Sdk">
 
   <PropertyGroup>
-    <TargetFrameworks>net6.0;net7.0</TargetFrameworks>
+    <TargetFrameworks>net6.0;net7.0;net8.0</TargetFrameworks>
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
 
@@ -58,7 +58,6 @@
 
   <ItemGroup>
     <ProjectReference Include="..\..\Udap.Client\Udap.Client.csproj" />
-    <ProjectReference Include="..\..\Udap.Metadata.Server\Udap.Metadata.Server.csproj" />
     <ProjectReference Include="..\..\Udap.Common\Udap.Common.csproj" />
     <ProjectReference Include="..\..\Udap.Util\Udap.Util.csproj" />
     
