@@ -95,6 +95,10 @@ Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "Udap.Auth.Server", "example
 EndProject
 Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "UdapDb.Postgres", "migrations\UdapDb.Postgres\UdapDb.Postgres.csproj", "{C6D703FE-00D9-42D8-9F81-DC113CE84779}"
 EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Udap-Aspire.AppHost", "examples\Udap-Aspire.AppHost\Udap-Aspire.AppHost.csproj", "{9D62ED1A-51F2-472C-97FA-2EF2995C2373}"
+EndProject
+Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "Udap-Aspire.ServiceDefaults", "examples\Udap-Aspire.ServiceDefaults\Udap-Aspire.ServiceDefaults.csproj", "{67ED5EC6-18A1-4A92-936E-5EDB230F58AB}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -270,6 +274,18 @@ Global
 		{C6D703FE-00D9-42D8-9F81-DC113CE84779}.FullDebug|Any CPU.Build.0 = Debug|Any CPU
 		{C6D703FE-00D9-42D8-9F81-DC113CE84779}.Release|Any CPU.ActiveCfg = Release|Any CPU
 		{C6D703FE-00D9-42D8-9F81-DC113CE84779}.Release|Any CPU.Build.0 = Release|Any CPU
+		{9D62ED1A-51F2-472C-97FA-2EF2995C2373}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{9D62ED1A-51F2-472C-97FA-2EF2995C2373}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{9D62ED1A-51F2-472C-97FA-2EF2995C2373}.FullDebug|Any CPU.ActiveCfg = Debug|Any CPU
+		{9D62ED1A-51F2-472C-97FA-2EF2995C2373}.FullDebug|Any CPU.Build.0 = Debug|Any CPU
+		{9D62ED1A-51F2-472C-97FA-2EF2995C2373}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{9D62ED1A-51F2-472C-97FA-2EF2995C2373}.Release|Any CPU.Build.0 = Release|Any CPU
+		{67ED5EC6-18A1-4A92-936E-5EDB230F58AB}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{67ED5EC6-18A1-4A92-936E-5EDB230F58AB}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{67ED5EC6-18A1-4A92-936E-5EDB230F58AB}.FullDebug|Any CPU.ActiveCfg = Debug|Any CPU
+		{67ED5EC6-18A1-4A92-936E-5EDB230F58AB}.FullDebug|Any CPU.Build.0 = Debug|Any CPU
+		{67ED5EC6-18A1-4A92-936E-5EDB230F58AB}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{67ED5EC6-18A1-4A92-936E-5EDB230F58AB}.Release|Any CPU.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE
@@ -299,6 +315,8 @@ Global
 		{CF2BC3EC-8B6D-49E4-9C7B-18EF4229F9CF} = {4B854644-1F54-4ECA-9290-A89B91A19FF9}
 		{FD9FBB5C-DBCF-4C1D-9E21-A98485D179E6} = {4B854644-1F54-4ECA-9290-A89B91A19FF9}
 		{C6D703FE-00D9-42D8-9F81-DC113CE84779} = {B73A108B-9163-4463-B755-A0F84344D088}
+		{9D62ED1A-51F2-472C-97FA-2EF2995C2373} = {4B854644-1F54-4ECA-9290-A89B91A19FF9}
+		{67ED5EC6-18A1-4A92-936E-5EDB230F58AB} = {4B854644-1F54-4ECA-9290-A89B91A19FF9}
 	EndGlobalSection
 	GlobalSection(ExtensibilityGlobals) = postSolution
 		SolutionGuid = {4C22E2C0-B5D3-497F-BAD0-EB769D6D6CD1}

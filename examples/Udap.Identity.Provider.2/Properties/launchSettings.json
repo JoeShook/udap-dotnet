@@ -4,12 +4,17 @@
       "commandName": "Project",
       "dotnetRunMessages": true,
       "launchBrowser": true,
-      "applicationUrl": "https://host.docker.internal:5057",
+      "applicationUrl": "https://localhost:5057",
       "environmentVariables": {
         "GCPDeploy": "false",
         "ASPNETCORE_ENVIRONMENT": "Development",
-        "UdapIdpBaseUrl": "https://host.docker.internal:5057"
+        "UdapIdpBaseUrl": "https://localhost:5057",
+        "ASPNETCORE_Kestrel__Endpoints__Https__Url": "https://host.docker.internal:5057"
       },
+      "notes": [
+        "This converation allowed me to bind to host.docker.internal in Aspire when not running in a container on Windows.",
+        "https://github.com/dotnet/aspire/issues/1116#issuecomment-1879818156"
+      ],
       "sslPort": 5057
     },
     "Docker": {

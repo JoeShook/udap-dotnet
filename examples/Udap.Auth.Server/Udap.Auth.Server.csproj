@@ -44,6 +44,10 @@
   </ItemGroup>
 
   <ItemGroup>
+    <ProjectReference Include="..\Udap-Aspire.ServiceDefaults\Udap-Aspire.ServiceDefaults.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
     <Content Update="nuget.config">
       <CopyToOutputDirectory>Always</CopyToOutputDirectory>
     </Content>

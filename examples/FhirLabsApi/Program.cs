@@ -27,6 +27,8 @@ using Udap.Common.Certificates;
 using Constants = Udap.Common.Constants;
 
 var builder = WebApplication.CreateBuilder(args);
+
+builder.AddServiceDefaults();
 builder.Configuration.AddUserSecrets<Program>(optional:true);  // I want user secrets even in release mode.
 
 builder.Host.UseSerilog((ctx, lc) => lc
@@ -81,19 +83,19 @@ builder.Services
     })
     ;
 
-// builder.Services.AddAuthentication(OidcConstants.AuthenticationSchemes.AuthorizationHeaderBearer)
-//
-//     .AddJwtBearer(OidcConstants.AuthenticationSchemes.AuthorizationHeaderBearer, options =>
-//     {
-//         options.Authority = builder.Configuration["Jwt:Authority"];
-//         options.RequireHttpsMetadata = bool.Parse(builder.Configuration["Jwt:RequireHttpsMetadata"] ?? "true");
-//      
-//         
-//         options.TokenValidationParameters = new TokenValidationParameters
-//         {
-//             ValidateAudience = false
-//         };
-//     });
+builder.Services.AddAuthentication(OidcConstants.AuthenticationSchemes.AuthorizationHeaderBearer)
+
+    .AddJwtBearer(OidcConstants.AuthenticationSchemes.AuthorizationHeaderBearer, options =>
+    {
+        options.Authority = builder.Configuration["Jwt:Authority"];
+        options.RequireHttpsMetadata = bool.Parse(builder.Configuration["Jwt:RequireHttpsMetadata"] ?? "true");
+     
+        
+        options.TokenValidationParameters = new TokenValidationParameters
+        {
+            ValidateAudience = false
+        };
+    });
 
 
 builder.Services.Configure<UdapFileCertStoreManifest>(builder.Configuration.GetSection(Constants.UDAP_FILE_STORE_MANIFEST));
@@ -129,6 +131,8 @@ builder.Services.AddTransient<FhirSmartAppLaunchConfiguration>(options =>
 
 
 var app = builder.Build();
+
+app.MapDefaultEndpoints();
 
 // Configure the HTTP request pipeline.
 
@@ -179,7 +183,7 @@ app.UseUdapMetadataServer();
 
 app.MapFhirSmartAppLaunchController();
 app.MapControllers()
-    // .RequireAuthorization()
+    .RequireAuthorization()
     .RequireRateLimiting(RateLimitExtensions.GetPolicy);
 
 app.Run();

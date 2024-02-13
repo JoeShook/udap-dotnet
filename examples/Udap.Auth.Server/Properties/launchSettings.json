@@ -6,8 +6,13 @@
       "environmentVariables": {
         "GCPDeploy": "false",
         "ASPNETCORE_ENVIRONMENT": "Development",
-        "UdapIdpBaseUrl": "https://host.docker.internal:5002"
+        "UdapIdpBaseUrl": "https://host.docker.internal:5002",
+        "ASPNETCORE_Kestrel__Endpoints__Https__Url": "https://host.docker.internal:5002"
       },
+      "notes": [
+        "This converation allowed me to bind to host.docker.internal in Aspire when not running in a container on Windows.",
+        "https://github.com/dotnet/aspire/issues/1116#issuecomment-1879818156"
+      ],
       "sslPort": 5002,
       "applicationUrl": "https://host.docker.internal:5002"
     },

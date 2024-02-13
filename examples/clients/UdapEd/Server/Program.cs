@@ -24,6 +24,8 @@ using UdapEd.Server.Rest;
 
 var builder = WebApplication.CreateBuilder(args);
 
+builder.AddServiceDefaults();
+
 // Add services to the container.
 builder.Host.UseSerilog((ctx, lc) => lc
     .MinimumLevel.Information()
@@ -112,6 +114,8 @@ builder.AddRateLimiting();
 builder.AddOpenTelemetry();
 
 var app = builder.Build();
+
+app.MapDefaultEndpoints();
 
 app.UseSerilogRequestLogging();
 

@@ -24,4 +24,8 @@
     <None Include="wwwroot\crl\.gitignore" />
   </ItemGroup>
 
+  <ItemGroup>
+    <ProjectReference Include="..\Udap-Aspire.ServiceDefaults\Udap-Aspire.ServiceDefaults.csproj" />
+  </ItemGroup>
+
 </Project>

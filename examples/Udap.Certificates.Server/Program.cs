@@ -2,6 +2,8 @@ using Microsoft.Extensions.FileProviders;
 
 var builder = WebApplication.CreateBuilder(args);
 
+builder.AddServiceDefaults();
+
 // Add services to the container.
 
 var provider = new Microsoft.AspNetCore.StaticFiles.FileExtensionContentTypeProvider();
@@ -11,6 +13,8 @@ provider.Mappings[".cer"] = "application/x-x509-ca-cert"; // NOTE: add the exten
 builder.Services.AddDirectoryBrowser();
  
 var app = builder.Build();
+
+app.MapDefaultEndpoints();
 
 // Configure the HTTP request pipeline.
 app.UseStaticFiles(new StaticFileOptions

@@ -25,6 +25,8 @@ internal static class HostingExtensions
 {
     public static WebApplication ConfigureServices(this WebApplicationBuilder builder, string[] args)
     {
+        builder.AddServiceDefaults();
+
         // if (! int.TryParse(Environment.GetEnvironmentVariable("ASPNETCORE_HTTPS_PORT"), out int sslPort))
         // {
         //     sslPort = 5002;
@@ -171,6 +173,8 @@ internal static class HostingExtensions
 
     public static WebApplication ConfigurePipeline(this WebApplication app, string[] args)
     {
+        app.MapDefaultEndpoints();
+
         if (Environment.GetEnvironmentVariable("GCLOUD_PROJECT") != null)
         {
             app.Use(async (ctx, next) =>
