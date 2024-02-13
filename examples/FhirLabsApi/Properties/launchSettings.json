@@ -6,8 +6,13 @@
       "launchUrl": "fhir/r4/.well-known/udap/communities/ashtml",
       "applicationUrl": "https://host.docker.internal:7016;http://host.docker.internal:5016",
       "environmentVariables": {
-        "ASPNETCORE_ENVIRONMENT": "Development"
+        "ASPNETCORE_ENVIRONMENT": "Development",
+        "ASPNETCORE_Kestrel__Endpoints__Https__Url": "https://host.docker.internal:7016"
       },
+      "notes": [
+        "This converation allowed me to bind to host.docker.internal in Aspire when not running in a container on Windows.",
+        "https://github.com/dotnet/aspire/issues/1116#issuecomment-1879818156"
+      ],
       "dotnetRunMessages": true
     },
     "FhirLabsApi": {
