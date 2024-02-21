@@ -1,14 +1,77 @@
 ﻿<?xml version="1.0" encoding="utf-8" ?>
-<ContentPage xmlns="http://schemas.microsoft.com/dotnet/2021/maui"
+
+<TabbedPage xmlns="http://schemas.microsoft.com/dotnet/2021/maui"
              xmlns:x="http://schemas.microsoft.com/winfx/2009/xaml"
              xmlns:local="clr-namespace:UdapEdAppMaui"
+             xmlns:pages="clr-namespace:UdapEd.Shared.Pages;assembly=UdapEd.Shared"
              x:Class="UdapEdAppMaui.MainPage"
              BackgroundColor="{DynamicResource PageBackgroundColor}">
 
-    <BlazorWebView x:Name="blazorWebView" HostPage="wwwroot/index.html">
-        <BlazorWebView.RootComponents>
-            <RootComponent Selector="#app" ComponentType="{x:Type local:Main}" />
-        </BlazorWebView.RootComponents>
+  
+  <ContentPage Title="Home">
+    <BlazorWebView HostPage="wwwroot/index.html">
+      <BlazorWebView.RootComponents>
+        <RootComponent Selector="#app" ComponentType="{x:Type pages:Index}" />
+      </BlazorWebView.RootComponents>
     </BlazorWebView>
+  </ContentPage>
 
-</ContentPage>
+  <ContentPage Title="Discovery">
+    <BlazorWebView HostPage="wwwroot/index.html">
+      <BlazorWebView.RootComponents>
+        <RootComponent Selector="#app" ComponentType="{x:Type pages:UdapDiscovery}" />
+      </BlazorWebView.RootComponents>
+    </BlazorWebView>
+  </ContentPage>
+
+  <ContentPage Title="Registration">
+    <BlazorWebView HostPage="wwwroot/index.html">
+      <BlazorWebView.RootComponents>
+        <RootComponent Selector="#app" ComponentType="{x:Type pages:UdapRegistration}" />
+      </BlazorWebView.RootComponents>
+    </BlazorWebView>
+  </ContentPage>
+
+  <ContentPage Title="B2B">
+    <BlazorWebView HostPage="wwwroot/index.html">
+      <BlazorWebView.RootComponents>
+        <RootComponent Selector="#app" ComponentType="{x:Type pages:UdapBusinessToBusiness}" />
+      </BlazorWebView.RootComponents>
+    </BlazorWebView>
+  </ContentPage>
+
+  <ContentPage Title="Consumer">
+    <BlazorWebView HostPage="wwwroot/index.html">
+      <BlazorWebView.RootComponents>
+        <RootComponent Selector="#app" ComponentType="{x:Type pages:UdapConsumer}" />
+      </BlazorWebView.RootComponents>
+    </BlazorWebView>
+  </ContentPage>
+
+  <ContentPage Title="Tiered">
+    <BlazorWebView HostPage="wwwroot/index.html">
+      <BlazorWebView.RootComponents>
+        <RootComponent Selector="#app" ComponentType="{x:Type pages:UdapTieredOAuth}" />
+      </BlazorWebView.RootComponents>
+    </BlazorWebView>
+  </ContentPage>
+
+  <ContentPage Title="Search">
+    <BlazorWebView HostPage="wwwroot/index.html">
+      <BlazorWebView.RootComponents>
+        <RootComponent Selector="#app" ComponentType="{x:Type pages:PatientSearch}" />
+      </BlazorWebView.RootComponents>
+    </BlazorWebView>
+  </ContentPage>
+
+
+  <ContentPage Title="Match">
+    <BlazorWebView HostPage="wwwroot/index.html">
+      <BlazorWebView.RootComponents>
+        <RootComponent Selector="#app" ComponentType="{x:Type pages:PatientMatch}" />
+      </BlazorWebView.RootComponents>
+    </BlazorWebView>
+  </ContentPage>
+
+</TabbedPage>
+

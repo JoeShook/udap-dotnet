@@ -18,6 +18,7 @@ using Udap.Client.Client;
 using Udap.Client.Configuration;
 using Udap.Common.Certificates;
 using UdapEd.Shared.Services;
+using UdapEd.Shared.Shared;
 using UdapEdAppMaui.Services;
 
 #if WINDOWS
@@ -84,7 +85,8 @@ public static class MauiProgram
         builder.Services.AddHttpClient<IUdapClient, UdapClient>()
             .AddHttpMessageHandler(sp => new HeaderAugmentationHandler(sp.GetRequiredService<IOptionsMonitor<UdapClientOptions>>()));
 
-        
+        // builder.Services.AddCascadingValue<CascadingAppState>(sp => new CascadingAppState());
+
 #if DEBUG
         builder.Services.AddBlazorWebViewDeveloperTools();
 		builder.Logging.AddDebug();
