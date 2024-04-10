@@ -18,7 +18,7 @@
     <PackageVersion Include="Microsoft.IdentityModel.Protocols.OpenIdConnect" Version="7.4.1" />
     <PackageVersion Include="MSTest.TestAdapter" Version="3.1.1" />
     <PackageVersion Include="MSTest.TestFramework" Version="3.1.1" />
-    <PackageVersion Include="IdentityModel" Version="6.2.0" />
+    <PackageVersion Include="IdentityModel" Version="7.0.0" />
     <PackageVersion Include="System.Text.Json" Version="[6.0.7,7.0.3]" />
     <PackageVersion Include="AutoMapper" Version="13.0.1" />
     <PackageVersion Include="Duende.IdentityServer" Version="7.0.4" />
