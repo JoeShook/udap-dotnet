@@ -9,7 +9,7 @@
 
 using System.Security.Claims;
 using System.Security.Cryptography.X509Certificates;
-using IdentityModel;
+using Duende.IdentityModel;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using Microsoft.IdentityModel.Tokens;

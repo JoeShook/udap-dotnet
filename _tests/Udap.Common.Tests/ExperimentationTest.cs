@@ -16,7 +16,7 @@ using Hl7.Fhir.Specification.Terminology;
 using Hl7.Fhir.Utility;
 
 #if NET7_0_OR_GREATER
-using IdentityModel;
+using Duende.IdentityModel;
 #endif
 
 using Microsoft.IdentityModel.Tokens;

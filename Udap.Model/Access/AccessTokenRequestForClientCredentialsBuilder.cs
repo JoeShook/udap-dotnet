@@ -13,7 +13,7 @@ using System.Linq;
 using System.Security.Claims;
 using System.Security.Cryptography.X509Certificates;
 using System.Text.Json;
-using IdentityModel;
+using Duende.IdentityModel;
 using Microsoft.IdentityModel.Tokens;
 using Udap.Model.Statement;
 
@@ -95,7 +95,7 @@ public  class AccessTokenRequestForClientCredentialsBuilder
         {
             Address = _tokenEndoint,
             //ClientId = result.ClientId, we use Implicit ClientId in the iss claim
-            ClientAssertion = new IdentityModel.Client.ClientAssertion()
+            ClientAssertion = new Duende.IdentityModel.Client.ClientAssertion()
             {
                 Type = OidcConstants.ClientAssertionTypes.JwtBearer,
                 Value = clientAssertion

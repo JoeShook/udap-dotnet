@@ -11,7 +11,7 @@ using System.Security.Cryptography.X509Certificates;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 using FluentAssertions;
-using IdentityModel;
+using Duende.IdentityModel;
 using Udap.Model.Registration;
 using Xunit.Abstractions;
 

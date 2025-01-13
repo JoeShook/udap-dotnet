@@ -10,7 +10,7 @@
 using System.Reflection;
 using Duende.IdentityServer.Stores;
 using FluentAssertions;
-using IdentityModel;
+using Duende.IdentityModel;
 using Microsoft.AspNetCore.Http;
 using Microsoft.Extensions.Logging;
 using Microsoft.IdentityModel.Tokens;
