@@ -8,7 +8,9 @@
 #endregion
 
 using System;
+using System.Collections.Generic;
 using System.IdentityModel.Tokens.Jwt;
+using System.Linq;
 using System.Runtime.InteropServices;
 using System.Security.Cryptography;
 using System.Security.Cryptography.X509Certificates;
@@ -20,18 +22,23 @@ using ECCurve = System.Security.Cryptography.ECCurve;
 namespace Udap.Model.Statement;
 public class SignedSoftwareStatementBuilder<T> where T : class, ISoftwareStatementSerializer
 {
-    private readonly X509Certificate2 _certificate;
+    private readonly List<X509Certificate2> _certificates;
     private readonly T _document;
 
-    private SignedSoftwareStatementBuilder(X509Certificate2 certificate, T document)
+    private SignedSoftwareStatementBuilder(List<X509Certificate2> certificates, T document)
     {
-        _certificate = certificate;
+        _certificates = certificates;
         _document = document;
     }
 
     public static SignedSoftwareStatementBuilder<T> Create(X509Certificate2 certificate, T document)
     {
-        return new SignedSoftwareStatementBuilder<T>(certificate, document);
+        return new SignedSoftwareStatementBuilder<T>([certificate], document);
+    }
+
+    public static SignedSoftwareStatementBuilder<T> Create(List<X509Certificate2> certificates, T document)
+    {
+        return new SignedSoftwareStatementBuilder<T>(certificates, document);
     }
 
     //
@@ -42,24 +49,34 @@ public class SignedSoftwareStatementBuilder<T> where T : class, ISoftwareStateme
 
     public string Build(string? algorithm = null)
     {
+        var x5cStrings = new List<string>();
+        var endCertificate = _certificates.First();
 
         //
         // Short circuit to ECDSA
         //
-        if (_certificate.GetECDsaPublicKey() != null)
+        if (endCertificate.GetECDsaPublicKey() != null)
         {
             return BuildECDSA(algorithm);
         }
 
         algorithm ??= UdapConstants.SupportedAlgorithm.RS256;
-        var securityKey = new X509SecurityKey(_certificate);
+        
+            
+        var securityKey = new X509SecurityKey(endCertificate);
         var signingCredentials = new SigningCredentials(securityKey, algorithm);
+        x5cStrings.Add(Convert.ToBase64String(endCertificate.Export(X509ContentType.Cert)));
 
-        var pem = Convert.ToBase64String(_certificate.Export(X509ContentType.Cert));
+
+        foreach (var certificate in _certificates.Skip(1))
+        {
+            x5cStrings.Add(Convert.ToBase64String(certificate.Export(X509ContentType.Cert)));
+        }
+
         var jwtHeader = new JwtHeader
         {
             { "alg", signingCredentials.Algorithm },
-            { "x5c", new[] { pem } }
+            { "x5c", x5cStrings.ToArray() }
         };
 
         var encodedHeader = jwtHeader.Base64UrlEncode();
@@ -75,14 +92,16 @@ public class SignedSoftwareStatementBuilder<T> where T : class, ISoftwareStateme
 
     public string BuildECDSA(string? algorithm = null)
     {
+        var x5cStrings = new List<string>();
         algorithm ??= UdapConstants.SupportedAlgorithm.ES256;
-        var key = _certificate.GetECDsaPrivateKey();
+        var endCertificate = _certificates.First();
+        var key = endCertificate.GetECDsaPrivateKey();
         using var ecdsa = ECDsa.Create(ECCurve.NamedCurves.nistP384);
 
         if (RuntimeInformation.IsOSPlatform(OSPlatform.Windows))
         {
             //
-            // Windows work around.  Otherwise works on Linux
+            // Windows work around.  Otherwise, works on Linux
             // Short answer: Windows behaves in such a way when importing the pfx
             // it creates the CNG key so it can only be exported encrypted
             // https://github.com/dotnet/runtime/issues/77590#issuecomment-1325896560
@@ -110,11 +129,17 @@ public class SignedSoftwareStatementBuilder<T> where T : class, ISoftwareStateme
             CryptoProviderFactory = new CryptoProviderFactory { CacheSignatureProviders = false }
         };
 
-        var pem = Convert.ToBase64String(_certificate.Export(X509ContentType.Cert));
+        x5cStrings.Add(Convert.ToBase64String(endCertificate.Export(X509ContentType.Cert)));
+
+        foreach (var certificate in _certificates.Skip(1))
+        {
+            x5cStrings.Add(Convert.ToBase64String(certificate.Export(X509ContentType.Cert)));
+        }
+
         var jwtHeader = new JwtHeader
         {
             { "alg", signingCredentials.Algorithm },
-            { "x5c", new[] { pem } }
+            { "x5c", x5cStrings.ToArray() }
         };
 
         var encodedHeader = jwtHeader.Base64UrlEncode();

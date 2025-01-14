@@ -7,6 +7,7 @@
 // */
 #endregion
 
+using System.IdentityModel.Tokens.Jwt;
 using System.Security.Claims;
 using System.Security.Cryptography.X509Certificates;
 using System.Text.Json;
@@ -20,8 +21,10 @@ using Udap.Model;
 using Udap.Model.Registration;
 using Udap.Model.Statement;
 using Udap.Model.UdapAuthenticationExtensions;
+using Udap.Util.Extensions;
 using Xunit.Abstractions;
 using Claim = System.Security.Claims.Claim;
+using JsonClaimValueTypes = Microsoft.IdentityModel.JsonWebTokens.JsonClaimValueTypes;
 
 namespace Udap.Common.Tests.Model.Registration;
 public class UdapDynamicClientRegistrationDocumentTest
@@ -727,6 +730,52 @@ public class UdapDynamicClientRegistrationDocumentTest
         // document["datetime"].Should().Be(now);
     }
 
+    [Fact]
+    public void SignedSoftwareStatementBuilderTestForMultipleX5cInHeader()
+    {
+        var expiration = TimeSpan.FromMinutes(5);
+        var endCertPath = Path.Combine(AppContext.BaseDirectory, "CertStore/issued", "fhirlabs.net.client.pfx");
+        var intermediateCertPath = Path.Combine(AppContext.BaseDirectory, "CertStore/intermediates", "SureFhirLabs_Intermediate.cer");
+        var clientCert = new X509Certificate2(endCertPath, "udap-test");
+        var intermediateCert = new X509Certificate2(intermediateCertPath);
+        var  chain = new List<X509Certificate2> { clientCert, intermediateCert };
+
+        var document = UdapDcrBuilderForAuthorizationCode
+            .Create(clientCert)
+            .WithAudience("https://securedcontrols.net/connect/register")
+            .WithExpiration(expiration)
+            .WithJwtId()
+            .WithClientName("dotnet system test client")
+            .WithContacts(new HashSet<string>
+            {
+                "mailto:Joseph.Shook@Surescripts.com", "mailto:JoeShook@gmail.com"
+            })
+            .WithTokenEndpointAuthMethod(UdapConstants.RegistrationDocumentValues.TokenEndpointAuthMethodValue)
+            .WithScope("system/Patient.rs system/Practitioner.read")
+            .WithRedirectUrls(new List<string?> { new Uri($"https://client.fhirlabs.net/redirect/").AbsoluteUri }!)
+            .WithLogoUri("https://avatars.githubusercontent.com/u/77421324?s=48&v=4")
+            .Build();
+
+        var signedDocument = SignedSoftwareStatementBuilder<UdapDynamicClientRegistrationDocument>
+            .Create(chain, document).Build();
+
+        document.SoftwareStatement = signedDocument;
+        document.ClientId = "MyNewClientId"; // Simulate successful registration
+        var serializeDocument = JsonSerializer.Serialize(document);
+        var documentDeserialize = JsonSerializer.Deserialize<UdapDynamicClientRegistrationDocument>(serializeDocument);
+
+
+        var tokenHandler = new JsonWebTokenHandler();
+        var jsonWebToken = tokenHandler.ReadJsonWebToken(documentDeserialize.SoftwareStatement);
+        _testOutputHelper.WriteLine("Header:");
+
+        
+        var certificates = jsonWebToken.GetCertificateList();
+        certificates.Should().NotBeNull();
+        certificates!.Count.Should().Be(2);
+        certificates.First().Thumbprint.Should().Be(clientCert.Thumbprint);
+        certificates.Last().Thumbprint.Should().Be(intermediateCert.Thumbprint);
+    }
 
     [Fact]
     public void AuthorizationCodeFlowTest()

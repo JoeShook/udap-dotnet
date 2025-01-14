@@ -751,9 +751,3 @@ public class UdapDynamicClientRegistrationDocument : Dictionary<string, object>,
         return Base64UrlEncoder.Encode(SerializeToJson());
     }
 }
-
-public interface ISoftwareStatementSerializer
-{
-    public string SerializeToJson();
-    public string Base64UrlEncode();
-}
