@@ -28,7 +28,7 @@ public class UdapDcrBuilderForClientCredentials
 {
     private readonly DateTime _now;
     private readonly UdapDynamicClientRegistrationDocument _document;
-    private X509Certificate2? _certificate;
+    private List<X509Certificate2>? _certificates;
 
     protected  UdapDynamicClientRegistrationDocument Document
     {
@@ -38,6 +38,11 @@ public class UdapDcrBuilderForClientCredentials
     protected UdapDcrBuilderForClientCredentials(X509Certificate2 certificate, bool cancelRegistration) : this(cancelRegistration)
     {
         this.WithCertificate(certificate);
+    }
+
+    protected UdapDcrBuilderForClientCredentials(List<X509Certificate2> certificates, bool cancelRegistration) : this(cancelRegistration)
+    {
+        this.WithCertificates(certificates);
     }
 
     protected UdapDcrBuilderForClientCredentials(bool cancelRegistration)
@@ -69,7 +74,16 @@ public class UdapDcrBuilderForClientCredentials
         return new UdapDcrBuilderForClientCredentials(cert, false);
     }
 
-    
+    /// <summary>
+    /// Register or update an existing registration
+    /// </summary>
+    /// <param name="certs">Certificate chain where the first certificate is the end certificate</param>
+    /// <returns></returns>
+    public static UdapDcrBuilderForClientCredentials Create(List<X509Certificate2> certs)
+    {
+        return new UdapDcrBuilderForClientCredentials(certs, false);
+    }
+
     /// <summary>
     /// Create a builder for registration.
     /// </summary>
@@ -108,10 +122,10 @@ public class UdapDcrBuilderForClientCredentials
     /// <returns></returns>
     public UdapDcrBuilderForClientCredentials WithIssuer(Uri issuer)
     {
-        var uriNames = _certificate!.GetSubjectAltNames(n=>n.TagNo == (int)X509Extensions.GeneralNameType.URI);
+        var uriNames = _certificates!.First().GetSubjectAltNames(n=>n.TagNo == (int)X509Extensions.GeneralNameType.URI);
         if (!uriNames.Select(u => u.Item2).Contains(issuer.AbsoluteUri))
         {
-            throw new Exception($"Certificate does not contain a URI Subject Alternative Name of, {issuer.AbsoluteUri}");
+            throw new Exception($"End certificate does not contain a URI Subject Alternative Name of, {issuer.AbsoluteUri}");
         }
         _document.Issuer = issuer.AbsoluteUri;
         _document.Subject = issuer.AbsoluteUri;
@@ -220,10 +234,20 @@ public class UdapDcrBuilderForClientCredentials
 
     public UdapDcrBuilderForClientCredentials WithCertificate(X509Certificate2 certificate)
     {
-        _certificate = certificate;
+        _certificates = new List<X509Certificate2> { certificate }; 
 
         _document.Issuer = certificate.GetNameInfo(X509NameType.UrlName, false);
         _document.Subject = certificate.GetNameInfo(X509NameType.UrlName, false);
+
+        return this;
+    }
+
+    public UdapDcrBuilderForClientCredentials WithCertificates(List<X509Certificate2> certificates)
+    {
+        _certificates = certificates;
+
+        _document.Issuer = _certificates.First().GetNameInfo(X509NameType.UrlName, false);
+        _document.Subject = _certificates.First().GetNameInfo(X509NameType.UrlName, false);
 
         return this;
     }
@@ -235,13 +259,13 @@ public class UdapDcrBuilderForClientCredentials
     
     public string BuildSoftwareStatement(string? signingAlgorithm = UdapConstants.SupportedAlgorithm.RS256)
     {
-        if (_certificate == null)
+        if (_certificates == null)
         {
             throw new Exception("Missing certificate");
         }
 
         return SignedSoftwareStatementBuilder<UdapDynamicClientRegistrationDocument>
-                .Create(_certificate, Build())
+                .Create(_certificates, Build())
                 .Build(signingAlgorithm);
     }
 }
