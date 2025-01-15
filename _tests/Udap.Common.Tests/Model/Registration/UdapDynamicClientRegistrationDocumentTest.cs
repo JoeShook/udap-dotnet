@@ -457,6 +457,60 @@ public class UdapDynamicClientRegistrationDocumentTest
         patientResourceResult.Should().BeEquivalentTo(patientResource);
     }
 
+    /// <summary>
+    /// This test proves that UdapDynamicClientRegistrationDocument can accomodate
+    /// exp and iat that are passed as string claims rather than numbers.
+    /// SerializeToJson() has the <see cref="UdapDynamicClientRegistrationDocumentConverter"/> applied
+    /// to fixup the <see cref="UdapDynamicClientRegistrationDocument"/> model object.
+    /// Remember that <see cref="UdapDynamicClientRegistrationDocument"/> inherits from Dictionary<string, object>
+    /// allowing for any claim to be added, which is how claims like HL7-B2B and TEFCA-IAS are added.
+    /// </summary>
+    [Fact]
+    public void DeserializeExtended()
+    {
+        var json = @"{
+    ""client_id"": ""484e5844-5980-4b9d-8b3b-c48dfaaa0979"",
+    ""software_statement"": ""..."",
+    ""redirect_uris"": [],
+    ""grant_types"": [
+        ""client_credentials""
+    ],
+    ""response_types"": [],
+    ""token_endpoint_auth_method"": ""private_key_jwt"",
+    ""client_name"": ""FhirLabs UdapEd"",
+    ""iss"": ""https://fhirlabs.net/fhir/r4"",
+    ""sub"": ""https://fhirlabs.net/fhir/r4"",
+    ""aud"": ""https://ihe-nimbus.epic.com/Interconnect-FHIR/udap/register"",
+    ""exp"": ""1736962786"",
+    ""iat"": ""1736962486"",
+    ""jti"": ""jPC7DYv90QDuPbF2ik2BqyAie6B6Pblszo1ji3pB8oM"",
+    ""contacts"": [
+        ""mailto:Joseph.Shook@Surescripts.com"",
+        ""mailto:JoeShook@gmail.com""
+    ],
+    ""scope"": ""..."",
+    ""logo_uri"": """"
+}";
+
+        var udapRegistrationDocument = JsonSerializer.Deserialize<UdapDynamicClientRegistrationDocument>(json);
+        var serializedJson = udapRegistrationDocument.SerializeToJson(true);
+        serializedJson.Should().Contain("1736962786");
+        serializedJson.Should().NotContain("\"1736962786\"");
+        // _testOutputHelper.WriteLine(serializedJson);
+        
+        udapRegistrationDocument = JsonSerializer.Deserialize<UdapDynamicClientRegistrationDocument>(
+            json,
+            new JsonSerializerOptions()
+            {
+                Converters = {
+                    new UdapDynamicClientRegistrationDocumentConverter(),
+                }
+            });
+
+        udapRegistrationDocument.IssuedAt.Should().Be(1736962486);
+        udapRegistrationDocument.Expiration.Should().Be(1736962786);
+    }
+
     [Fact]
     public void DeserializeTestWhenRemovingItemFromList()
     {
@@ -486,7 +540,7 @@ public class UdapDynamicClientRegistrationDocumentTest
         var document = builder.Build();
 
         var serializeDocument = document.SerializeToJson(true);
-        _testOutputHelper.WriteLine(serializeDocument);
+        // _testOutputHelper.WriteLine(serializeDocument);
 
         document = JsonSerializer.Deserialize<UdapDynamicClientRegistrationDocument>(serializeDocument);
 
@@ -528,7 +582,7 @@ public class UdapDynamicClientRegistrationDocumentTest
         };
 
         var serializeDocument = document.SerializeToJson(true);
-        _testOutputHelper.WriteLine(serializeDocument);
+        // _testOutputHelper.WriteLine(serializeDocument);
 
         document = JsonSerializer.Deserialize<UdapDynamicClientRegistrationDocument>(serializeDocument);
 

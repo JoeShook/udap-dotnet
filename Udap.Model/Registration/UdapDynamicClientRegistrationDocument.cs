@@ -730,8 +730,21 @@ public class UdapDynamicClientRegistrationDocument : Dictionary<string, object>,
         return JsonSerializer.Serialize(this, indent ? IndentedOptions : DefaultOptions);
     }
 
-    private static readonly JsonSerializerOptions DefaultOptions = new JsonSerializerOptions { WriteIndented = false };
-    private static readonly JsonSerializerOptions IndentedOptions = new JsonSerializerOptions { WriteIndented = true };
+    private static readonly JsonSerializerOptions DefaultOptions = new JsonSerializerOptions
+    {
+        Converters = {
+            new UdapDynamicClientRegistrationDocumentConverter(),
+        },
+        WriteIndented = false
+    };
+
+    private static readonly JsonSerializerOptions IndentedOptions = new JsonSerializerOptions
+    {
+        Converters = {
+            new UdapDynamicClientRegistrationDocumentConverter(),
+        },
+        WriteIndented = true
+    };
 
     /// <summary>
     /// Serializes this instance to JSON.
@@ -749,5 +762,81 @@ public class UdapDynamicClientRegistrationDocument : Dictionary<string, object>,
     public virtual string Base64UrlEncode()
     {
         return Base64UrlEncoder.Encode(SerializeToJson());
+    }
+}
+
+
+public class UdapDynamicClientRegistrationDocumentConverter : JsonConverter<UdapDynamicClientRegistrationDocument>
+{
+    public override UdapDynamicClientRegistrationDocument Read(ref Utf8JsonReader reader, Type typeToConvert, JsonSerializerOptions options)
+    {
+        var document = new UdapDynamicClientRegistrationDocument();
+
+        using (JsonDocument jsonDocument = JsonDocument.ParseValue(ref reader))
+        {
+            foreach (JsonProperty property in jsonDocument.RootElement.EnumerateObject())
+            {
+                if (property.NameEquals(UdapConstants.RegistrationDocumentValues.Expiration))
+                {
+                    if (property.Value.ValueKind == JsonValueKind.String && long.TryParse(property.Value.GetString(), out var expiration))
+                    {
+                        document.Expiration = expiration;
+                    }
+                    else if (property.Value.ValueKind == JsonValueKind.Number)
+                    {
+                        document.Expiration = property.Value.GetInt64();
+                    }
+                }
+                else if (property.NameEquals(UdapConstants.RegistrationDocumentValues.IssuedAt))
+                {
+                    if (property.Value.ValueKind == JsonValueKind.String && long.TryParse(property.Value.GetString(), out var issuedAt))
+                    {
+                        document.IssuedAt = issuedAt;
+                    }
+                    else if (property.Value.ValueKind == JsonValueKind.Number)
+                    {
+                        document.IssuedAt = property.Value.GetInt64();
+                    }
+                }
+                else
+                {
+                    document[property.Name] = property.Value.Clone();
+                }
+            }
+        }
+
+        return document;
+    }
+
+    public override void Write(Utf8JsonWriter writer, UdapDynamicClientRegistrationDocument value, JsonSerializerOptions options)
+    {
+        writer.WriteStartObject();
+
+        foreach (var kvp in value)
+        {
+            writer.WritePropertyName(kvp.Key);
+
+            if (kvp.Key == UdapConstants.RegistrationDocumentValues.Expiration || kvp.Key == UdapConstants.RegistrationDocumentValues.IssuedAt)
+            {
+                if (kvp.Value is string stringValue && long.TryParse(stringValue, out var longValue))
+                {
+                    writer.WriteNumberValue(longValue);
+                }
+                else if (kvp.Value is JsonElement jsonElement && jsonElement.ValueKind == JsonValueKind.String && long.TryParse(jsonElement.GetString(), out var jsonLongValue))
+                {
+                    writer.WriteNumberValue(jsonLongValue);
+                }
+                else
+                {
+                    JsonSerializer.Serialize(writer, kvp.Value, options);
+                }
+            }
+            else
+            {
+                JsonSerializer.Serialize(writer, kvp.Value, options);
+            }
+        }
+
+        writer.WriteEndObject();
     }
 }
