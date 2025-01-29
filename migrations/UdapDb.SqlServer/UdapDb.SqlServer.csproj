@@ -21,7 +21,7 @@
   <ItemGroup>
     <PackageReference Include="Duende.IdentityServer.EntityFramework.Storage" Version="7.0.8" />
     <PackageReference Include="Hl7.Fhir.Specification.R4B" Version="5.11.1" />
-    <PackageReference Include="Microsoft.AspNetCore.DataProtection.Abstractions" Version="9.0.0" />
+    <PackageReference Include="Microsoft.AspNetCore.DataProtection.Abstractions" Version="9.0.1" />
     <PackageReference Include="Microsoft.Data.SqlClient" Version="5.2.2" />
     <PackageReference Include="Microsoft.EntityFrameworkCore" Version="9.0.0" />
     <PackageReference Include="Microsoft.EntityFrameworkCore.Design" Version="9.0.0">
