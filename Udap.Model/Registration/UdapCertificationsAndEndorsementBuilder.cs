@@ -10,7 +10,7 @@
 using System.Security.Cryptography.X509Certificates;
 using System;
 using Microsoft.IdentityModel.Tokens;
-using IdentityModel;
+using Duende.IdentityModel;
 using System.Collections.Generic;
 using Udap.Model.Statement;
 

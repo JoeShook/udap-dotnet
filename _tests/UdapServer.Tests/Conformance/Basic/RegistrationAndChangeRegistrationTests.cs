@@ -15,7 +15,7 @@ using System.Text.Json;
 using Duende.IdentityServer.Models;
 using FluentAssertions;
 using FluentAssertions.Common;
-using IdentityModel;
+using Duende.IdentityModel;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Options;
 using Udap.Client.Configuration;

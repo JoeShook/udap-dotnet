@@ -8,7 +8,7 @@
 #endregion
 
 using System.Security.Cryptography.X509Certificates;
-using IdentityModel.Client;
+using Duende.IdentityModel.Client;
 using Microsoft.IdentityModel.Tokens;
 using Udap.Client.Authentication;
 using Udap.Client.Client.Messages;

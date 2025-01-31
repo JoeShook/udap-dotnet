@@ -7,6 +7,7 @@
 // */
 #endregion
 
+using System.IdentityModel.Tokens.Jwt;
 using System.Security.Claims;
 using System.Security.Cryptography.X509Certificates;
 using System.Text.Json;
@@ -20,8 +21,10 @@ using Udap.Model;
 using Udap.Model.Registration;
 using Udap.Model.Statement;
 using Udap.Model.UdapAuthenticationExtensions;
+using Udap.Util.Extensions;
 using Xunit.Abstractions;
 using Claim = System.Security.Claims.Claim;
+using JsonClaimValueTypes = Microsoft.IdentityModel.JsonWebTokens.JsonClaimValueTypes;
 
 namespace Udap.Common.Tests.Model.Registration;
 public class UdapDynamicClientRegistrationDocumentTest
@@ -193,7 +196,7 @@ public class UdapDynamicClientRegistrationDocumentTest
             .WithIssuer(new Uri("https://fhirlabs.net:7016/fhir/not_here"));
 
         act.Should().Throw<Exception>()
-            .Where(e => e.Message.StartsWith("Certificate does not contain a URI Subject Alternative Name of, https://fhirlabs.net:7016/fhir/not_here"));
+            .Where(e => e.Message.StartsWith("End certificate does not contain a URI Subject Alternative Name of, https://fhirlabs.net:7016/fhir/not_here"));
 
     }
 
@@ -454,6 +457,60 @@ public class UdapDynamicClientRegistrationDocumentTest
         patientResourceResult.Should().BeEquivalentTo(patientResource);
     }
 
+    /// <summary>
+    /// This test proves that UdapDynamicClientRegistrationDocument can accomodate
+    /// exp and iat that are passed as string claims rather than numbers.
+    /// SerializeToJson() has the <see cref="UdapDynamicClientRegistrationDocumentConverter"/> applied
+    /// to fixup the <see cref="UdapDynamicClientRegistrationDocument"/> model object.
+    /// Remember that <see cref="UdapDynamicClientRegistrationDocument"/> inherits from Dictionary<string, object>
+    /// allowing for any claim to be added, which is how claims like HL7-B2B and TEFCA-IAS are added.
+    /// </summary>
+    [Fact]
+    public void DeserializeExtended()
+    {
+        var json = @"{
+    ""client_id"": ""484e5844-5980-4b9d-8b3b-c48dfaaa0979"",
+    ""software_statement"": ""..."",
+    ""redirect_uris"": [],
+    ""grant_types"": [
+        ""client_credentials""
+    ],
+    ""response_types"": [],
+    ""token_endpoint_auth_method"": ""private_key_jwt"",
+    ""client_name"": ""FhirLabs UdapEd"",
+    ""iss"": ""https://fhirlabs.net/fhir/r4"",
+    ""sub"": ""https://fhirlabs.net/fhir/r4"",
+    ""aud"": ""https://ihe-nimbus.epic.com/Interconnect-FHIR/udap/register"",
+    ""exp"": ""1736962786"",
+    ""iat"": ""1736962486"",
+    ""jti"": ""jPC7DYv90QDuPbF2ik2BqyAie6B6Pblszo1ji3pB8oM"",
+    ""contacts"": [
+        ""mailto:Joseph.Shook@Surescripts.com"",
+        ""mailto:JoeShook@gmail.com""
+    ],
+    ""scope"": ""..."",
+    ""logo_uri"": """"
+}";
+
+        var udapRegistrationDocument = JsonSerializer.Deserialize<UdapDynamicClientRegistrationDocument>(json);
+        var serializedJson = udapRegistrationDocument.SerializeToJson(true);
+        serializedJson.Should().Contain("1736962786");
+        serializedJson.Should().NotContain("\"1736962786\"");
+        // _testOutputHelper.WriteLine(serializedJson);
+        
+        udapRegistrationDocument = JsonSerializer.Deserialize<UdapDynamicClientRegistrationDocument>(
+            json,
+            new JsonSerializerOptions()
+            {
+                Converters = {
+                    new UdapDynamicClientRegistrationDocumentConverter(),
+                }
+            });
+
+        udapRegistrationDocument.IssuedAt.Should().Be(1736962486);
+        udapRegistrationDocument.Expiration.Should().Be(1736962786);
+    }
+
     [Fact]
     public void DeserializeTestWhenRemovingItemFromList()
     {
@@ -483,7 +540,7 @@ public class UdapDynamicClientRegistrationDocumentTest
         var document = builder.Build();
 
         var serializeDocument = document.SerializeToJson(true);
-        _testOutputHelper.WriteLine(serializeDocument);
+        // _testOutputHelper.WriteLine(serializeDocument);
 
         document = JsonSerializer.Deserialize<UdapDynamicClientRegistrationDocument>(serializeDocument);
 
@@ -525,7 +582,7 @@ public class UdapDynamicClientRegistrationDocumentTest
         };
 
         var serializeDocument = document.SerializeToJson(true);
-        _testOutputHelper.WriteLine(serializeDocument);
+        // _testOutputHelper.WriteLine(serializeDocument);
 
         document = JsonSerializer.Deserialize<UdapDynamicClientRegistrationDocument>(serializeDocument);
 
@@ -727,7 +784,6 @@ public class UdapDynamicClientRegistrationDocumentTest
         // document["datetime"].Should().Be(now);
     }
 
-
     [Fact]
     public void AuthorizationCodeFlowTest()
     {
@@ -868,12 +924,110 @@ public class UdapDynamicClientRegistrationDocumentTest
     }
 
     /// <summary>
+    /// Test that the SignedSoftwareStatementBuilder can add multiple x5c certificates to the header
+    /// </summary>
+    [Fact]
+    public void SignedSoftwareStatementBuilderTestForMultipleX5cInHeader()
+    {
+        var expiration = TimeSpan.FromMinutes(5);
+        var endCertPath = Path.Combine(AppContext.BaseDirectory, "CertStore/issued", "fhirlabs.net.client.pfx");
+        var intermediateCertPath = Path.Combine(AppContext.BaseDirectory, "CertStore/intermediates", "SureFhirLabs_Intermediate.cer");
+        var clientCert = new X509Certificate2(endCertPath, "udap-test");
+        var intermediateCert = new X509Certificate2(intermediateCertPath);
+        var chain = new List<X509Certificate2> { clientCert, intermediateCert };
+
+        var document = UdapDcrBuilderForAuthorizationCode
+            .Create(clientCert)
+            .WithAudience("https://securedcontrols.net/connect/register")
+            .WithExpiration(expiration)
+            .WithJwtId()
+            .WithClientName("dotnet system test client")
+            .WithContacts(new HashSet<string>
+            {
+                "mailto:Joseph.Shook@Surescripts.com", "mailto:JoeShook@gmail.com"
+            })
+            .WithTokenEndpointAuthMethod(UdapConstants.RegistrationDocumentValues.TokenEndpointAuthMethodValue)
+            .WithScope("system/Patient.rs system/Practitioner.read")
+            .WithRedirectUrls(new List<string?> { new Uri($"https://client.fhirlabs.net/redirect/").AbsoluteUri }!)
+            .WithLogoUri("https://avatars.githubusercontent.com/u/77421324?s=48&v=4")
+            .Build();
+
+        var signedDocument = SignedSoftwareStatementBuilder<UdapDynamicClientRegistrationDocument>
+            .Create(chain, document).Build();
+
+        document.SoftwareStatement = signedDocument;
+        document.ClientId = "MyNewClientId"; // Simulate successful registration
+        var serializeDocument = JsonSerializer.Serialize(document);
+        var documentDeserialize = JsonSerializer.Deserialize<UdapDynamicClientRegistrationDocument>(serializeDocument);
+
+
+        var tokenHandler = new JsonWebTokenHandler();
+        var jsonWebToken = tokenHandler.ReadJsonWebToken(documentDeserialize.SoftwareStatement);
+
+
+        var certificates = jsonWebToken.GetCertificateList();
+        certificates.Should().NotBeNull();
+        certificates!.Count.Should().Be(2);
+        certificates.First().Thumbprint.Should().Be(clientCert.Thumbprint);
+        certificates.Last().Thumbprint.Should().Be(intermediateCert.Thumbprint);
+    }
+
+    /// <summary>
+    /// Test that the UdapDcrBuilderForClientCredentials can add multiple x5c certificates to the header
+    /// </summary>
+    [Fact]
+    public void UdapDcrBuilderForClientCredentials_TestForMultipleX5cInHeader()
+    {
+        var endCertPath = Path.Combine(AppContext.BaseDirectory, "CertStore/issued", "fhirlabs.net.client.pfx");
+        var intermediateCertPath = Path.Combine(AppContext.BaseDirectory, "CertStore/intermediates", "SureFhirLabs_Intermediate.cer");
+        var clientCert = new X509Certificate2(endCertPath, "udap-test");
+        var intermediateCert = new X509Certificate2(intermediateCertPath);
+        var chain = new List<X509Certificate2> { clientCert, intermediateCert };
+
+        var softwareStatement = UdapDcrBuilderForAuthorizationCode
+            .Create(chain)
+            .BuildSoftwareStatement();
+
+        var tokenHandler = new JsonWebTokenHandler();
+        var jsonWebToken = tokenHandler.ReadJsonWebToken(softwareStatement);
+        var certificates = jsonWebToken.GetCertificateList();
+        certificates.Should().NotBeNull();
+        certificates!.Count.Should().Be(2);
+        certificates.First().Thumbprint.Should().Be(clientCert.Thumbprint);
+        certificates.Last().Thumbprint.Should().Be(intermediateCert.Thumbprint);
+    }
+    
+    /// <summary>
+    /// Test that the UdapDcrBuilderForAuthorizationCode can add multiple x5c certificates to the header
+    /// </summary>
+    [Fact]
+    public void UdapDcrBuilderForAuthorizationCode_TestForMultipleX5cInHeader()
+    {
+        var endCertPath = Path.Combine(AppContext.BaseDirectory, "CertStore/issued", "fhirlabs.net.client.pfx");
+        var intermediateCertPath = Path.Combine(AppContext.BaseDirectory, "CertStore/intermediates", "SureFhirLabs_Intermediate.cer");
+        var clientCert = new X509Certificate2(endCertPath, "udap-test");
+        var intermediateCert = new X509Certificate2(intermediateCertPath);
+        var chain = new List<X509Certificate2> { clientCert, intermediateCert };
+
+        var softwareStatement = UdapDcrBuilderForAuthorizationCode
+            .Create(chain)
+            .BuildSoftwareStatement();
+
+        var tokenHandler = new JsonWebTokenHandler();
+        var jsonWebToken = tokenHandler.ReadJsonWebToken(softwareStatement);
+        var certificates = jsonWebToken.GetCertificateList();
+        certificates.Should().NotBeNull();
+        certificates!.Count.Should().Be(2);
+        certificates.First().Thumbprint.Should().Be(clientCert.Thumbprint);
+        certificates.Last().Thumbprint.Should().Be(intermediateCert.Thumbprint);
+    }
+
+    /// <summary>
     /// Pick another issuer that matches a SAN other than the first one in the Certificate
     /// </summary>
     [Fact]
     public void AlternateSanAuthorizationCodeFlowTest()
     {
-        EpochTime.GetIntDate(DateTime.Now.Add(TimeSpan.FromMinutes(5)));
         var cert = Path.Combine(AppContext.BaseDirectory, "CertStore/issued", "fhirlabs.net.client.pfx");
         var clientCert = new X509Certificate2(cert, "udap-test");
 
@@ -889,7 +1043,7 @@ public class UdapDynamicClientRegistrationDocumentTest
             .WithIssuer(new Uri("https://fhirlabs.net:7016/fhir/not_here"));
 
         act.Should().Throw<Exception>()
-            .Where(e => e.Message.StartsWith("Certificate does not contain a URI Subject Alternative Name of, https://fhirlabs.net:7016/fhir/not_here"));
+            .Where(e => e.Message.StartsWith("End certificate does not contain a URI Subject Alternative Name of, https://fhirlabs.net:7016/fhir/not_here"));
     }
 
     [Fact]

@@ -10,7 +10,7 @@
 using System.IdentityModel.Tokens.Jwt;
 using Duende.IdentityServer.Extensions;
 using Duende.IdentityServer.Stores;
-using IdentityModel;
+using Duende.IdentityModel;
 using Microsoft.AspNetCore.Http;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Primitives;

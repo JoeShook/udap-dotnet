@@ -9,8 +9,8 @@
 
 using System.Web;
 using Duende.IdentityServer.Services;
-using IdentityModel;
-using IdentityModel.Client;
+using Duende.IdentityModel;
+using Duende.IdentityModel.Client;
 using Microsoft.AspNetCore.Authentication;
 using Udap.Client.Client;
 using Udap.Model;
@@ -67,7 +67,7 @@ public static class TieredOAuthHelpers
         var request = new DiscoveryDocumentRequest
         {
             Address = idpBaseUrl,
-            Policy = new IdentityModel.Client.DiscoveryPolicy()
+            Policy = new Duende.IdentityModel.Client.DiscoveryPolicy()
             {
                 EndpointValidationExcludeList = new List<string> { OidcConstants.Discovery.RegistrationEndpoint }
             }
