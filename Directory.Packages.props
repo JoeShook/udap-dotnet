@@ -21,7 +21,7 @@
     <PackageVersion Include="MSTest.TestAdapter" Version="3.1.1" />
     <PackageVersion Include="MSTest.TestFramework" Version="3.1.1" />
     <PackageVersion Include="Duende.IdentityModel" Version="7.0.0" />
-    <PackageVersion Include="AutoMapper" Version="13.0.1" />
+    <PackageVersion Include="AutoMapper" Version="14.0.0" />
     <PackageVersion Include="Duende.IdentityServer" Version="7.0.8" />
     <PackageVersion Include="Duende.IdentityServer.AspNetIdentity" Version="7.0.8" />
     <PackageVersion Include="Duende.IdentityServer.EntityFramework.Storage" Version="7.0.8" />
@@ -44,7 +44,6 @@
     <PackageVersion Include="OpenTelemetry.Instrumentation.AspNetCore" Version="1.9.0" />
     <PackageVersion Include="OpenTelemetry.Instrumentation.Http" Version="1.9.0" />
     <PackageVersion Include="OpenTelemetry.Instrumentation.SqlClient" Version="1.0.0-rc9.14" />
-    
     <PackageVersion Include="Portable.BouncyCastle" Version="1.9.0" />
     <PackageVersion Include="System.IdentityModel.Tokens.Jwt" Version="8.3.0" />
     <PackageVersion Include="Udap.Metadata.Server" Version="0.3.24" />
