@@ -22,6 +22,7 @@ using Org.BouncyCastle.X509.Extension;
 using Udap.Support.Tests.Extensions;
 using Xunit.Abstractions;
 using Xunit.Sdk;
+using Xunit;
 using X509Extensions = Org.BouncyCastle.Asn1.X509.X509Extensions;
 // ReSharper disable All
 #pragma warning disable xUnit1004
@@ -1690,7 +1691,7 @@ public partial class BuildTestCerts : CertificateBase
     }
 
 
-    [Fact(Skip = "Ignore")]
+    [Fact] //(Skip = "Ignore")]
     public void ListStoreNames()
     {
         var store = new X509Store(StoreName.Root, StoreLocation.LocalMachine);
