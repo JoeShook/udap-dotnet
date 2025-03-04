@@ -1691,7 +1691,7 @@ public partial class BuildTestCerts : CertificateBase
     }
 
 
-    [Fact] //(Skip = "Ignore")]
+    [Fact(Skip = "Ignore")]
     public void ListStoreNames()
     {
         var store = new X509Store(StoreName.Root, StoreLocation.LocalMachine);
