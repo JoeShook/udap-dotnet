@@ -21,7 +21,7 @@ namespace Udap.Model.Registration;
 /// </summary>
 public class UdapCertificationsAndEndorsementBuilder
 {
-    private readonly DateTime _now;
+    private readonly DateTime _noUniversal;
     private readonly UdapCertificationAndEndorsementDocument _document;
     private X509Certificate2? _certificate;
 
@@ -33,13 +33,13 @@ public class UdapCertificationsAndEndorsementBuilder
     protected UdapCertificationsAndEndorsementBuilder(string certificationName, X509Certificate2 certificate) : this(certificationName)
     {
         
-        _now = DateTime.Now;
+        _noUniversal = DateTime.Now.ToUniversalTime();
         this.WithCertificate(certificate);
     }
 
     protected UdapCertificationsAndEndorsementBuilder(string certificationName)
     {
-        _now = DateTime.Now;
+        _noUniversal = DateTime.Now.ToUniversalTime();
         _document = new UdapCertificationAndEndorsementDocument(certificationName);
     }
 
@@ -83,7 +83,7 @@ public class UdapCertificationsAndEndorsementBuilder
     /// <returns></returns>
     public UdapCertificationsAndEndorsementBuilder WithExpiration(TimeSpan expirationOffset)
     {
-        if (expirationOffset > _now.AddYears(3) - _now)
+        if (expirationOffset > _noUniversal.AddYears(3) - _noUniversal)
         {
             throw new ArgumentOutOfRangeException(nameof(expirationOffset), "Expiration limit to 3 years");
         }
@@ -93,12 +93,12 @@ public class UdapCertificationsAndEndorsementBuilder
             throw new Exception("Certificate required");
         }
 
-        if (_certificate.NotAfter.ToUniversalTime() < (_now.ToUniversalTime() + expirationOffset))
+        if (_certificate.NotAfter.ToUniversalTime() < (_noUniversal.Add(expirationOffset)))
         {
             throw new ArgumentOutOfRangeException(nameof(expirationOffset), "Expiration must not expire after certificate");
         }
 
-        _document.Expiration = EpochTime.GetIntDate(_now.Add(expirationOffset));
+        _document.Expiration = EpochTime.GetIntDate(_noUniversal.Add(expirationOffset));
         return this;
     }
 
@@ -109,7 +109,7 @@ public class UdapCertificationsAndEndorsementBuilder
     /// <returns></returns>
     public UdapCertificationsAndEndorsementBuilder WithExpiration(DateTime expiration)
     {
-        return WithExpiration(expiration - _now);
+        return WithExpiration(expiration.ToUniversalTime() - _noUniversal);
     }
 
     /// <summary>
