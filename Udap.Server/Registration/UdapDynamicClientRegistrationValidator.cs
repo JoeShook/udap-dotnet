@@ -475,13 +475,24 @@ public class UdapDynamicClientRegistrationValidator : IUdapDynamicClientRegistra
             var expandedScopes = _scopeExpander.Expand(scopes).ToList();
             var explodedScopes = _scopeExpander.WildCardExpand(expandedScopes, resources.ApiScopes.Select(a => a.Name).ToList()).ToList();
             var allowedApiScopes = resources.ApiScopes.Where(s => explodedScopes.Contains(s.Name));
-            
+            var allowedResourceScopes = resources.IdentityResources.Where(s => explodedScopes.Contains(s.Name));
+
+            var allValidScopes = allowedApiScopes.Select(s => s.Name)
+                .Concat(allowedResourceScopes.Select(s => s.Name))
+                .ToHashSet();
+
+            if (explodedScopes.All(s => !allValidScopes.Contains(s)))
+            {
+                return await Task.FromResult(new UdapDynamicClientRegistrationValidationResult(
+                    UdapDynamicClientRegistrationErrors.InvalidClientMetadata,
+                    "invalid_scope supplied"));
+            }
+
+
             foreach (var scope in allowedApiScopes)
             {
                 client?.AllowedScopes.Add(scope.Name);
             }
-            
-            var allowedResourceScopes = resources.IdentityResources.Where(s => explodedScopes.Contains(s.Name));
 
             foreach (var scope in allowedResourceScopes.Where(s => s.Enabled).Select(s => s.Name))
             {
