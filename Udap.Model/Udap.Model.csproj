@@ -29,6 +29,7 @@
   <ItemGroup>
     <PackageReference Include="Hl7.Fhir.R4B" />
     <PackageReference Include="Duende.IdentityModel" />
+    <PackageReference Include="Microsoft.Extensions.Configuration.Abstractions" />
     <PackageReference Include="Microsoft.Extensions.Options" />
     <PackageReference Include="System.IdentityModel.Tokens.Jwt" />
   </ItemGroup>

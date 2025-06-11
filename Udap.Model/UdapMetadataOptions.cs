@@ -8,6 +8,8 @@
 #endregion
 
 using System.Collections.Generic;
+using System.Text.Json;
+using System.Text.Json.Serialization;
 
 namespace Udap.Model
 {
@@ -31,5 +33,11 @@ namespace Udap.Model
         public List<UdapMetadataConfig> UdapMetadataConfigs { get; set; } = [];
 
         public int CertificateResolveTimeoutSeconds { get; set; } = 10; 
+
+        /// <summary>
+        /// Holds additional properties from appsettings.json that are not explicitly defined in this class.
+        /// </summary>
+        [JsonExtensionData]
+        public Dictionary<string, JsonElement>? ExtensionData { get; set; }
     }
 }

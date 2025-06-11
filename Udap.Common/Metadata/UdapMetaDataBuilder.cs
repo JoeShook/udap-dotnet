@@ -11,7 +11,6 @@ using System.Security.Claims;
 using System.Security.Cryptography.X509Certificates;
 using Duende.IdentityModel;
 using Microsoft.Extensions.Logging;
-using Microsoft.Extensions.Options;
 using Microsoft.IdentityModel.Tokens;
 using Udap.Common.Certificates;
 using Udap.Model;
@@ -25,16 +24,16 @@ public class UdapMetaDataBuilder<TUdapMetadataOptions, TUdapMetadata>
     where TUdapMetadataOptions : UdapMetadataOptions
     where TUdapMetadata : UdapMetadata
 {
-    private readonly IOptionsMonitor<TUdapMetadataOptions> _optionsMonitor;
+    private readonly IUdapMetadataOptionsProvider _optionsProvider;
     private readonly IPrivateCertificateStore _certificateStore;
     private readonly ILogger<UdapMetaDataBuilder<TUdapMetadataOptions, TUdapMetadata>> _logger;
 
     public UdapMetaDataBuilder(
-        IOptionsMonitor<TUdapMetadataOptions> optionsMonitor,
+        IUdapMetadataOptionsProvider optionsProvider,
         IPrivateCertificateStore certificateStore,
         ILogger<UdapMetaDataBuilder<TUdapMetadataOptions, TUdapMetadata>> logger)
     {
-        _optionsMonitor = optionsMonitor;
+        _optionsProvider = optionsProvider;
         _certificateStore = certificateStore;
         _logger = logger;
     }
@@ -45,7 +44,7 @@ public class UdapMetaDataBuilder<TUdapMetadataOptions, TUdapMetadata>
     /// <returns></returns>
     public ICollection<string> GetCommunities()
     {
-        var options = _optionsMonitor.CurrentValue;
+        var options = _optionsProvider.Value;
         var udapMetaData = (TUdapMetadata)Activator.CreateInstance(typeof(TUdapMetadata), options)!;
 
         return udapMetaData.Communities();
@@ -58,7 +57,7 @@ public class UdapMetaDataBuilder<TUdapMetadataOptions, TUdapMetadata>
     /// <returns></returns>
     public string GetCommunitiesAsHtml(string path)
     {
-        var options = _optionsMonitor.CurrentValue;
+        var options = _optionsProvider.Value;
         var udapMetaData = (TUdapMetadata)Activator.CreateInstance(typeof(TUdapMetadata), options)!;
 
         return udapMetaData.CommunitiesAsHtml(path);
@@ -72,7 +71,7 @@ public class UdapMetaDataBuilder<TUdapMetadataOptions, TUdapMetadata>
     /// <exception cref="System.NotImplementedException"></exception>
     public async Task<UdapMetadata?> SignMetaData(string baseUrl, string? community = null, CancellationToken token = default)
     {
-        var options = _optionsMonitor.CurrentValue;
+        var options = _optionsProvider.Value;
         var udapMetaData = (TUdapMetadata)Activator.CreateInstance(typeof(TUdapMetadata), options)!;
 
         var udapMetadataConfig = udapMetaData.GetUdapMetadataConfig(community);

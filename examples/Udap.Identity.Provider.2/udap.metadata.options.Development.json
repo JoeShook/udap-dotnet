@@ -1,0 +1,18 @@
+{
+  "UdapVersionsSupported": [ "1" ],
+  "UdapProfilesSupported": [ "udap_dcr", "udap_authn", "udap_authz", "udap_to" ],
+  "ScopesSupported": [ "openid", "udap", "profile", "email" ],
+  "GrantTypesSupported": [ "authorization_code", "refresh_token", "client_credentials" ],
+
+
+  "UdapMetadataConfigs": [
+    {
+      "Community": "udap://Provider2",
+      "SignedMetadataConfig": {
+        "AuthorizationEndPoint": "https://idp2.securedcontrols.net/connect/authorize",
+        "TokenEndpoint": "https://idp2.securedcontrols.net/connect/token",
+        "RegistrationEndpoint": "https://idp2.securedcontrols.net/connect/register"
+      }
+    }
+  ]
+}
