@@ -172,7 +172,7 @@ public class UdapDynamicClientRegistrationValidator : IUdapDynamicClientRegistra
 
         if (_serverSettings.RegistrationJtiRequired)
         {
-            var result = await ValidateJti(document, document.Expiration);
+            var result = await ValidateJti(document, document.Expiration.GetValueOrDefault());
 
             if (result.IsError)
             {
@@ -248,7 +248,7 @@ public class UdapDynamicClientRegistrationValidator : IUdapDynamicClientRegistra
                 UdapDynamicClientRegistrationErrorDescriptions.IssuedAtMissing));
         }
 
-        var iat = EpochTime.DateTime(document.IssuedAt).ToUniversalTime();
+        var iat = EpochTime.DateTime(document.IssuedAt.GetValueOrDefault()).ToUniversalTime();
         // var exp = EpochTime.DateTime(document.Expiration).ToUniversalTime();
         //TODO Server Config for iat window (clock skew?)
         if (iat > DateTime.UtcNow.AddSeconds(5))

@@ -39,8 +39,8 @@ public class UdapDynamicClientRegistrationDocument : Dictionary<string, object>,
     private string? _issuer;
     private string? _subject;
     private string? _audience;
-    private long _expiration;
-    private long _issuedAt;
+    private long? _expiration;
+    private long? _issuedAt;
     private string? _jwtId;
     private string? _clientName;
     private ICollection<string>? _redirectUris = [];
@@ -157,14 +157,11 @@ public class UdapDynamicClientRegistrationDocument : Dictionary<string, object>,
     /// the value of the iat claim.
     /// </summary>
     [JsonPropertyName(UdapConstants.RegistrationDocumentValues.Expiration)]
-    public long Expiration
+    public long? Expiration
     {
         get
         {
-            if (_expiration == 0)
-            {
-                _expiration = GetStandardInt64Claim(UdapConstants.RegistrationDocumentValues.Expiration);
-            }
+            _expiration = GetStandardInt64Claim(UdapConstants.RegistrationDocumentValues.Expiration);
 
             return _expiration;
         }
@@ -179,14 +176,11 @@ public class UdapDynamicClientRegistrationDocument : Dictionary<string, object>,
     /// Issued time integer for this software statement, expressed in seconds since the "Epoch"
     /// </summary>
     [JsonPropertyName(UdapConstants.RegistrationDocumentValues.IssuedAt)]
-    public long IssuedAt
+    public long? IssuedAt
     {
         get
         {
-            if (_issuedAt == 0)
-            {
-                _issuedAt = GetStandardInt64Claim(UdapConstants.RegistrationDocumentValues.IssuedAt);
-            }
+            _issuedAt = GetStandardInt64Claim(UdapConstants.RegistrationDocumentValues.IssuedAt);
 
             return _issuedAt;
         }
