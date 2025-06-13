@@ -45,6 +45,7 @@ builder.Services.AddSerilog((services, lc) => lc
 
 // Mount Cloud Secrets
 builder.Configuration.AddJsonFile("/secret/tefcaproxyserverappsettings", true, false);
+builder.Configuration.AddJsonFile("/secret/udap.tefca.metadata.options.json", true, false);
 
 // Add services to the container.
 builder.Services.AddControllersWithViews();

@@ -35,7 +35,8 @@ Log.Logger = new LoggerConfiguration()
 builder.Host.UseSerilog();
 
 // Mount Cloud Secrets
-builder.Configuration.AddJsonFile("/secret/udapproxyserverappsettings", true, false);
+builder.Configuration.AddJsonFile("udapproxyserverappsettings.json", true, false);
+builder.Configuration.AddJsonFile("udap.proxy.server.metadata.options.json", true, false);
 
 // Add services to the container.
 builder.Services.AddControllersWithViews();
