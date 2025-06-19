@@ -14,7 +14,6 @@ using Google.Apis.Auth.OAuth2;
 using Hl7.Fhir.Model;
 using Hl7.Fhir.Serialization;
 using Duende.IdentityModel;
-using Microsoft.Extensions.DependencyInjection;
 using Microsoft.IdentityModel.Tokens;
 using Serilog;
 using Serilog.Templates;

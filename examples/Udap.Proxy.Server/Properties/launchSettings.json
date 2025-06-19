@@ -11,6 +11,18 @@
       "dotnetRunMessages": true,
       "applicationUrl": "https://localhost:7074;https://proxy.fhirlabs.net:7074"
     },
+    "https-no-compression": {
+      "commandName": "Project",
+      "launchBrowser": true,
+      "launchUrl": "index.html",
+      "environmentVariables": {
+        "ASPNETCORE_ENVIRONMENT": "Development",
+        "ASPNETCORE_RESPONSE_COMPRESSION_DISSABLED": "true",
+        "AccessToken": "your bearer token"
+      },
+      "dotnetRunMessages": true,
+      "applicationUrl": "https://localhost:7074;https://proxy.fhirlabs.net:7074"
+    },
     "Container (Dockerfile)": {
       "commandName": "Docker",
       "launchBrowser": true,

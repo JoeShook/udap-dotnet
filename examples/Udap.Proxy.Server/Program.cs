@@ -7,17 +7,19 @@
 // */
 #endregion
 
+using Duende.IdentityModel;
+using Google.Apis.Auth.OAuth2;
+using Hl7.Fhir.Model;
+using Hl7.Fhir.Model.CdsHooks;
+using Hl7.Fhir.Serialization;
+using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.ResponseCompression;
+using Microsoft.IdentityModel.Tokens;
+using Serilog;
 using System.IdentityModel.Tokens.Jwt;
 using System.Net.Http.Headers;
 using System.Text;
 using System.Text.Json.Serialization;
-using Google.Apis.Auth.OAuth2;
-using Hl7.Fhir.Model;
-using Hl7.Fhir.Serialization;
-using Duende.IdentityModel;
-using Microsoft.AspNetCore.Mvc;
-using Microsoft.IdentityModel.Tokens;
-using Serilog;
 using Udap.CdsHooks.Model;
 using Udap.Common;
 using Udap.Proxy.Server;
@@ -35,8 +37,8 @@ Log.Logger = new LoggerConfiguration()
 builder.Host.UseSerilog();
 
 // Mount Cloud Secrets
-builder.Configuration.AddJsonFile("udapproxyserverappsettings.json", true, false);
-builder.Configuration.AddJsonFile("udap.proxy.server.metadata.options.json", true, false);
+builder.Configuration.AddJsonFile("/secret/udapproxyserverappsettings", true, false);
+builder.Configuration.AddJsonFile("/secret/metadata/udap.proxy.server.metadata.options.json", true, false);
 
 // Add services to the container.
 builder.Services.AddControllersWithViews();
@@ -95,11 +97,20 @@ builder.Services.AddReverseProxy()
     .LoadFromConfig(builder.Configuration.GetSection("ReverseProxy"))
     .ConfigureHttpClient((_, handler) =>
     {
-        // this is required to decompress automatically.  *******   troubleshooting only   *******
-        handler.AutomaticDecompression = System.Net.DecompressionMethods.All;
+        // Enable automatic decompression for gzip, deflate, and brotli
+        handler.AutomaticDecompression = System.Net.DecompressionMethods.GZip |
+                                          System.Net.DecompressionMethods.Deflate |
+                                          System.Net.DecompressionMethods.Brotli;
     })
     .AddTransforms(builderContext =>
     {
+        // Always forward encoding headers for all routes
+        builderContext.AddRequestTransform(context =>
+        {
+            ForwardEncodingHeaders(context.HttpContext, context.ProxyRequest);
+            return ValueTask.CompletedTask;
+        });
+
         // Conditionally add a transform for routes that require auth.
         if (builderContext.Route.Metadata != null &&
             (builderContext.Route.Metadata.ContainsKey("GCPKeyResolve") || builderContext.Route.Metadata.ContainsKey("AccessToken")))
@@ -108,7 +119,6 @@ builder.Services.AddReverseProxy()
             {
                 var resolveAccessToken = await ResolveAccessToken(builderContext.Route.Metadata);
                 context.ProxyRequest.Headers.Authorization = new AuthenticationHeaderValue("Bearer", resolveAccessToken);
-                
                 SetProxyHeaders(context);
             });
         }
@@ -123,7 +133,6 @@ builder.Services.AddReverseProxy()
                     var googleCredentials = GoogleCredential.GetApplicationDefault();
                     string accessToken = await googleCredentials.UnderlyingCredential.GetAccessTokenForRequestAsync();
                     context.ProxyRequest.Headers.Authorization = new AuthenticationHeaderValue("Bearer", accessToken);
-
                     SetProxyHeaders(context);
                 });
             }
@@ -169,10 +178,29 @@ builder.Services.AddReverseProxy()
         });
     });
 
+var disableCompression = Environment.GetEnvironmentVariable("ASPNETCORE_RESPONSE_COMPRESSION_DISSABLED");
+if (!string.Equals(disableCompression, "true", StringComparison.OrdinalIgnoreCase))
+{
+    builder.Services.AddResponseCompression(options =>
+    {
+        options.EnableForHttps = true;
+        options.MimeTypes = ResponseCompressionDefaults.MimeTypes.Concat([
+            "application/fhir+xml",
+            "application/fhir+json"
+        ]);
+    });
+}
+
 var app = builder.Build();
 
 // Configure the HTTP request pipeline.
 app.UseCors("DefaultPolicy");
+
+if (!string.Equals(disableCompression, "true", StringComparison.OrdinalIgnoreCase))
+{
+    app.UseResponseCompression();
+}
+
 app.UseDefaultFiles();
 app.UseStaticFiles();
 
@@ -180,7 +208,7 @@ app.UseStaticFiles();
 // To use the default framework request logging instead, remove this line and set the "Microsoft"
 // level in appsettings.json to "Information".
 app.UseSerilogRequestLogging();
-
+    
 app.UseAuthentication();
 app.UseAuthorization();
 
@@ -305,4 +333,20 @@ void SetProxyHeaders(RequestTransformContext requestTransformContext)
     requestTransformContext.ProxyRequest.Headers.Add("X-Authorization-Scope", spaceSeparatedString);
     requestTransformContext.ProxyRequest.Headers.Add("X-Authorization-Issuer", iss.SingleOrDefault()?.Value);
     // context.ProxyRequest.Headers.Add("X-Authorization-Subject", sub.SingleOrDefault().Value);
+}
+
+void ForwardEncodingHeaders(HttpContext httpContext, HttpRequestMessage proxyRequest)
+{
+    // Forward Accept-Encoding from client to backend
+    if (httpContext.Request.Headers.TryGetValue("Accept-Encoding", out var encodings))
+    {
+        proxyRequest.Headers.Remove("Accept-Encoding");
+        proxyRequest.Headers.Add("Accept-Encoding", encodings.ToArray());
+    }
+    // Forward Content-Encoding if present
+    if (httpContext.Request.Headers.TryGetValue("Content-Encoding", out var contentEncodings))
+    {
+        proxyRequest.Headers.Remove("Content-Encoding");
+        proxyRequest.Headers.Add("Content-Encoding", contentEncodings.ToArray());
+    }
 }
