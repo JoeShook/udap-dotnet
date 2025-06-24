@@ -23,6 +23,7 @@ using System.Text.Json.Serialization;
 using Udap.CdsHooks.Model;
 using Udap.Common;
 using Udap.Proxy.Server;
+using Udap.Proxy.Server.IDIPatientMatch;
 using Udap.Smart.Model;
 using Udap.Util.Extensions;
 using Yarp.ReverseProxy.Transforms;
@@ -191,6 +192,14 @@ if (!string.Equals(disableCompression, "true", StringComparison.OrdinalIgnoreCas
     });
 }
 
+//
+// IDI Patient Match Operations
+//
+builder.Services.AddSingleton<IFhirOperation, OpMatch>();
+builder.Services.AddSingleton<IFhirOperation, OpIdiMatch>();
+
+
+
 var app = builder.Build();
 
 // Configure the HTTP request pipeline.
@@ -211,6 +220,12 @@ app.UseSerilogRequestLogging();
     
 app.UseAuthentication();
 app.UseAuthorization();
+
+//
+// IDI Patient Match Operations
+//
+app.UseMiddleware<OperationMiddleware>();
+
 
 app.UseMiddleware<RouteLoggingMiddleware>();
 app.MapReverseProxy();
