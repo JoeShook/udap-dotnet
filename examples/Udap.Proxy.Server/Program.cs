@@ -24,6 +24,7 @@ using Udap.CdsHooks.Model;
 using Udap.Common;
 using Udap.Proxy.Server;
 using Udap.Proxy.Server.IDIPatientMatch;
+using Udap.Proxy.Server.Services;
 using Udap.Smart.Model;
 using Udap.Util.Extensions;
 using Yarp.ReverseProxy.Transforms;
@@ -118,7 +119,8 @@ builder.Services.AddReverseProxy()
         {
             builderContext.AddRequestTransform(async context =>
             {
-                var resolveAccessToken = await ResolveAccessToken(builderContext.Route.Metadata);
+                var accessTokenService = context.HttpContext.RequestServices.GetRequiredService<IAccessTokenService>();
+                var resolveAccessToken = await accessTokenService.ResolveAccessTokenAsync(builderContext.Route.Metadata, context.HttpContext.RequestAborted);
                 context.ProxyRequest.Headers.Authorization = new AuthenticationHeaderValue("Bearer", resolveAccessToken);
                 SetProxyHeaders(context);
             });
@@ -192,6 +194,8 @@ if (!string.Equals(disableCompression, "true", StringComparison.OrdinalIgnoreCas
     });
 }
 
+builder.Services.AddSingleton<IAccessTokenService, AccessTokenService>();
+
 //
 // IDI Patient Match Operations
 //
@@ -236,38 +240,6 @@ app.UseUdapMetadataServer("fhir/r4"); // Ensure metadata can only be called from
 
 app.Run();
 
-
-async Task<string?> ResolveAccessToken(IReadOnlyDictionary<string, string> metadata)
-{
-    try
-    {
-        if (metadata.ContainsKey("AccessToken"))
-        {
-            // You could pass AccessToken as an environment variable
-            return builder.Configuration.GetValue<string>(metadata["AccessToken"]);
-        }
-
-        var routeAuthorizationPolicy = metadata["GCPKeyResolve"];
-
-        var path = builder.Configuration.GetValue<string>(routeAuthorizationPolicy);
-
-        if (string.IsNullOrWhiteSpace(path))
-        {
-            throw new InvalidOperationException(
-                $"The route metadata '{routeAuthorizationPolicy}' must be set to a valid path.");
-        }
-
-        var credentials = new ServiceAccountCredentialCache();
-        return await credentials.GetAccessTokenAsync(path, "https://www.googleapis.com/auth/cloud-healthcare");
-    }
-    catch (Exception ex)
-    {
-        Console.WriteLine(ex); //todo: Logger
-
-        return string.Empty;
-    }
-
-}
 
 async Task<byte[]?> GetFhirMetadata(ResponseTransformContext responseTransformContext,
     WebApplicationBuilder webApplicationBuilder)

@@ -64,12 +64,38 @@ public class OpIdiMatch : IFhirOperation
         var inputPatient = (Patient)parameters.Parameter.FirstOrDefault(p => p.Name == "resource")?.Resource;
 
         if (inputPatient == null)
-            throw new InvalidOperationException("Missing input patient in parameters");
+        {
+            return new OperationOutcome
+            {
+                Issue = new List<OperationOutcome.IssueComponent>
+                {
+                    new OperationOutcome.IssueComponent
+                    {
+                        Severity = OperationOutcome.IssueSeverity.Error,
+                        Code = OperationOutcome.IssueType.Required,
+                        Diagnostics = "Missing input patient in parameters"
+                    }
+                }
+            };
+        }
 
         // Validate the profile (e.g., IDI-Patient)
         var profile = inputPatient.Meta?.Profile?.FirstOrDefault();
         if (profile != "http://example.com/fhir/StructureDefinition/IDI-Patient")
-            throw new InvalidOperationException("Input patient must conform to IDI-Patient profile");
+        {
+            return new OperationOutcome
+            {
+                Issue = new List<OperationOutcome.IssueComponent>
+                {
+                    new OperationOutcome.IssueComponent
+                    {
+                        Severity = OperationOutcome.IssueSeverity.Error,
+                        Code = OperationOutcome.IssueType.Invalid,
+                        Diagnostics = "Input patient must conform to IDI-Patient profile"
+                    }
+                }
+            };
+        }
 
         // Build search query and execute
         var query = BuildSearchQuery(inputPatient);
