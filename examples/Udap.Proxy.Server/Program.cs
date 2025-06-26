@@ -10,7 +10,6 @@
 using Duende.IdentityModel;
 using Google.Apis.Auth.OAuth2;
 using Hl7.Fhir.Model;
-using Hl7.Fhir.Model.CdsHooks;
 using Hl7.Fhir.Serialization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.ResponseCompression;
@@ -29,6 +28,7 @@ using Udap.Smart.Model;
 using Udap.Util.Extensions;
 using Yarp.ReverseProxy.Transforms;
 using ZiggyCreatures.Caching.Fusion;
+using Constants = Udap.Common.Constants;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -194,6 +194,7 @@ if (!string.Equals(disableCompression, "true", StringComparison.OrdinalIgnoreCas
     });
 }
 
+builder.Services.AddHttpClient();
 builder.Services.AddSingleton<IAccessTokenService, AccessTokenService>();
 
 //
@@ -201,6 +202,7 @@ builder.Services.AddSingleton<IAccessTokenService, AccessTokenService>();
 //
 builder.Services.AddSingleton<IFhirOperation, OpMatch>();
 builder.Services.AddSingleton<IFhirOperation, OpIdiMatch>();
+builder.Services.AddSingleton<IIdiPatientRules, IdiPatientRules>();
 
 
 

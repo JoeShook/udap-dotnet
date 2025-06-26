@@ -1,28 +1,29 @@
-﻿using Hl7.Fhir.Model;
+﻿using Google.Apis.Util;
+using Hl7.Fhir.Model;
 using Hl7.Fhir.Serialization;
-using Microsoft.Extensions.Configuration;
-using System;
-using System.Collections.Generic;
-using System.Linq;
-using System.Net.Http;
-using System.Threading;
-using System.Threading.Tasks;
-using Udap.Proxy.Server.IDIPatientMatch;
+using System.Net.Http.Headers;
+using Udap.Proxy.Server.Services;
 
 namespace Udap.Proxy.Server.IDIPatientMatch;
 
 public class OpIdiMatch : IFhirOperation
 {
+    private readonly IAccessTokenService _accessTokenService;
+    private readonly ILogger<OpIdiMatch> _logger;
     public string Name => "$idi-match";
     public string Description => "Identity matching operation per Identity Matching IG";
-
     private readonly HttpClient _httpClient;
     private readonly string _backendUrl;
+    private readonly IIdiPatientRules _idiPatientRules;
 
-    public OpIdiMatch(IConfiguration config)
+    public OpIdiMatch(IConfiguration config, IAccessTokenService accessTokenService, HttpClient httpClient, ILogger<OpIdiMatch> logger, IIdiPatientRules idiPatientRules)
     {
+        config.ThrowIfNull(nameof(config));
+        _accessTokenService = accessTokenService ?? throw new ArgumentNullException(nameof(accessTokenService));
         _backendUrl = config["FhirUrlProxy:Back"] ?? throw new ArgumentNullException("FhirUrlProxy:Back is not configured");
-        _httpClient = new HttpClient();
+        _httpClient = httpClient ?? throw new ArgumentNullException(nameof(httpClient));
+        _logger = logger ?? throw new ArgumentNullException(nameof(logger));
+        _idiPatientRules = idiPatientRules ?? throw new ArgumentNullException(nameof(idiPatientRules));
     }
 
     public OperationDefinition GetDefinition()
@@ -61,9 +62,10 @@ public class OpIdiMatch : IFhirOperation
     public async Task<Resource> ExecuteAsync(OperationContext context, CancellationToken cancellationToken)
     {
         var parameters = context.Parameters;
-        var inputPatient = (Patient)parameters.Parameter.FirstOrDefault(p => p.Name == "resource")?.Resource;
+        var inputPatient = parameters.Parameter.FirstOrDefault(p => p.Name == "patient")?.Resource;
+        var patient = inputPatient as Patient;
 
-        if (inputPatient == null)
+        if (patient == null)
         {
             return new OperationOutcome
             {
@@ -73,15 +75,14 @@ public class OpIdiMatch : IFhirOperation
                     {
                         Severity = OperationOutcome.IssueSeverity.Error,
                         Code = OperationOutcome.IssueType.Required,
-                        Diagnostics = "Missing input patient in parameters"
+                        Diagnostics = "Missing input named patient in parameters"
                     }
                 }
             };
         }
 
-        // Validate the profile (e.g., IDI-Patient)
-        var profile = inputPatient.Meta?.Profile?.FirstOrDefault();
-        if (profile != "http://example.com/fhir/StructureDefinition/IDI-Patient")
+        var patientProfiles = patient.Meta?.Profile ?? new List<string>();
+        if (!patientProfiles.Any(p => Constants.IdiPatientProfiles.ValidProfiles.Contains(p)))
         {
             return new OperationOutcome
             {
@@ -91,30 +92,72 @@ public class OpIdiMatch : IFhirOperation
                     {
                         Severity = OperationOutcome.IssueSeverity.Error,
                         Code = OperationOutcome.IssueType.Invalid,
-                        Diagnostics = "Input patient must conform to IDI-Patient profile"
+                        Diagnostics = "Input patient must conform to one of the IDI-Patient profiles." +
+                                      "<br>https://build.fhir.org/ig/HL7/fhir-identity-matching-ig/artifacts.html#structures-resource-profiles"
+                    }
+                }
+            };
+        }
+
+        var (isValid, error) = _idiPatientRules.ValidatePatientProfile(patient);
+        if (!isValid)
+        {
+            return new OperationOutcome
+            {
+                Issue = new List<OperationOutcome.IssueComponent>
+                {
+                    new OperationOutcome.IssueComponent
+                    {
+                        Severity = OperationOutcome.IssueSeverity.Error,
+                        Code = OperationOutcome.IssueType.Invalid,
+                        Diagnostics = error
                     }
                 }
             };
         }
 
         // Build search query and execute
-        var query = BuildSearchQuery(inputPatient);
+        var query = BuildSearchQuery(patient);
         var searchUrl = $"{_backendUrl}/Patient?{query}";
-        var response = await _httpClient.GetAsync(searchUrl, cancellationToken);
-        response.EnsureSuccessStatusCode();
-
-        var json = await response.Content.ReadAsStringAsync();
-        var bundle = new FhirJsonParser().Parse<Bundle>(json);
-
-        // Score candidates
-        foreach (var entry in bundle.Entry)
+        try
         {
-            var candidate = (Patient)entry.Resource;
-            var score = CalculateScore(inputPatient, candidate);
-            entry.Search = new Bundle.SearchComponent { Score = score };
-        }
+            var dict = new Dictionary<string, string>();
+            dict.TryAdd("GCPKeyResolve", "gcp_joe_key_location");
+            var resolveAccessToken = await _accessTokenService.ResolveAccessTokenAsync(dict, cancellationToken);
+            var request = new HttpRequestMessage(HttpMethod.Get, searchUrl);
+            request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", resolveAccessToken);
+            var response = await _httpClient.SendAsync(request, cancellationToken);
+            response.EnsureSuccessStatusCode();
 
-        return bundle;
+            var json = await response.Content.ReadAsStringAsync();
+            var bundle = new FhirJsonParser().Parse<Bundle>(json);
+
+            // Score candidates
+            foreach (var entry in bundle.Entry)
+            {
+                var candidate = (Patient)entry.Resource;
+                var score = CalculateScore(patient, candidate);
+                entry.Search = new Bundle.SearchComponent { Score = score };
+            }
+
+            return bundle;
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error connecting to backend FHIR server");
+            return new OperationOutcome
+            {
+                Issue = new List<OperationOutcome.IssueComponent>
+                {
+                    new OperationOutcome.IssueComponent
+                    {
+                        Severity = OperationOutcome.IssueSeverity.Error,
+                        Code = OperationOutcome.IssueType.Exception,
+                        Diagnostics = "An error occurred while connecting to the backend FHIR server. Please try again later."
+                    }
+                }
+            };
+        }
     }
 
     private string BuildSearchQuery(Patient patient)
