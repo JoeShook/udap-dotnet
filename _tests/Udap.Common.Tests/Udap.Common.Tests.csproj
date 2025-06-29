@@ -59,6 +59,7 @@
 
   <ItemGroup>
     <!-- <ProjectReference Include="..\..\Udap.Client\Udap.Client.csproj" /> -->
+    <ProjectReference Include="..\..\examples\Udap.Proxy.Server\Udap.Proxy.Server.csproj" />
     <ProjectReference Include="..\..\Udap.CdsHooks.Model\Udap.CdsHooks.Model.csproj" />
     <ProjectReference Include="..\..\Udap.Client\Udap.Client.csproj" />
     <ProjectReference Include="..\..\Udap.Common\Udap.Common.csproj" />

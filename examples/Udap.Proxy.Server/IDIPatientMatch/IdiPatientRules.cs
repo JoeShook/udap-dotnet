@@ -15,11 +15,6 @@ public class IdiPatientRules : IIdiPatientRules
 {
     public (bool IsValid, string? Error) ValidatePatientProfile(Patient patient)
     {
-        if (String.IsNullOrWhiteSpace(patient.Name.FirstOrDefault()?.Family))
-        {
-            return (false, "This FHIR server requires at least a Family name.");
-        }
-
         var profiles = patient.Meta?.Profile ?? new List<string>();
         
         if (profiles.Contains(Constants.IdiPatientProfiles.IdiPatientL0))

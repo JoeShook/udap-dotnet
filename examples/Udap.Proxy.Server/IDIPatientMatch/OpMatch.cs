@@ -124,11 +124,15 @@ public class OpMatch : IFhirOperation
 
         // Search the backend FHIR server
         var searchUrl = $"{_backendUrl}/Patient?{query}";
+        _logger.LogDebug(searchUrl);
         try
         {
             var dict = new Dictionary<string, string>();
             dict.TryAdd("GCPKeyResolve", "gcp_joe_key_location");
-            var resolveAccessToken = await _accessTokenService.ResolveAccessTokenAsync(dict, cancellationToken);
+            var resolveAccessToken = await _accessTokenService.ResolveAccessTokenAsync(
+                dict,
+                context.HttpContext.RequestServices.GetRequiredService<ILogger<OpMatch>>(),
+                cancellationToken: cancellationToken);
             var request = new HttpRequestMessage(HttpMethod.Get, searchUrl);
             request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", resolveAccessToken);
             var response = await _httpClient.SendAsync(request, cancellationToken);
@@ -167,11 +171,61 @@ public class OpMatch : IFhirOperation
 
     private string BuildSearchQuery(Patient patient)
     {
-        var family = patient.Name.FirstOrDefault()?.Family;
-        var birthdate = patient.BirthDate;
         var queryParams = new List<string>();
-        if (!string.IsNullOrEmpty(family)) queryParams.Add($"family={Uri.EscapeDataString(family)}");
-        if (!string.IsNullOrEmpty(birthdate)) queryParams.Add($"birthdate={birthdate}");
+
+        // Collect all unique family names and given names from all HumanName entries
+        var familyNames = patient.Name?
+            .Where(n => !string.IsNullOrWhiteSpace(n.Family))
+            .Select(n => n.Family)
+            .Distinct()
+            .ToList() ?? new List<string>();
+
+        var givenNames = patient.Name?
+            .SelectMany(n => n.Given ?? Enumerable.Empty<string>())
+            .Where(g => !string.IsNullOrWhiteSpace(g))
+            .Distinct()
+            .ToList() ?? new List<string>();
+
+        foreach (var family in familyNames)
+        {
+            queryParams.Add($"family={Uri.EscapeDataString(family)}");
+        }
+
+        foreach (var given in givenNames)
+        {
+            queryParams.Add($"given={Uri.EscapeDataString(given)}");
+        }
+
+        if (familyNames.Count == 0 && givenNames.Count == 0 && patient.Name != null)
+        {
+            var textNames = patient.Name
+                .Where(n => !string.IsNullOrWhiteSpace(n.Text))
+                .Select(n => n.Text)
+                .Distinct();
+
+            foreach (var text in textNames)
+            {
+                queryParams.Add($"name={Uri.EscapeDataString(text)}");
+            }
+        }
+
+        if (!string.IsNullOrEmpty(patient.BirthDate))
+        {
+            queryParams.Add($"birthdate={patient.BirthDate}");
+        }
+
+        // Support multiple identifiers if present
+        if (patient.Identifier != null)
+        {
+            foreach (var identifier in patient.Identifier)
+            {
+                if (!string.IsNullOrEmpty(identifier.Value))
+                {
+                    queryParams.Add($"identifier={Uri.EscapeDataString(identifier.Value)}");
+                }
+            }
+        }
+
         return string.Join("&", queryParams);
     }
 

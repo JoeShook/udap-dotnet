@@ -9,7 +9,10 @@ public class AccessTokenService : IAccessTokenService
         _configuration = configuration;
     }
 
-    public async Task<string?> ResolveAccessTokenAsync(IReadOnlyDictionary<string, string> metadata, CancellationToken cancellationToken = default)
+    public async Task<string?> ResolveAccessTokenAsync(
+        IReadOnlyDictionary<string, string> metadata,
+        ILogger logger,
+        CancellationToken cancellationToken = default)
     {
         try
         {
@@ -29,7 +32,11 @@ public class AccessTokenService : IAccessTokenService
                 }
 
                 var credentials = new ServiceAccountCredentialCache();
-                return await credentials.GetAccessTokenAsync(path, "https://www.googleapis.com/auth/cloud-healthcare");
+                var token = await credentials.GetAccessTokenAsync(path, "https://www.googleapis.com/auth/cloud-healthcare");
+#if DEBUG
+                logger.LogDebug($"Backend token: {token}");
+#endif
+                return token;
             }
         }
         catch (Exception ex)

@@ -120,7 +120,10 @@ builder.Services.AddReverseProxy()
             builderContext.AddRequestTransform(async context =>
             {
                 var accessTokenService = context.HttpContext.RequestServices.GetRequiredService<IAccessTokenService>();
-                var resolveAccessToken = await accessTokenService.ResolveAccessTokenAsync(builderContext.Route.Metadata, context.HttpContext.RequestAborted);
+                var resolveAccessToken = await accessTokenService.ResolveAccessTokenAsync(
+                    builderContext.Route.Metadata, 
+                    context.HttpContext.RequestServices.GetRequiredService<ILogger<AccessTokenService>>(), 
+                    cancellationToken: context.HttpContext.RequestAborted);
                 context.ProxyRequest.Headers.Authorization = new AuthenticationHeaderValue("Bearer", resolveAccessToken);
                 SetProxyHeaders(context);
             });
@@ -203,6 +206,7 @@ builder.Services.AddSingleton<IAccessTokenService, AccessTokenService>();
 builder.Services.AddSingleton<IFhirOperation, OpMatch>();
 builder.Services.AddSingleton<IFhirOperation, OpIdiMatch>();
 builder.Services.AddSingleton<IIdiPatientRules, IdiPatientRules>();
+builder.Services.AddSingleton<IIdiPatientMatchInValidator, IdiPatientMatchInValidator>();
 
 
 
@@ -309,7 +313,7 @@ void SetProxyHeaders(RequestTransformContext requestTransformContext)
     var iss = jsonToken.Claims.Where(c => c.Type == "iss");
     // var sub = jsonToken.Claims.Where(c => c.Type == "sub"); // figure out what subject should be for GCP
 
-
+    //TODO:  This should be capable of introspection calls, because the token may not be a jwt.
     // Never let the requester set this header.
     requestTransformContext.ProxyRequest.Headers.Remove("X-Authorization-Scope");
     requestTransformContext.ProxyRequest.Headers.Remove("X-Authorization-Issuer");
