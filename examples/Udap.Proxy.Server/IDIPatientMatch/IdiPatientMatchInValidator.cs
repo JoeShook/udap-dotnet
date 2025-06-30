@@ -1,8 +1,5 @@
-using Firely.Fhir.Packages;
 using Firely.Fhir.Validation;
 using Hl7.Fhir.Model;
-using Hl7.Fhir.Specification.Source;
-using Hl7.Fhir.Specification.Terminology;
 using Udap.Proxy.Server.IDIPatientMatch;
 
 public class IdiPatientMatchInValidator : IIdiPatientMatchInValidator
@@ -10,21 +7,15 @@ public class IdiPatientMatchInValidator : IIdiPatientMatchInValidator
     private readonly IIdiPatientRules _idiPatientRules;
     private readonly Validator _fhirProfileValidator;
 
-    public IdiPatientMatchInValidator(IIdiPatientRules idiPatientRules)
+    public IdiPatientMatchInValidator(
+        IIdiPatientRules idiPatientRules,
+        Validator fhirProfileValidator)
     {
         _idiPatientRules = idiPatientRules;
-
-        IAsyncResourceResolver packageSource = new FhirPackageSource(ModelInfo.ModelInspector, @"IDIPatientMatch/packages/hl7.fhir.r4b.core-4.3.0.tgz");
-        var coreSource = new CachedResolver(packageSource);
-        var coreSnapshot = new SnapshotSource(coreSource);
-        var terminologySource = new LocalTerminologyService(coreSnapshot);
-        IAsyncResourceResolver idiSource = new FhirPackageSource(ModelInfo.ModelInspector, @"IDIPatientMatch/packages/hl7.fhir.us.identity-matching-2.0.0-ballot.tgz");
-        var source = new MultiResolver(idiSource, coreSnapshot);
-        var settings = new ValidationSettings { ConformanceResourceResolver = source };
-        _fhirProfileValidator = new Validator(source, terminologySource, null, settings);
+        _fhirProfileValidator = fhirProfileValidator;
     }
 
-    public OperationOutcome? Validate(Parameters parameters)
+    public async Task<OperationOutcome?> Validate(Parameters parameters)
     {
         var outcome = _fhirProfileValidator.Validate(
             parameters, 

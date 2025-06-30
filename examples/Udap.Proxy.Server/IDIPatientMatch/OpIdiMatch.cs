@@ -71,7 +71,7 @@ public class OpIdiMatch : IFhirOperation
     {
         // Validate profile:
         var parameters = context.Parameters;
-        var validationOutcome = _idiPatientMatchInValidator.Validate(parameters);
+        var validationOutcome = await _idiPatientMatchInValidator.Validate(parameters);
         if (validationOutcome != null)
         {
             return validationOutcome;

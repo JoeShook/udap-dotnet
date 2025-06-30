@@ -1,10 +1,13 @@
 using Firely.Fhir.Packages;
 using Firely.Fhir.Validation;
 using Hl7.Fhir.Model;
+using Hl7.Fhir.Rest;
 using Hl7.Fhir.Serialization;
 using Hl7.Fhir.Specification.Source;
 using Hl7.Fhir.Specification.Terminology;
+using System.Text.Json;
 using Xunit.Abstractions;
+using Task = System.Threading.Tasks.Task;
 
 namespace Udap.Idi.Patient.Match.Tests;
 
@@ -63,5 +66,24 @@ public class IdiPatientMatchTests
         }
     }
 
+    [Fact (Skip = "Build the Country codes")]
+    public async Task GetCountryCodes()
+    {
+        var client = new FhirClient("https://tx.fhir.org/r4");
+        var expanded = await client.ExpandValueSetAsync(new Uri("http://hl7.org/fhir/ValueSet/iso3166-1-3"));
+
+        var codes = expanded.Expansion.Contains
+            .Select(c => c.Code)
+            .Distinct()
+            .ToList();
+
+        await File.WriteAllTextAsync("iso3166-1-alpha3-codes.json", JsonSerializer.Serialize(codes, new JsonSerializerOptions { WriteIndented = true }));
+
+        // Print a few codes
+        foreach (var code in codes.Take(10))
+        {
+            _testOutputHelper.WriteLine(code);
+        }
+    }
 
 }

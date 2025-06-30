@@ -109,7 +109,7 @@ public class OperationIdiMatchTests : IClassFixture<OperationIdiMatchFixture>
         string? expectedDiagnosticsSubstring)
     {
         // Act
-        var outcome = _fixture.IdiPatientMatchInValidator.Validate(parameters);
+        var outcome = await _fixture.IdiPatientMatchInValidator.Validate(parameters);
 
         // Assert
         if (expectedSuccess)
@@ -199,6 +199,155 @@ public class OperationIdiMatchTests : IClassFixture<OperationIdiMatchFixture>
             true, // expectedSuccess
             null,  // expectedErrorSubstring
             null  // expectedDiagnostics
+        };
+
+        // Negative test: Invalid country code.
+        yield return new object[]
+        {
+            new Parameters
+            {
+                Meta = new Meta
+                {
+                    Profile = new[] { "http://hl7.org/fhir/us/identity-matching/StructureDefinition/idi-match-input-parameters" }
+                },
+                Parameter = new List<Parameters.ParameterComponent>
+                {
+                    new Parameters.ParameterComponent
+                    {
+                        Name = "patient",
+                        Resource = new Hl7.Fhir.Model.Patient
+                        {
+                            Name = new List<HumanName> { new HumanName { Family = "Patient", Given = new[] { "Max" } } },
+                            BirthDate = "1992-05-17",
+                            Meta = new Meta
+                            {
+                                Profile = new[] { "http://hl7.org/fhir/us/identity-matching/StructureDefinition/IDI-Patient-L1" }
+                            },
+                            Identifier = new List<Identifier>
+                            {
+                                new Identifier
+                                {
+                                    Type = new CodeableConcept
+                                    {
+                                        Coding = new List<Coding>
+                                        {
+                                            new Coding
+                                            {
+                                                System = "http://terminology.hl7.org/CodeSystem/v2-0203",
+                                                Code = "PPN"
+                                            }
+                                        }
+                                    },
+                                    System = "http://hl7.org/fhir/sid/passport-XYZ",
+                                    Value = "1234-234-1243-12345678901"
+                                }
+                            }
+                        }
+                    }
+                }
+            },
+            false, // expectedSuccess
+            null,  // expectedErrorSubstring
+            "Invalid or missing country code"  // expectedDiagnostics
+        };
+
+        // Negative test: User is supplied only the system, and it appears as a value.
+        yield return new object[]
+        {
+            new Parameters
+            {
+                Meta = new Meta
+                {
+                    Profile = new[] { "http://hl7.org/fhir/us/identity-matching/StructureDefinition/idi-match-input-parameters" }
+                },
+                Parameter = new List<Parameters.ParameterComponent>
+                {
+                    new Parameters.ParameterComponent
+                    {
+                        Name = "patient",
+                        Resource = new Hl7.Fhir.Model.Patient
+                        {
+                            Name = new List<HumanName> { new HumanName { Family = "Patient", Given = new[] { "Max" } } },
+                            BirthDate = "1992-05-17",
+                            Meta = new Meta
+                            {
+                                Profile = new[] { "http://hl7.org/fhir/us/identity-matching/StructureDefinition/IDI-Patient" }
+                            },
+                            Identifier = new List<Identifier>
+                            {
+                                new Identifier
+                                {
+                                    Type = new CodeableConcept
+                                    {
+                                        Coding = new List<Coding>
+                                        {
+                                            new Coding
+                                            {
+                                                System = "http://terminology.hl7.org/CodeSystem/v2-0203",
+                                                Code = "PPN"
+                                            }
+                                        }
+                                    },
+                                    Value = "http://hl7.org/fhir/sid/passport-AUS"
+                                }
+                            }
+                        }
+                    }
+                }
+            },
+            false, // expectedSuccess
+            null,  // expectedErrorSubstring
+            "Missing a value for Passport."  // expectedDiagnostics
+        };
+
+        // Negative test: Invalid country code.
+        yield return new object[]
+        {
+            new Parameters
+            {
+                Meta = new Meta
+                {
+                    Profile = new[] { "http://hl7.org/fhir/us/identity-matching/StructureDefinition/idi-match-input-parameters" }
+                },
+                Parameter = new List<Parameters.ParameterComponent>
+                {
+                    new Parameters.ParameterComponent
+                    {
+                        Name = "patient",
+                        Resource = new Hl7.Fhir.Model.Patient
+                        {
+                            Name = new List<HumanName> { new HumanName { Family = "Patient", Given = new[] { "Max" } } },
+                            BirthDate = "1992-05-17",
+                            Meta = new Meta
+                            {
+                                Profile = new[] { "http://hl7.org/fhir/us/identity-matching/StructureDefinition/IDI-Patient-L1" }
+                            },
+                            Identifier = new List<Identifier>
+                            {
+                                new Identifier
+                                {
+                                    Type = new CodeableConcept
+                                    {
+                                        Coding = new List<Coding>
+                                        {
+                                            new Coding
+                                            {
+                                                System = "http://terminology.hl7.org/CodeSystem/v2-0203",
+                                                Code = "PPN"
+                                            }
+                                        }
+                                    },
+                                    
+                                    Value = "1234-234-1243-12345678901"
+                                }
+                            }
+                        }
+                    }
+                }
+            },
+            false, // expectedSuccess
+            null,  // expectedErrorSubstring
+            "Invalid or missing country code"  // expectedDiagnostics
         };
 
         // Negative test: given or family name missing

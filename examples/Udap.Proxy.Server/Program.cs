@@ -8,9 +8,13 @@
 #endregion
 
 using Duende.IdentityModel;
+using Firely.Fhir.Packages;
 using Google.Apis.Auth.OAuth2;
 using Hl7.Fhir.Model;
+using Hl7.Fhir.Model.CdsHooks;
 using Hl7.Fhir.Serialization;
+using Hl7.Fhir.Specification.Source;
+using Hl7.Fhir.Specification.Terminology;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.ResponseCompression;
 using Microsoft.IdentityModel.Tokens;
@@ -19,6 +23,7 @@ using System.IdentityModel.Tokens.Jwt;
 using System.Net.Http.Headers;
 using System.Text;
 using System.Text.Json.Serialization;
+using Firely.Fhir.Validation;
 using Udap.CdsHooks.Model;
 using Udap.Common;
 using Udap.Proxy.Server;
@@ -209,6 +214,18 @@ builder.Services.AddSingleton<IIdiPatientRules, IdiPatientRules>();
 builder.Services.AddSingleton<IIdiPatientMatchInValidator, IdiPatientMatchInValidator>();
 
 
+builder.Services.AddSingleton<Validator>(sp =>
+{
+    IAsyncResourceResolver packageSource = new FhirPackageSource(ModelInfo.ModelInspector, @"IDIPatientMatch/packages/hl7.fhir.r4b.core-4.3.0.tgz");
+    var coreSource = new CachedResolver(packageSource);
+    var coreSnapshot = new SnapshotSource(coreSource);
+    var terminologySource = new LocalTerminologyService(coreSnapshot);
+    IAsyncResourceResolver idiSource = new FhirPackageSource(ModelInfo.ModelInspector, @"IDIPatientMatch/packages/hl7.fhir.us.identity-matching-2.0.0-ballot.tgz");
+    var source = new MultiResolver(idiSource, coreSnapshot);
+    var settings = new ValidationSettings { ConformanceResourceResolver = source };
+    return new Validator(source, terminologySource, null, settings);
+
+});
 
 var app = builder.Build();
 
