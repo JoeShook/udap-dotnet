@@ -2,12 +2,12 @@ using Firely.Fhir.Validation;
 using Hl7.Fhir.Model;
 using Udap.Proxy.Server.IDIPatientMatch;
 
-public class IdiPatientMatchInValidator : IPatientMatchInValidator
+public class PatientMatchInValidator : IPatientMatchInValidator
 {
     private readonly IIdiPatientRules _idiPatientRules;
     private readonly Validator _fhirProfileValidator;
 
-    public IdiPatientMatchInValidator(
+    public PatientMatchInValidator(
         IIdiPatientRules idiPatientRules,
         Validator fhirProfileValidator)
     {
@@ -27,27 +27,9 @@ public class IdiPatientMatchInValidator : IPatientMatchInValidator
             return outcome;
         }
 
-        var inputPatient = parameters.Parameter.FirstOrDefault(p => p.Name == "patient")?.Resource;
+        var inputPatient = parameters.Parameter.FirstOrDefault(p => p.Name == "resource")?.Resource;
         var patient = inputPatient as Patient;
-
-        var patientProfiles = patient.Meta?.Profile ?? new List<string>();
-        if (!patientProfiles.Any(p => Constants.IdiPatientProfiles.ValidProfiles.Contains(p)))
-        {
-            return new OperationOutcome
-            {
-                Issue = new List<OperationOutcome.IssueComponent>
-                {
-                    new OperationOutcome.IssueComponent
-                    {
-                        Severity = OperationOutcome.IssueSeverity.Error,
-                        Code = OperationOutcome.IssueType.Invalid,
-                        Diagnostics = "Input patient must conform to one of the IDI-Patient profiles." +
-                                      "<br>https://build.fhir.org/ig/HL7/fhir-identity-matching-ig/artifacts.html#structures-resource-profiles"
-                    }
-                }
-            };
-        }
-
+        
         var (isValid, error) = _idiPatientRules.ValidatePatientProfile(patient);
         if (!isValid)
         {

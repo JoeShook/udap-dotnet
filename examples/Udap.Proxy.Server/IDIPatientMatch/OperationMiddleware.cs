@@ -23,27 +23,39 @@ public class OperationMiddleware
             (path.Equals("/fhir/r4/Patient/$match", StringComparison.OrdinalIgnoreCase) ||
              path.Equals("/fhir/r4/Patient/$idi-match", StringComparison.OrdinalIgnoreCase)))
         {
-            var operationName = path.Split('/').Last();
-            if (_operations.TryGetValue(operationName, out var operation))
+            var logger = context.RequestServices.GetRequiredService<ILogger<OperationMiddleware>>();
+            try
             {
-                // Parse the request body as FHIR Parameters
-                var requestBody = await new StreamReader(context.Request.Body).ReadToEndAsync();
-                var parameters = new FhirJsonParser().Parse<Parameters>(requestBody);
-
-                var opContext = new OperationContext
+                var operationName = path.Split('/').Last();
+                if (_operations.TryGetValue(operationName, out var operation))
                 {
-                    HttpContext = context,
-                    Parameters = parameters
-                };
+                    // Parse the request body as FHIR Parameters
+                    var requestBody = await new StreamReader(context.Request.Body).ReadToEndAsync();
+                    Console.WriteLine(requestBody);
+                    var parameters = new FhirJsonParser().Parse<Parameters>(requestBody);
 
-                // Execute the operation
-                var result = await operation.ExecuteAsync(opContext, context.RequestAborted);
+                    var opContext = new OperationContext
+                    {
+                        HttpContext = context,
+                        Parameters = parameters
+                    };
 
-                // Serialize and return the result
-                context.Response.ContentType = "application/fhir+json";
-                var json = await new FhirJsonSerializer().SerializeToStringAsync(result);
-                await context.Response.WriteAsync(json);
-                return;
+                    // Execute the operation
+                    var result = await operation.ExecuteAsync(opContext, context.RequestAborted);
+
+                    // Serialize and return the result
+                    context.Response.ContentType = "application/fhir+json";
+                    var json = await new FhirJsonSerializer().SerializeToStringAsync(result);
+                    await context.Response.WriteAsync(json);
+                    return;
+                }
+            }
+            catch (Exception ex)
+            {
+                // Log the exception and return a 500 Internal Server Error
+                
+                logger.LogError(ex, "OperationMiddleware failure");
+                throw;
             }
         }
 

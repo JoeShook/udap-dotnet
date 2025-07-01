@@ -118,36 +118,16 @@ builder.Services.AddReverseProxy()
             return ValueTask.CompletedTask;
         });
 
-        // Conditionally add a transform for routes that require auth.
-        if (builderContext.Route.Metadata != null &&
-            (builderContext.Route.Metadata.ContainsKey("GCPKeyResolve") || builderContext.Route.Metadata.ContainsKey("AccessToken")))
-        {
-            builderContext.AddRequestTransform(async context =>
-            {
-                var accessTokenService = context.HttpContext.RequestServices.GetRequiredService<IAccessTokenService>();
-                var resolveAccessToken = await accessTokenService.ResolveAccessTokenAsync(
-                    builderContext.Route.Metadata, 
-                    context.HttpContext.RequestServices.GetRequiredService<ILogger<AccessTokenService>>(), 
-                    cancellationToken: context.HttpContext.RequestAborted);
-                context.ProxyRequest.Headers.Authorization = new AuthenticationHeaderValue("Bearer", resolveAccessToken);
-                SetProxyHeaders(context);
-            });
-        }
 
-        // Use the default credentials.  Primary usage: running in Cloud Run under a specific service account
-        if (builderContext.Route.Metadata != null && (builderContext.Route.Metadata.TryGetValue("ADC", out string? adc)))
+        builderContext.AddRequestTransform(async context =>
         {
-            if (adc.Equals("True", StringComparison.OrdinalIgnoreCase))
-            {
-                builderContext.AddRequestTransform(async context =>
-                {
-                    var googleCredentials = GoogleCredential.GetApplicationDefault();
-                    string accessToken = await googleCredentials.UnderlyingCredential.GetAccessTokenForRequestAsync();
-                    context.ProxyRequest.Headers.Authorization = new AuthenticationHeaderValue("Bearer", accessToken);
-                    SetProxyHeaders(context);
-                });
-            }
-        }
+            var accessTokenService = context.HttpContext.RequestServices.GetRequiredService<IAccessTokenService>();
+            var accessToken = await accessTokenService.ResolveAccessTokenAsync(
+                context.HttpContext.RequestServices.GetRequiredService<ILogger<AccessTokenService>>(),
+                cancellationToken: context.HttpContext.RequestAborted);
+            context.ProxyRequest.Headers.Authorization = new AuthenticationHeaderValue("Bearer", accessToken);
+            SetProxyHeaders(context);
+        });
 
         builderContext.AddResponseTransform(async responseContext =>
         {
@@ -208,26 +188,54 @@ builder.Services.AddSingleton<IAccessTokenService, AccessTokenService>();
 //
 // IDI Patient Match Operations
 //
-builder.Services.AddSingleton<IFhirOperation, OpMatch>();
-builder.Services.AddSingleton<IFhirOperation, OpIdiMatch>();
-builder.Services.AddSingleton<IIdiPatientRules, IdiPatientRules>();
-builder.Services.AddSingleton<IIdiPatientMatchInValidator, IdiPatientMatchInValidator>();
-
-
 builder.Services.AddSingleton<Validator>(sp =>
 {
-    IAsyncResourceResolver packageSource = new FhirPackageSource(ModelInfo.ModelInspector, @"IDIPatientMatch/packages/hl7.fhir.r4b.core-4.3.0.tgz");
+    IAsyncResourceResolver packageSource = new FhirPackageSource(ModelInfo.ModelInspector, @"IDIPatientMatch/Packages/hl7.fhir.r4b.core-4.3.0.tgz");
     var coreSource = new CachedResolver(packageSource);
     var coreSnapshot = new SnapshotSource(coreSource);
     var terminologySource = new LocalTerminologyService(coreSnapshot);
-    IAsyncResourceResolver idiSource = new FhirPackageSource(ModelInfo.ModelInspector, @"IDIPatientMatch/packages/hl7.fhir.us.identity-matching-2.0.0-ballot.tgz");
+    IAsyncResourceResolver idiSource = new FhirPackageSource(ModelInfo.ModelInspector, @"IDIPatientMatch/Packages/hl7.fhir.us.identity-matching-2.0.0-ballot.tgz");
     var source = new MultiResolver(idiSource, coreSnapshot);
     var settings = new ValidationSettings { ConformanceResourceResolver = source };
     return new Validator(source, terminologySource, null, settings);
 
 });
 
+builder.Services.AddSingleton<IIdiPatientRules, IdiPatientRules>();
+builder.Services.AddSingleton<PatientMatchInValidator>();
+builder.Services.AddSingleton<IdiPatientMatchInValidator>();
+
+builder.Services.AddSingleton<IFhirOperation>(sp =>
+    new OpMatch(
+        sp.GetRequiredService<IConfiguration>(),
+        sp.GetRequiredService<IAccessTokenService>(),
+        sp.GetRequiredService<HttpClient>(),
+        sp.GetRequiredService<ILogger<OpMatch>>(),
+        sp.GetRequiredService<PatientMatchInValidator>()
+    ));
+
+builder.Services.AddSingleton<IFhirOperation>(sp =>
+    new OpIdiMatch(
+        sp.GetRequiredService<IConfiguration>(),
+        sp.GetRequiredService<IAccessTokenService>(),
+        sp.GetRequiredService<HttpClient>(),
+        sp.GetRequiredService<ILogger<OpIdiMatch>>(),
+        sp.GetRequiredService<IdiPatientMatchInValidator>()
+    ));
+
+
+
+
+
 var app = builder.Build();
+
+// Force Validator to expand/load packages at startup
+using (var scope = app.Services.CreateScope())
+{
+    var validator = scope.ServiceProvider.GetRequiredService<Validator>();
+    var dummyPatient = new Patient { Id = "init" };
+    validator.Validate(dummyPatient);
+}
 
 // Configure the HTTP request pipeline.
 app.UseCors("DefaultPolicy");

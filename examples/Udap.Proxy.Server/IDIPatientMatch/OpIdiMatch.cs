@@ -14,23 +14,20 @@ public class OpIdiMatch : IFhirOperation
     public string Description => "Identity matching operation per Identity Matching IG";
     private readonly HttpClient _httpClient;
     private readonly string _backendUrl;
-    private readonly IIdiPatientRules _idiPatientRules;
-    private readonly IIdiPatientMatchInValidator _idiPatientMatchInValidator;
+    private readonly IPatientMatchInValidator _idiPatientMatchInValidator;
 
     public OpIdiMatch(
         IConfiguration config,
         IAccessTokenService accessTokenService,
         HttpClient httpClient,
         ILogger<OpIdiMatch> logger,
-        IIdiPatientRules idiPatientRules,
-        IIdiPatientMatchInValidator idiPatientMatchInValidator)
+        IPatientMatchInValidator idiPatientMatchInValidator)
     {
         config.ThrowIfNull(nameof(config));
         _accessTokenService = accessTokenService ?? throw new ArgumentNullException(nameof(accessTokenService));
         _backendUrl = config["FhirUrlProxy:Back"] ?? throw new ArgumentNullException("FhirUrlProxy:Back is not configured");
         _httpClient = httpClient ?? throw new ArgumentNullException(nameof(httpClient));
         _logger = logger ?? throw new ArgumentNullException(nameof(logger));
-        _idiPatientRules = idiPatientRules ?? throw new ArgumentNullException(nameof(idiPatientRules));
         _idiPatientMatchInValidator = idiPatientMatchInValidator ?? throw new ArgumentNullException(nameof(idiPatientMatchInValidator));
     }
 
@@ -69,28 +66,23 @@ public class OpIdiMatch : IFhirOperation
 
     public async Task<Resource> ExecuteAsync(OperationContext context, CancellationToken cancellationToken)
     {
-        // Validate profile:
-        var parameters = context.Parameters;
-        var validationOutcome = await _idiPatientMatchInValidator.Validate(parameters);
-        if (validationOutcome != null)
-        {
-            return validationOutcome;
-        }
-
-        var inputPatient = parameters.Parameter.FirstOrDefault(p => p.Name == "patient")?.Resource;
-        var patient = inputPatient as Patient;
-
-
-        // Build search query and execute
-        var query = BuildSearchQuery(patient);
-        var searchUrl = $"{_backendUrl}/Patient?{query}";
-        _logger.LogDebug(searchUrl);
         try
         {
-            var dict = new Dictionary<string, string>();
-            dict.TryAdd("GCPKeyResolve", "gcp_joe_key_location");
+            // Validate profile:
+            var parameters = context.Parameters;
+            var validationOutcome = await _idiPatientMatchInValidator.Validate(parameters);
+            if (validationOutcome != null)
+            {
+                return validationOutcome;
+            }
+
+            var inputPatient = parameters.Parameter.FirstOrDefault(p => p.Name == "patient")?.Resource;
+            var patient = inputPatient as Patient;
+            
+            var query = BuildSearchQuery(patient);
+            var searchUrl = $"{_backendUrl}/Patient?{query}";
+            
             var resolveAccessToken = await _accessTokenService.ResolveAccessTokenAsync(
-                dict,
                 context.HttpContext.RequestServices.GetRequiredService<ILogger<OpIdiMatch>>(),
                 cancellationToken: cancellationToken);
             var request = new HttpRequestMessage(HttpMethod.Get, searchUrl);
@@ -98,7 +90,7 @@ public class OpIdiMatch : IFhirOperation
             var response = await _httpClient.SendAsync(request, cancellationToken);
             response.EnsureSuccessStatusCode();
 
-            var json = await response.Content.ReadAsStringAsync();
+            var json = await response.Content.ReadAsStringAsync(cancellationToken);
             var bundle = new FhirJsonParser().Parse<Bundle>(json);
 
             // Score candidates
@@ -113,18 +105,19 @@ public class OpIdiMatch : IFhirOperation
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Error connecting to backend FHIR server");
+            _logger.LogError(ex, "OpIdiMatch unknown error");
             return new OperationOutcome
             {
-                Issue = new List<OperationOutcome.IssueComponent>
-                {
+                Issue =
+                [
                     new OperationOutcome.IssueComponent
                     {
                         Severity = OperationOutcome.IssueSeverity.Error,
                         Code = OperationOutcome.IssueType.Exception,
-                        Diagnostics = "An error occurred while connecting to the backend FHIR server. Please try again later."
+                        Diagnostics =
+                            "An error occurred while connecting to the backend FHIR server. Please try again later."
                     }
-                }
+                ]
             };
         }
     }

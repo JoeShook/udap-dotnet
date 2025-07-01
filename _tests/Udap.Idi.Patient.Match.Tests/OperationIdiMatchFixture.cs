@@ -15,12 +15,15 @@ using T = System.Threading.Tasks;
 public class OperationIdiMatchFixture
 {
     public OpIdiMatch OpIdiMatch { get; }
+    public OpMatch OpMatch { get; }
     public HttpClient HttpClient { get; }
     public IAccessTokenService AccessTokenService { get; }
     public IIdiPatientRules IdiPatientRules { get; }
     public IConfiguration Config { get; }
-    public IIdiPatientMatchInValidator IdiPatientMatchInValidator { get; }
+    public IdiPatientMatchInValidator IdiPatientMatchInValidator { get; }
+    public PatientMatchInValidator PatientMatchInValidator { get; }
     public ILogger<OpIdiMatch> OpIdiMatchLogger { get; }
+    public ILogger<OpMatch> OpMatchLogger { get; }
 
     public OperationIdiMatchFixture()
     {
@@ -30,19 +33,19 @@ public class OperationIdiMatchFixture
         AccessTokenService = NSubstitute.Substitute.For<IAccessTokenService>();
         AccessTokenService
             .ResolveAccessTokenAsync(
-                NSubstitute.Arg.Any<IReadOnlyDictionary<string, string>>(),
                 NSubstitute.Arg.Any<ILogger<OpIdiMatch>>(),
                 NSubstitute.Arg.Any<CancellationToken>())
             .Returns("dummy-token");
 
         HttpClient = new HttpClient(new MockHttpMessageHandler());
-        OpIdiMatchLogger = NSubstitute.Substitute.For<Microsoft.Extensions.Logging.ILogger<OpIdiMatch>>();
+        OpIdiMatchLogger = Substitute.For<ILogger<OpIdiMatch>>();
+        OpMatchLogger = Substitute.For<ILogger<OpMatch>>();
 
-        IAsyncResourceResolver packageSource = new FhirPackageSource(ModelInfo.ModelInspector, @"IDIPatientMatch/packages/hl7.fhir.r4b.core-4.3.0.tgz");
+        IAsyncResourceResolver packageSource = new FhirPackageSource(ModelInfo.ModelInspector, @"IDIPatientMatch/Packages/hl7.fhir.r4b.core-4.3.0.tgz");
         var coreSource = new CachedResolver(packageSource);
         var coreSnapshot = new SnapshotSource(coreSource);
         var terminologySource = new LocalTerminologyService(coreSnapshot);
-        IAsyncResourceResolver idiSource = new FhirPackageSource(ModelInfo.ModelInspector, @"IDIPatientMatch/packages/hl7.fhir.us.identity-matching-2.0.0-ballot.tgz");
+        IAsyncResourceResolver idiSource = new FhirPackageSource(ModelInfo.ModelInspector, @"IDIPatientMatch/Packages/hl7.fhir.us.identity-matching-2.0.0-ballot.tgz");
         var source = new MultiResolver(idiSource, coreSnapshot);
         var settings = new ValidationSettings { ConformanceResourceResolver = source };
         var fhirProfileValidator = new Validator(source, terminologySource, null, settings);
@@ -51,14 +54,22 @@ public class OperationIdiMatchFixture
 
 
         IdiPatientMatchInValidator = new IdiPatientMatchInValidator(IdiPatientRules, fhirProfileValidator);
+        PatientMatchInValidator = new PatientMatchInValidator(IdiPatientRules, fhirProfileValidator);
+
 
         OpIdiMatch = new OpIdiMatch(
             Config,
             AccessTokenService,
             HttpClient,
             OpIdiMatchLogger,
-            IdiPatientRules,
             IdiPatientMatchInValidator);
+
+        OpMatch = new OpMatch(
+            Config,
+            AccessTokenService,
+            HttpClient,
+            OpMatchLogger,
+            PatientMatchInValidator);
     }
 
     // Mock HTTP handler to simulate FHIR backend

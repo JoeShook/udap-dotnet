@@ -1,4 +1,7 @@
+using Google.Apis.Auth.OAuth2;
+
 namespace Udap.Proxy.Server.Services;
+
 
 public class AccessTokenService : IAccessTokenService
 {
@@ -10,38 +13,21 @@ public class AccessTokenService : IAccessTokenService
     }
 
     public async Task<string?> ResolveAccessTokenAsync(
-        IReadOnlyDictionary<string, string> metadata,
         ILogger logger,
         CancellationToken cancellationToken = default)
     {
         try
         {
-            if (metadata.ContainsKey("AccessToken"))
-            {
-                return _configuration.GetValue<string>(metadata["AccessToken"]);
-            }
-
-            if (metadata.TryGetValue("GCPKeyResolve", out var routeAuthorizationPolicy))
-            {
-                var path = _configuration.GetValue<string>(routeAuthorizationPolicy);
-
-                if (string.IsNullOrWhiteSpace(path))
-                {
-                    throw new InvalidOperationException(
-                        $"The route metadata '{routeAuthorizationPolicy}' must be set to a valid path.");
-                }
-
-                var credentials = new ServiceAccountCredentialCache();
-                var token = await credentials.GetAccessTokenAsync(path, "https://www.googleapis.com/auth/cloud-healthcare");
+            var googleCredentials = await GoogleCredential.GetApplicationDefaultAsync(cancellationToken);
+            var token = await googleCredentials.UnderlyingCredential.GetAccessTokenForRequestAsync(cancellationToken: cancellationToken);
 #if DEBUG
                 logger.LogDebug($"Backend token: {token}");
 #endif
-                return token;
-            }
+            return token;
         }
         catch (Exception ex)
         {
-            Console.WriteLine(ex); // TODO: Replace with proper logging
+            logger.LogError(ex, "Failed access token access"); 
         }
 
         return string.Empty;

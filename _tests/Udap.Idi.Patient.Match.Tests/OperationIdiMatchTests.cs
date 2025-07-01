@@ -45,7 +45,7 @@ public class OperationIdiMatchTests : IClassFixture<OperationIdiMatchFixture>
     }
 
     [Theory]
-    [MemberData(nameof(PatientTestCases))]
+    [MemberData(nameof(IdiPatientMatchTestCases))]
     public async T.Task ExecuteAsync_ValidatesPatient_PositiveAndNegative(
         Parameters parameters, 
         bool expectedSuccess, 
@@ -101,7 +101,7 @@ public class OperationIdiMatchTests : IClassFixture<OperationIdiMatchFixture>
     }
 
     [Theory]
-    [MemberData(nameof(PatientTestCases))]
+    [MemberData(nameof(IdiPatientMatchTestCases))]
     public async T.Task IdiPatientMatchInValidator_ValidatesPatient_PositiveAndNegative(
         Parameters parameters,
         bool expectedSuccess,
@@ -149,7 +149,56 @@ public class OperationIdiMatchTests : IClassFixture<OperationIdiMatchFixture>
         }
     }
 
-    public static IEnumerable<object[]> PatientTestCases()
+    [Theory]
+    [MemberData(nameof(PatientMatchTestCases))]
+    public async T.Task PatientMatchInValidator_ValidatesPatient_PositiveAndNegative(
+        Parameters parameters,
+        bool expectedSuccess,
+        string? expectedErrorSubstring,
+        string? expectedDiagnosticsSubstring)
+    {
+        // Act
+        var outcome = await _fixture.PatientMatchInValidator.Validate(parameters);
+
+        // Assert
+        if (expectedSuccess)
+        {
+            try
+            {
+                Assert.Null(outcome);
+            }
+            catch (Exception)
+            {
+                _output.WriteLine("Validator returned unexpected OperationOutcome:");
+                _output.WriteLine("Result (unexpected OperationOutcome):");
+                _output.WriteLine(await new FhirJsonSerializer(new SerializerSettings() { Pretty = true }).SerializeToStringAsync(outcome));
+                throw;
+            }
+        }
+        else
+        {
+            try
+            {
+                Assert.NotNull(outcome);
+                if (expectedErrorSubstring != null)
+                {
+                    Assert.Contains(expectedErrorSubstring, string.Join(" ", outcome.Issue.Select(i => i.Details.Text)));
+                }
+                if (expectedDiagnosticsSubstring != null)
+                {
+                    Assert.Contains(expectedDiagnosticsSubstring, string.Join(" ", outcome.Issue.Select(i => i.Diagnostics)));
+                }
+            }
+            catch (Exception)
+            {
+                _output.WriteLine("Result (expected OperationOutcome, but got):");
+                _output.WriteLine(await new FhirJsonSerializer(new SerializerSettings() { Pretty = true }).SerializeToStringAsync(outcome));
+                throw;
+            }
+        }
+    }
+
+    public static IEnumerable<object[]> IdiPatientMatchTestCases()
     {
         // Positive test: valid Parameters with Patient
         yield return new object[]
@@ -196,7 +245,7 @@ public class OperationIdiMatchTests : IClassFixture<OperationIdiMatchFixture>
                     }
                 }
             },
-            true, // expectedSuccess
+            true, // expectedSuccess  //TODO this should fail because it is actually a weight of 8.  
             null,  // expectedErrorSubstring
             null  // expectedDiagnostics
         };
@@ -441,7 +490,7 @@ public class OperationIdiMatchTests : IClassFixture<OperationIdiMatchFixture>
             },
             false, // expectedSuccess
             null, // expectedErrorSubstring
-            "Input patient must conform to one of the IDI-Patient profiles"  // expectedDiagnostics
+            "Input patient must conform to one of the IDI-Patient profiles",  // expectedDiagnostics
         };
 
         // Negative test: missing patient profile
@@ -458,6 +507,288 @@ public class OperationIdiMatchTests : IClassFixture<OperationIdiMatchFixture>
                     new Parameters.ParameterComponent
                     {
                         Name = "patient",
+                        Resource = new Hl7.Fhir.Model.Patient
+                        {
+                            Name = new List<HumanName> { new HumanName { Family = "Patient", Given = new[] { "Max" } } },
+                            BirthDate = "1992-05-17",
+                            Meta = new Meta
+                            {
+                                Profile = new[] { "http://hl7.org/fhir/us/identity-matching/StructureDefinition/IDI-Patient-L1" }
+                            }
+                        }
+                    }
+                }
+            },
+            false, // expectedSuccess
+            "Instance failed constraint idi-L1", // expectedErrorSubstring
+            null  // expectedDiagnostics
+        };
+
+        // Add more cases as needed...
+    }
+
+    public static IEnumerable<object[]> PatientMatchTestCases()
+    {
+        // Positive test: valid Parameters with Patient
+        yield return new object[]
+        {
+            new Parameters
+            {
+                Meta = new Meta
+                {
+                    Profile = new[] { "http://hl7.org/fhir/us/identity-matching/StructureDefinition/idi-match-input-parameters" }
+                },
+                Parameter = new List<Parameters.ParameterComponent>
+                {
+                    new Parameters.ParameterComponent
+                    {
+                        Name = "resource",
+                        Resource = new Hl7.Fhir.Model.Patient
+                        {
+                            Name = new List<HumanName> { new HumanName { Family = "Patient", Given = new[] { "Max" } } },
+                            BirthDate = "1992-05-17",
+                            Meta = new Meta
+                            {
+                                Profile = new[] { "http://hl7.org/fhir/us/identity-matching/StructureDefinition/IDI-Patient-L1" }
+                            },
+                            Identifier = new List<Identifier>
+                            {
+                                new Identifier
+                                {
+                                    Type = new CodeableConcept
+                                    {
+                                        Coding = new List<Coding>
+                                        {
+                                            new Coding
+                                            {
+                                                System = "http://terminology.hl7.org/CodeSystem/v2-0203",
+                                                Code = "PPN"
+                                            }
+                                        }
+                                    },
+                                    System = "http://hl7.org/fhir/sid/passport-AUS",
+                                    Value = "1234-234-1243-12345678901"
+                                }
+                            }
+                        }
+                    }
+                }
+            },
+            true, // expectedSuccess
+            null,  // expectedErrorSubstring
+            null  // expectedDiagnostics
+        };
+
+        // Negative test: Invalid country code.
+        yield return new object[]
+        {
+            new Parameters
+            {
+                Meta = new Meta
+                {
+                    Profile = new[] { "http://hl7.org/fhir/us/identity-matching/StructureDefinition/idi-match-input-parameters" }
+                },
+                Parameter = new List<Parameters.ParameterComponent>
+                {
+                    new Parameters.ParameterComponent
+                    {
+                        Name = "resource",
+                        Resource = new Hl7.Fhir.Model.Patient
+                        {
+                            Name = new List<HumanName> { new HumanName { Family = "Patient", Given = new[] { "Max" } } },
+                            BirthDate = "1992-05-17",
+                            Meta = new Meta
+                            {
+                                Profile = new[] { "http://hl7.org/fhir/us/identity-matching/StructureDefinition/IDI-Patient-L1" }
+                            },
+                            Identifier = new List<Identifier>
+                            {
+                                new Identifier
+                                {
+                                    Type = new CodeableConcept
+                                    {
+                                        Coding = new List<Coding>
+                                        {
+                                            new Coding
+                                            {
+                                                System = "http://terminology.hl7.org/CodeSystem/v2-0203",
+                                                Code = "PPN"
+                                            }
+                                        }
+                                    },
+                                    System = "http://hl7.org/fhir/sid/passport-XYZ",
+                                    Value = "1234-234-1243-12345678901"
+                                }
+                            }
+                        }
+                    }
+                }
+            },
+            false, // expectedSuccess
+            null,  // expectedErrorSubstring
+            "Invalid or missing country code"  // expectedDiagnostics
+        };
+
+        // Negative test: User is supplied only the system, and it appears as a value.
+        yield return new object[]
+        {
+            new Parameters
+            {
+                Meta = new Meta
+                {
+                    Profile = new[] { "http://hl7.org/fhir/us/identity-matching/StructureDefinition/idi-match-input-parameters" }
+                },
+                Parameter = new List<Parameters.ParameterComponent>
+                {
+                    new Parameters.ParameterComponent
+                    {
+                        Name = "resource",
+                        Resource = new Hl7.Fhir.Model.Patient
+                        {
+                            Name = new List<HumanName> { new HumanName { Family = "Patient", Given = new[] { "Max" } } },
+                            BirthDate = "1992-05-17",
+                            Meta = new Meta
+                            {
+                                Profile = new[] { "http://hl7.org/fhir/us/identity-matching/StructureDefinition/IDI-Patient" }
+                            },
+                            Identifier = new List<Identifier>
+                            {
+                                new Identifier
+                                {
+                                    Type = new CodeableConcept
+                                    {
+                                        Coding = new List<Coding>
+                                        {
+                                            new Coding
+                                            {
+                                                System = "http://terminology.hl7.org/CodeSystem/v2-0203",
+                                                Code = "PPN"
+                                            }
+                                        }
+                                    },
+                                    Value = "http://hl7.org/fhir/sid/passport-AUS"
+                                }
+                            }
+                        }
+                    }
+                }
+            },
+            false, // expectedSuccess
+            null,  // expectedErrorSubstring
+            "Missing a value for Passport."  // expectedDiagnostics
+        };
+
+        // Negative test: Invalid country code.
+        yield return new object[]
+        {
+            new Parameters
+            {
+                Meta = new Meta
+                {
+                    Profile = new[] { "http://hl7.org/fhir/us/identity-matching/StructureDefinition/idi-match-input-parameters" }
+                },
+                Parameter = new List<Parameters.ParameterComponent>
+                {
+                    new Parameters.ParameterComponent
+                    {
+                        Name = "resource",
+                        Resource = new Hl7.Fhir.Model.Patient
+                        {
+                            Name = new List<HumanName> { new HumanName { Family = "Patient", Given = new[] { "Max" } } },
+                            BirthDate = "1992-05-17",
+                            Meta = new Meta
+                            {
+                                Profile = new[] { "http://hl7.org/fhir/us/identity-matching/StructureDefinition/IDI-Patient-L1" }
+                            },
+                            Identifier = new List<Identifier>
+                            {
+                                new Identifier
+                                {
+                                    Type = new CodeableConcept
+                                    {
+                                        Coding = new List<Coding>
+                                        {
+                                            new Coding
+                                            {
+                                                System = "http://terminology.hl7.org/CodeSystem/v2-0203",
+                                                Code = "PPN"
+                                            }
+                                        }
+                                    },
+
+                                    Value = "1234-234-1243-12345678901"
+                                }
+                            }
+                        }
+                    }
+                }
+            },
+            false, // expectedSuccess
+            null,  // expectedErrorSubstring
+            "Invalid or missing country code"  // expectedDiagnostics
+        };
+
+        // Negative test: given or family name missing
+        yield return new object[]
+        {
+            new Parameters
+            {
+                // Meta = new Meta
+                // {
+                //     Profile = new[] { "http://hl7.org/fhir/us/identity-matching/StructureDefinition/idi-match-input-parameters" }
+                // },
+                Parameter = new List<Parameters.ParameterComponent>
+                {
+                    new Parameters.ParameterComponent
+                    {
+                        Name = "resource",
+                        Resource = new Hl7.Fhir.Model.Patient
+                        {
+                            Name = new List<HumanName> { new HumanName { Text = "joe shook"} },
+                            BirthDate = "1992-05-17",
+                            Meta = new Meta
+                            {
+                                Profile = new[] { "http://hl7.org/fhir/us/identity-matching/StructureDefinition/IDI-Patient" }
+                            }
+                        }
+                    }
+                }
+            },
+            false, // expectedSuccess
+            "Either the given or family name SHALL be present",  // expectedErrorSubstring
+            null  // expectedDiagnostics
+        };
+
+        // Negative test: missing patient resource
+        yield return new object[]
+        {
+            new Parameters
+            {
+                Meta = new Meta
+                {
+                    Profile = new[] { "http://hl7.org/fhir/us/identity-matching/StructureDefinition/idi-match-input-parameters" }
+                },
+                Parameter = new List<Parameters.ParameterComponent>()
+            },
+            false, // expectedSuccess
+            "Instance count is 0, which is not within the specified cardinality of 1..1", // expectedErrorSubstring
+            null  // expectedDiagnostics
+        };
+
+        // Negative test: missing patient profile
+        yield return new object[]
+        {
+            new Parameters
+            {
+                Meta = new Meta
+                {
+                    Profile = new[] { "http://hl7.org/fhir/us/identity-matching/StructureDefinition/idi-match-input-parameters" }
+                },
+                Parameter = new List<Parameters.ParameterComponent>
+                {
+                    new Parameters.ParameterComponent
+                    {
+                        Name = "resource",
                         Resource = new Hl7.Fhir.Model.Patient
                         {
                             Name = new List<HumanName> { new HumanName { Family = "Patient", Given = new[] { "Max" } } },
