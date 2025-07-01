@@ -81,7 +81,8 @@ public class OpIdiMatch : IFhirOperation
             
             var query = BuildSearchQuery(patient);
             var searchUrl = $"{_backendUrl}/Patient?{query}";
-            
+            _logger.LogDebug(searchUrl);
+
             var resolveAccessToken = await _accessTokenService.ResolveAccessTokenAsync(
                 context.HttpContext.RequestServices.GetRequiredService<ILogger<OpIdiMatch>>(),
                 cancellationToken: cancellationToken);
@@ -161,7 +162,9 @@ public class OpIdiMatch : IFhirOperation
             {
                 if (!string.IsNullOrEmpty(identifier.Value))
                 {
-                    queryParams.Add($"identifier={Uri.EscapeDataString(identifier.Value)}");
+                    queryParams.Add(identifier.System == null
+                        ? $"identifier={Uri.EscapeDataString(identifier.Value)}"
+                        : $"identifier={Uri.EscapeDataString(identifier.System)}|{Uri.EscapeDataString(identifier.Value)}");
                 }
             }
         }

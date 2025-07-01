@@ -26,7 +26,7 @@ public class OperationIdiMatchTests : IClassFixture<OperationIdiMatchFixture>
     public async T.Task ExecuteAsync_ValidatesJsonFile()
     {
         // Load Parameters resource from JSON
-        var json = File.ReadAllText("testdata/idi-match-in-parameters.json");
+        var json = File.ReadAllText("testdata/idi-match-in-parameters-drivers-license.json");
         var parameters = new FhirJsonParser().Parse<Parameters>(json);
 
         // Prepare OperationContext
@@ -46,7 +46,7 @@ public class OperationIdiMatchTests : IClassFixture<OperationIdiMatchFixture>
 
     [Theory]
     [MemberData(nameof(IdiPatientMatchTestCases))]
-    public async T.Task ExecuteAsync_ValidatesPatient_PositiveAndNegative(
+    public async T.Task ValidateIdiPatient_PositiveAndNegative(
         Parameters parameters, 
         bool expectedSuccess, 
         string? expectedErrorSubstring,
@@ -58,7 +58,7 @@ public class OperationIdiMatchTests : IClassFixture<OperationIdiMatchFixture>
             Parameters = parameters
         };
 
-        _fixture.SetupRequestServices(context.HttpContext);
+        _fixture.SetupRequestServices<OpIdiMatch>(context.HttpContext);
 
         // Act
         var result = await _fixture.OpIdiMatch.ExecuteAsync(context, CancellationToken.None);
@@ -99,79 +99,37 @@ public class OperationIdiMatchTests : IClassFixture<OperationIdiMatchFixture>
             }
         }
     }
-
-    [Theory]
-    [MemberData(nameof(IdiPatientMatchTestCases))]
-    public async T.Task IdiPatientMatchInValidator_ValidatesPatient_PositiveAndNegative(
-        Parameters parameters,
-        bool expectedSuccess,
-        string? expectedErrorSubstring,
-        string? expectedDiagnosticsSubstring)
-    {
-        // Act
-        var outcome = await _fixture.IdiPatientMatchInValidator.Validate(parameters);
-
-        // Assert
-        if (expectedSuccess)
-        {
-            try
-            {
-                Assert.Null(outcome);
-            }
-            catch (Exception)
-            {
-                _output.WriteLine("Validator returned unexpected OperationOutcome:");
-                _output.WriteLine("Result (unexpected OperationOutcome):");
-                _output.WriteLine(await new FhirJsonSerializer(new SerializerSettings() { Pretty = true }).SerializeToStringAsync(outcome));
-                throw;
-            }
-        }
-        else
-        {
-            try
-            {
-                Assert.NotNull(outcome);
-                if (expectedErrorSubstring != null)
-                {
-                    Assert.Contains(expectedErrorSubstring, string.Join(" ", outcome.Issue.Select(i => i.Details.Text)));
-                }
-                if (expectedDiagnosticsSubstring != null)
-                {
-                    Assert.Contains(expectedDiagnosticsSubstring, string.Join(" ", outcome.Issue.Select(i => i.Diagnostics)));
-                }
-            }
-            catch (Exception)
-            {
-                _output.WriteLine("Result (expected OperationOutcome, but got):");
-                _output.WriteLine(await new FhirJsonSerializer(new SerializerSettings() { Pretty = true }).SerializeToStringAsync(outcome));
-                throw;
-            }
-        }
-    }
-
+   
     [Theory]
     [MemberData(nameof(PatientMatchTestCases))]
-    public async T.Task PatientMatchInValidator_ValidatesPatient_PositiveAndNegative(
+    public async T.Task ValidatePatient_PositiveAndNegative(
         Parameters parameters,
         bool expectedSuccess,
         string? expectedErrorSubstring,
         string? expectedDiagnosticsSubstring)
     {
+        var context = new OperationContext
+        {
+            HttpContext = new DefaultHttpContext(),
+            Parameters = parameters
+        };
+
+        _fixture.SetupRequestServices<OpMatch>(context.HttpContext);
+
         // Act
-        var outcome = await _fixture.PatientMatchInValidator.Validate(parameters);
+        var result = await _fixture.OpMatch.ExecuteAsync(context, CancellationToken.None);
 
         // Assert
         if (expectedSuccess)
         {
             try
             {
-                Assert.Null(outcome);
+                Assert.IsNotType<OperationOutcome>(result);
             }
             catch (Exception)
             {
-                _output.WriteLine("Validator returned unexpected OperationOutcome:");
                 _output.WriteLine("Result (unexpected OperationOutcome):");
-                _output.WriteLine(await new FhirJsonSerializer(new SerializerSettings() { Pretty = true }).SerializeToStringAsync(outcome));
+                _output.WriteLine(await new FhirJsonSerializer(new SerializerSettings() { Pretty = true }).SerializeToStringAsync(result));
                 throw;
             }
         }
@@ -179,7 +137,7 @@ public class OperationIdiMatchTests : IClassFixture<OperationIdiMatchFixture>
         {
             try
             {
-                Assert.NotNull(outcome);
+                var outcome = Assert.IsType<OperationOutcome>(result);
                 if (expectedErrorSubstring != null)
                 {
                     Assert.Contains(expectedErrorSubstring, string.Join(" ", outcome.Issue.Select(i => i.Details.Text)));
@@ -192,7 +150,7 @@ public class OperationIdiMatchTests : IClassFixture<OperationIdiMatchFixture>
             catch (Exception)
             {
                 _output.WriteLine("Result (expected OperationOutcome, but got):");
-                _output.WriteLine(await new FhirJsonSerializer(new SerializerSettings() { Pretty = true }).SerializeToStringAsync(outcome));
+                _output.WriteLine(await new FhirJsonSerializer(new SerializerSettings() { Pretty = true }).SerializeToStringAsync(result));
                 throw;
             }
         }
@@ -233,11 +191,11 @@ public class OperationIdiMatchTests : IClassFixture<OperationIdiMatchFixture>
                                             new Coding
                                             {
                                                 System = "http://terminology.hl7.org/CodeSystem/v2-0203",
-                                                Code = "PPN"
+                                                Code = "DL"
                                             }
                                         }
                                     },
-                                    System = "http://hl7.org/fhir/sid/passport-AUS",
+                                    System = "urn:oid:2.16.840.1.113883.4.3.12",
                                     Value = "1234-234-1243-12345678901"
                                 }
                             }
@@ -283,7 +241,7 @@ public class OperationIdiMatchTests : IClassFixture<OperationIdiMatchFixture>
                                             new Coding
                                             {
                                                 System = "http://terminology.hl7.org/CodeSystem/v2-0203",
-                                                Code = "PPN"
+                                                Code = "DL"
                                             }
                                         }
                                     },
@@ -297,7 +255,7 @@ public class OperationIdiMatchTests : IClassFixture<OperationIdiMatchFixture>
             },
             false, // expectedSuccess
             null,  // expectedErrorSubstring
-            "Invalid or missing country code"  // expectedDiagnostics
+            "Invalid or unknown driver's license OID"  // expectedDiagnostics
         };
 
         // Negative test: User is supplied only the system, and it appears as a value.
@@ -333,11 +291,11 @@ public class OperationIdiMatchTests : IClassFixture<OperationIdiMatchFixture>
                                             new Coding
                                             {
                                                 System = "http://terminology.hl7.org/CodeSystem/v2-0203",
-                                                Code = "PPN"
+                                                Code = "DL"
                                             }
                                         }
                                     },
-                                    Value = "http://hl7.org/fhir/sid/passport-AUS"
+                                    Value = "urn:oid:2.16.840.1.113883.4.3.12"
                                 }
                             }
                         }
@@ -346,7 +304,7 @@ public class OperationIdiMatchTests : IClassFixture<OperationIdiMatchFixture>
             },
             false, // expectedSuccess
             null,  // expectedErrorSubstring
-            "Missing a value for Passport."  // expectedDiagnostics
+            "Missing system for Driver's License identifier."  // expectedDiagnostics
         };
 
         // Negative test: Invalid country code.
@@ -382,7 +340,7 @@ public class OperationIdiMatchTests : IClassFixture<OperationIdiMatchFixture>
                                             new Coding
                                             {
                                                 System = "http://terminology.hl7.org/CodeSystem/v2-0203",
-                                                Code = "PPN"
+                                                Code = "DL"
                                             }
                                         }
                                     },
@@ -396,7 +354,7 @@ public class OperationIdiMatchTests : IClassFixture<OperationIdiMatchFixture>
             },
             false, // expectedSuccess
             null,  // expectedErrorSubstring
-            "Invalid or missing country code"  // expectedDiagnostics
+            "Missing system for Driver's License identifier."  // expectedDiagnostics
         };
 
         // Negative test: given or family name missing
@@ -475,11 +433,11 @@ public class OperationIdiMatchTests : IClassFixture<OperationIdiMatchFixture>
                                             new Coding
                                             {
                                                 System = "http://terminology.hl7.org/CodeSystem/v2-0203",
-                                                Code = "PPN"
+                                                Code = "DL"
                                             }
                                         }
                                     },
-                                    System = "http://hl7.org/fhir/sid/passport-AUS",
+                                    System = "urn:oid:2.16.840.1.113883.4.3.12",
                                     Value = "1234-234-1243-12345678901"
                                 }
                             }
@@ -524,7 +482,36 @@ public class OperationIdiMatchTests : IClassFixture<OperationIdiMatchFixture>
             null  // expectedDiagnostics
         };
 
-        // Add more cases as needed...
+        // Negative test: bad parameter name
+        yield return new object[]
+        {
+            new Parameters
+            {
+                Meta = new Meta
+                {
+                    Profile = new[] { "http://hl7.org/fhir/us/identity-matching/StructureDefinition/idi-match-input-parameters" }
+                },
+                Parameter = new List<Parameters.ParameterComponent>
+                {
+                    new Parameters.ParameterComponent
+                    {
+                        Name = "badName",
+                        Resource = new Hl7.Fhir.Model.Patient
+                        {
+                            Name = new List<HumanName> { new HumanName { Family = "Patient", Given = new[] { "Max" } } },
+                            BirthDate = "1992-05-17",
+                            Meta = new Meta
+                            {
+                                Profile = new[] { "http://hl7.org/fhir/us/identity-matching/StructureDefinition/IDI-Patient" }
+                            }
+                        }
+                    }
+                }
+            },
+            false, // expectedSuccess
+            null, // expectedErrorSubstring
+            "Cannot find a Patient resource in the parameter named 'resource'."  // expectedDiagnostics
+        };
     }
 
     public static IEnumerable<object[]> PatientMatchTestCases()
@@ -562,11 +549,11 @@ public class OperationIdiMatchTests : IClassFixture<OperationIdiMatchFixture>
                                             new Coding
                                             {
                                                 System = "http://terminology.hl7.org/CodeSystem/v2-0203",
-                                                Code = "PPN"
+                                                Code = "DL"
                                             }
                                         }
                                     },
-                                    System = "http://hl7.org/fhir/sid/passport-AUS",
+                                    System = "urn:oid:2.16.840.1.113883.4.3.12",
                                     Value = "1234-234-1243-12345678901"
                                 }
                             }
@@ -612,7 +599,7 @@ public class OperationIdiMatchTests : IClassFixture<OperationIdiMatchFixture>
                                             new Coding
                                             {
                                                 System = "http://terminology.hl7.org/CodeSystem/v2-0203",
-                                                Code = "PPN"
+                                                Code = "DL"
                                             }
                                         }
                                     },
@@ -626,7 +613,7 @@ public class OperationIdiMatchTests : IClassFixture<OperationIdiMatchFixture>
             },
             false, // expectedSuccess
             null,  // expectedErrorSubstring
-            "Invalid or missing country code"  // expectedDiagnostics
+            "Invalid or unknown driver's license OID"  // expectedDiagnostics
         };
 
         // Negative test: User is supplied only the system, and it appears as a value.
@@ -662,11 +649,11 @@ public class OperationIdiMatchTests : IClassFixture<OperationIdiMatchFixture>
                                             new Coding
                                             {
                                                 System = "http://terminology.hl7.org/CodeSystem/v2-0203",
-                                                Code = "PPN"
+                                                Code = "DL"
                                             }
                                         }
                                     },
-                                    Value = "http://hl7.org/fhir/sid/passport-AUS"
+                                    Value = "urn:oid:2.16.840.1.113883.4.3.12"
                                 }
                             }
                         }
@@ -675,7 +662,7 @@ public class OperationIdiMatchTests : IClassFixture<OperationIdiMatchFixture>
             },
             false, // expectedSuccess
             null,  // expectedErrorSubstring
-            "Missing a value for Passport."  // expectedDiagnostics
+            "Missing system for Driver's License identifier."  // expectedDiagnostics
         };
 
         // Negative test: Invalid country code.
@@ -711,7 +698,7 @@ public class OperationIdiMatchTests : IClassFixture<OperationIdiMatchFixture>
                                             new Coding
                                             {
                                                 System = "http://terminology.hl7.org/CodeSystem/v2-0203",
-                                                Code = "PPN"
+                                                Code = "DL"
                                             }
                                         }
                                     },
@@ -725,7 +712,7 @@ public class OperationIdiMatchTests : IClassFixture<OperationIdiMatchFixture>
             },
             false, // expectedSuccess
             null,  // expectedErrorSubstring
-            "Invalid or missing country code"  // expectedDiagnostics
+            "Missing system for Driver's License identifier."  // expectedDiagnostics
         };
 
         // Negative test: given or family name missing
@@ -798,13 +785,39 @@ public class OperationIdiMatchTests : IClassFixture<OperationIdiMatchFixture>
                                 Profile = new[] { "http://hl7.org/fhir/us/identity-matching/StructureDefinition/IDI-Patient-L1" }
                             }
                         }
-                        // No Meta.Profile
                     }
                 }
             },
             false, // expectedSuccess
             "Instance failed constraint idi-L1", // expectedErrorSubstring
             null  // expectedDiagnostics
+        };
+
+        // Negative test: bad parameter name
+        yield return new object[]
+        {
+            new Parameters
+            {
+                Meta = new Meta
+                {
+                    Profile = new[] { "http://hl7.org/fhir/us/identity-matching/StructureDefinition/idi-match-input-parameters" }
+                },
+                Parameter = new List<Parameters.ParameterComponent>
+                {
+                    new Parameters.ParameterComponent
+                    {
+                        Name = "badName",
+                        Resource = new Hl7.Fhir.Model.Patient
+                        {
+                            Name = new List<HumanName> { new HumanName { Family = "Patient", Given = new[] { "Max" } } },
+                            BirthDate = "1992-05-17"
+                        }
+                    }
+                }
+            },
+            false, // expectedSuccess
+            null, // expectedErrorSubstring
+            "Cannot find a Patient resource in the parameter named 'resource'."  // expectedDiagnostics
         };
 
         // Add more cases as needed...

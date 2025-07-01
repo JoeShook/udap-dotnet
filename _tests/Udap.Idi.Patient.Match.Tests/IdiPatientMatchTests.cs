@@ -5,6 +5,7 @@ using Hl7.Fhir.Rest;
 using Hl7.Fhir.Serialization;
 using Hl7.Fhir.Specification.Source;
 using Hl7.Fhir.Specification.Terminology;
+using HtmlAgilityPack;
 using System.Text.Json;
 using Xunit.Abstractions;
 using Task = System.Threading.Tasks.Task;
@@ -44,7 +45,7 @@ public class IdiPatientMatchTests
         var validator = new Validator(source, terminologySource, null, settings);
 
         // Load the Parameter resource to be validated
-        var json = File.ReadAllText("testdata/idi-match-in-parameters.json");
+        var json = File.ReadAllText("testdata/idi-match-in-parameters-passport.json");
         var parser = new FhirJsonParser();
         var parameterResource = parser.Parse<Parameters>(json);
 
@@ -86,4 +87,42 @@ public class IdiPatientMatchTests
         }
     }
 
+    [Fact (Skip = "Scrapes HL7 FHIR Identifier Registry for state driver license OIDs")]
+    public async Task GetUsStateCodes()
+    {
+        // Requires HtmlAgilityPack NuGet package
+        var url = "https://hl7.org/fhir/R4/identifier-registry.html";
+        using var httpClient = new HttpClient();
+        httpClient.DefaultRequestHeaders.UserAgent.ParseAdd("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36");
+        var html = await httpClient.GetStringAsync(url);
+
+        var doc = new HtmlAgilityPack.HtmlDocument();
+        doc.LoadHtml(html);
+
+        var table = doc.DocumentNode.SelectSingleNode("//table[contains(@class, 'grid')]");
+        var rows = table.SelectNodes(".//tr[position()>1]"); // skip header
+
+        var stateOids = new List<Dictionary<string, string>>();
+
+        foreach (var row in rows)
+        {
+            var cells = row.SelectNodes(".//td");
+            if (cells == null || cells.Count < 2) continue;
+            var name = cells[0].InnerText.Trim();
+            var oid = cells[1].InnerText.Trim();
+            if (name.Contains("Driver's License"))
+            {
+                stateOids.Add(new Dictionary<string, string> { { "State", name }, { "Oid", oid } });
+            }
+        }
+
+        var json = JsonSerializer.Serialize(stateOids, new JsonSerializerOptions { WriteIndented = true });
+        await File.WriteAllTextAsync("state-driver-license-oids.json", json);
+
+        // Print a few
+        foreach (var entry in stateOids.Take(10))
+        {
+            _testOutputHelper.WriteLine($"{entry["State"]}: {entry["Oid"]}");
+        }
+    }
 }

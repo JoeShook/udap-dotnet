@@ -30,6 +30,22 @@ public class IdiPatientMatchInValidator : IPatientMatchInValidator
         var inputPatient = parameters.Parameter.FirstOrDefault(p => p.Name == "patient")?.Resource;
         var patient = inputPatient as Patient;
 
+        if (patient == null)
+        {
+            return new OperationOutcome
+            {
+                Issue = new List<OperationOutcome.IssueComponent>
+                {
+                    new OperationOutcome.IssueComponent
+                    {
+                        Severity = OperationOutcome.IssueSeverity.Error,
+                        Code = OperationOutcome.IssueType.Invalid,
+                        Diagnostics = "Cannot find a Patient resource in the parameter named 'resource'."
+                    }
+                }
+            };
+        }
+
         var patientProfiles = patient.Meta?.Profile ?? new List<string>();
         if (!patientProfiles.Any(p => Constants.IdiPatientProfiles.ValidProfiles.Contains(p)))
         {

@@ -13,6 +13,7 @@
 
 		<PackageReference Include="Firely.Fhir.Packages" />
 		<PackageReference Include="Firely.Fhir.Validation.R4B" />
+		<PackageReference Include="HtmlAgilityPack" />
 		<PackageReference Include="Microsoft.NET.Test.Sdk" />
 		<PackageReference Include="NSubstitute" />
 		<PackageReference Include="xunit" />
@@ -36,7 +37,10 @@
   </ItemGroup>
 
   <ItemGroup>
-    <None Update="testdata\idi-match-in-parameters.json">
+    <None Update="testdata\idi-match-in-parameters-drivers-license.json">
+      <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+    </None>
+    <None Update="testdata\idi-match-in-parameters-Passport.json">
       <CopyToOutputDirectory>Always</CopyToOutputDirectory>
     </None>
   </ItemGroup>

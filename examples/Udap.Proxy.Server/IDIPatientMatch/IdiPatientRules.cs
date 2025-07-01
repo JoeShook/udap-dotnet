@@ -15,6 +15,7 @@ public interface IIdiPatientRules
 public class IdiPatientRules : IIdiPatientRules
 {
     private static readonly HashSet<string> Iso3166Alpha3Codes;
+    private static readonly Dictionary<string, string> StateDriverLicenseOids;
 
     static IdiPatientRules()
     {
@@ -24,6 +25,16 @@ public class IdiPatientRules : IIdiPatientRules
         Iso3166Alpha3Codes = codes != null
             ? new HashSet<string>(codes.Select(c => c.ToUpperInvariant()))
             : new HashSet<string>();
+
+        // Load state driver license OIDs
+        var oidsJson = File.ReadAllText("IDIPatientMatch/Packages/state-driver-license-oids.json");
+        var oidList = JsonSerializer.Deserialize<List<StateOidEntry>>(oidsJson);
+        StateDriverLicenseOids = oidList != null
+            ? oidList.ToDictionary(
+                e => e.Oid,
+                e => e.State,
+                StringComparer.OrdinalIgnoreCase)
+            : new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
     }
 
     public (bool IsValid, string? Error) ValidatePatientProfile(Patient patient)
@@ -34,6 +45,7 @@ public class IdiPatientRules : IIdiPatientRules
             foreach (var id in patient.Identifier)
             {
                 var code = id.Type?.Coding?.FirstOrDefault()?.Code;
+
                 if (code == "PPN")
                 {
                     var countryCode = ExtractPassportCountryCode(id.System ?? id.Value);
@@ -44,6 +56,19 @@ public class IdiPatientRules : IIdiPatientRules
                     if(countryCode != null && id.System == null)
                     {
                         return (false, $"Missing a value for Passport.");
+                    }
+                }
+
+                // Driver's License validation
+                if (code == "DL")
+                {
+                    if (string.IsNullOrWhiteSpace(id.System))
+                    {
+                        return (false, "Missing system for Driver's License identifier.");
+                    }
+                    if (!StateDriverLicenseOids.ContainsKey(id.System))
+                    {
+                        return (false, $"Invalid or unknown driver's license OID '{id.System}'.");
                     }
                 }
             }
@@ -66,5 +91,11 @@ public class IdiPatientRules : IIdiPatientRules
     private static bool IsValidIso3166Alpha3CountryCode(string? code)
     {
         return !string.IsNullOrWhiteSpace(code) && Iso3166Alpha3Codes.Contains(code.ToUpperInvariant());
+    }
+
+    private class StateOidEntry
+    {
+        public string State { get; set; } = string.Empty;
+        public string Oid { get; set; } = string.Empty;
     }
 }

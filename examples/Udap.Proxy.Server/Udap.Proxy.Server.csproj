@@ -45,6 +45,9 @@
     <Content Update="IDIPatientMatch\Packages\iso3166-1-alpha3-codes.json">
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
     </Content>
+    <Content Update="IDIPatientMatch\Packages\state-driver-license-oids.json">
+      <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+    </Content>
   </ItemGroup>
 
   <ItemGroup>

@@ -97,7 +97,7 @@ public class OpMatch : IFhirOperation
             var searchUrl = $"{_backendUrl}/Patient?{query}";
 
             var resolveAccessToken = await _accessTokenService.ResolveAccessTokenAsync(
-                context.HttpContext.RequestServices.GetRequiredService<ILogger<OpIdiMatch>>(),
+                context.HttpContext.RequestServices.GetRequiredService<ILogger<OpMatch>>(),
                 cancellationToken: cancellationToken);
             var request = new HttpRequestMessage(HttpMethod.Get, searchUrl);
             request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", resolveAccessToken);

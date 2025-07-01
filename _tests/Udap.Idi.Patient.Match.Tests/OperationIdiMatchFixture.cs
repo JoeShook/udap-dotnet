@@ -41,6 +41,7 @@ public class OperationIdiMatchFixture
         OpIdiMatchLogger = Substitute.For<ILogger<OpIdiMatch>>();
         OpMatchLogger = Substitute.For<ILogger<OpMatch>>();
 
+
         IAsyncResourceResolver packageSource = new FhirPackageSource(ModelInfo.ModelInspector, @"IDIPatientMatch/Packages/hl7.fhir.r4b.core-4.3.0.tgz");
         var coreSource = new CachedResolver(packageSource);
         var coreSnapshot = new SnapshotSource(coreSource);
@@ -91,11 +92,20 @@ public class OperationIdiMatchFixture
         }
     }
 
-    public void SetupRequestServices(HttpContext context)
+    public void SetupRequestServices<T>(HttpContext context)
     {
-        var serviceProvider = NSubstitute.Substitute.For<IServiceProvider>();
-        serviceProvider.GetService(typeof(ILogger<OpIdiMatch>))
-            .Returns(OpIdiMatchLogger);
+        var serviceProvider = Substitute.For<IServiceProvider>();
+
+        if (typeof(T) == OpMatch.GetType())
+        {
+            serviceProvider.GetService(typeof(ILogger<T>))
+                .Returns(OpMatchLogger);
+        }
+        else
+        {
+            serviceProvider.GetService(typeof(ILogger<T>))
+                .Returns(OpIdiMatchLogger);
+        }
 
         context.RequestServices = serviceProvider;
     }
