@@ -40,7 +40,7 @@ public class IdiPatientMatchInValidator : IPatientMatchInValidator
                     {
                         Severity = OperationOutcome.IssueSeverity.Error,
                         Code = OperationOutcome.IssueType.Invalid,
-                        Diagnostics = "Cannot find a Patient resource in the parameter named 'resource'."
+                        Diagnostics = "Cannot find a Patient resource in the parameter named 'patient'."
                     }
                 }
             };

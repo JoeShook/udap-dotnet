@@ -510,7 +510,7 @@ public class OperationIdiMatchTests : IClassFixture<OperationIdiMatchFixture>
             },
             false, // expectedSuccess
             null, // expectedErrorSubstring
-            "Cannot find a Patient resource in the parameter named 'resource'."  // expectedDiagnostics
+            "Cannot find a Patient resource in the parameter named 'patient'."  // expectedDiagnostics
         };
     }
 
