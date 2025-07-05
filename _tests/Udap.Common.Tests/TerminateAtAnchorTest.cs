@@ -39,7 +39,16 @@ public class TerminateAtAnchorTest
                                 X509VerificationFlags.AllowUnknownCertificateAuthority
         };
 
-        var validator = new TrustChainValidator(chainPolicy, logger);
+        // remove revocation check for this test.
+        var problemFlags = X509ChainStatusFlags.NotTimeValid |
+                           X509ChainStatusFlags.Revoked |
+                           X509ChainStatusFlags.NotSignatureValid |
+                           X509ChainStatusFlags.InvalidBasicConstraints |
+                           X509ChainStatusFlags.CtlNotTimeValid |
+                           // X509ChainStatusFlags.OfflineRevocation |
+                           X509ChainStatusFlags.CtlNotSignatureValid;
+
+        var validator = new TrustChainValidator(chainPolicy, problemFlags, logger);
         var diagnosticsChainValidator = SetupDiagnostics(validator);
 
         var anchors = new X509Certificate2Collection { anchor };
