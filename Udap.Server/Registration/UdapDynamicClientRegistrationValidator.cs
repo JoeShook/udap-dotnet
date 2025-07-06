@@ -413,8 +413,7 @@ public class UdapDynamicClientRegistrationValidator : IUdapDynamicClientRegistra
                     if (uri.IsAbsoluteUri)
                     {
                         client.RedirectUris.Add(uri.OriginalString);
-                        //TODO: I need to create a policy engine or dig into the Duende policy stuff and see it if makes sense
-                        client.RequirePkce = false;
+                        client.RequirePkce = _serverSettings.RequirePkce;
                     }
                     else
                     {
@@ -466,7 +465,7 @@ public class UdapDynamicClientRegistrationValidator : IUdapDynamicClientRegistra
                 "scope is required"));
         }
         
-        if (document.Scope != null && document.Any())
+        if (!string.IsNullOrWhiteSpace(document.Scope))
         {
             var scopes = document.Scope.Split(' ', StringSplitOptions.RemoveEmptyEntries);
             // todo: ideally scope names get checked against configuration store?

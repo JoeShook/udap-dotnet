@@ -7,17 +7,18 @@
 // */
 #endregion
 
+
+using Duende.IdentityServer.Models;
+using FluentAssertions;
+using FluentAssertions.Common;
+using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Options;
 using System.Net;
 using System.Net.Http.Headers;
 using System.Net.Http.Json;
 using System.Security.Cryptography.X509Certificates;
 using System.Text.Json;
-using Duende.IdentityServer.Models;
-using FluentAssertions;
-using FluentAssertions.Common;
 using Duende.IdentityModel;
-using Microsoft.Extensions.DependencyInjection;
-using Microsoft.Extensions.Options;
 using Udap.Client.Configuration;
 using Udap.Common.Models;
 using Udap.Model;
@@ -49,8 +50,13 @@ public class RegistrationAndChangeRegistrationTests
 
         _mockPipeline.OnPostConfigureServices += services =>
         {
-            services.AddSingleton(sp => sp.GetRequiredService<IOptions<ServerSettings>>().Value);
-             
+            services.AddSingleton(new ServerSettings
+            {
+                ForceStateParamOnAuthorizationCode = true,
+                RequireConsent = false,
+                RequirePkce = true
+            });
+
             services.AddSingleton<UdapClientOptions>(new UdapClientOptions
             {
                 ClientName = "Mock Client",
@@ -221,5 +227,115 @@ public class RegistrationAndChangeRegistrationTests
         _mockPipeline.Clients.Single().AllowedGrantTypes.Should().Contain(OidcConstants.GrantTypes.AuthorizationCode);
         _mockPipeline.Clients.Single().AllowOfflineAccess.Should().BeTrue();
         _mockPipeline.Clients.Single().RequirePkce.Should().BeTrue();
+    }
+
+    /// <summary>
+    /// Cancel Authorization Code Registration and leave scope empty
+    /// </summary>
+    /// <returns></returns>
+    [Fact]
+    public async Task CancelAuthorizationCodeRegistration()
+    {
+        var clientCert = new X509Certificate2("CertStore/issued/fhirlabs.net.client.pfx", "udap-test");
+
+        //
+        // Registration
+        //
+        var signedSoftwareStatement = UdapDcrBuilderForAuthorizationCode
+            .Create(clientCert)
+            .WithAudience(UdapAuthServerPipeline.RegistrationEndpoint)
+            .WithExpiration(TimeSpan.FromMinutes(5))
+            .WithJwtId()
+            .WithClientName("mock test")
+            .WithLogoUri("https://avatars.githubusercontent.com/u/77421324?s=48&v=4")
+            .WithContacts(new HashSet<string>
+            {
+                "mailto:Joseph.Shook@Surescripts.com", "mailto:JoeShook@gmail.com"
+            })
+            .WithTokenEndpointAuthMethod(UdapConstants.RegistrationDocumentValues.TokenEndpointAuthMethodValue)
+            .WithScope("system/Patient.rs system/Appointment.rs")
+            .WithResponseTypes(new List<string> { "code" })
+            .WithRedirectUrls(new List<string> { "https://code_client/callback" })
+            .WithGrantType(OidcConstants.GrantTypes.RefreshToken)
+            .BuildSoftwareStatement();
+
+        var requestBody = new UdapRegisterRequest
+        (
+            signedSoftwareStatement,
+            UdapConstants.UdapVersionsSupportedValue,
+            Array.Empty<string>()
+        );
+
+        var regResponse = await _mockPipeline.BrowserClient.PostAsync(
+            UdapAuthServerPipeline.RegistrationEndpoint,
+            new StringContent(JsonSerializer.Serialize(requestBody), new MediaTypeHeaderValue("application/json")));
+
+        regResponse.StatusCode.Should().Be(HttpStatusCode.Created, await regResponse.Content.ReadAsStringAsync());
+        var regDocumentResult = await regResponse.Content.ReadFromJsonAsync<UdapDynamicClientRegistrationDocument>();
+        regDocumentResult!.Scope.Should().Be("system/Appointment.rs system/Patient.rs");
+        var clientId = regDocumentResult.ClientId;
+
+        _mockPipeline.Clients.Single().AllowedGrantTypes.Should().NotContain(OidcConstants.GrantTypes.ClientCredentials);
+        _mockPipeline.Clients.Single().AllowedGrantTypes.Should().Contain(OidcConstants.GrantTypes.AuthorizationCode);
+        _mockPipeline.Clients.Single().AllowOfflineAccess.Should().BeTrue();
+        _mockPipeline.Clients.Single().RequirePkce.Should().BeTrue();
+
+        //
+        // Cancel Registration and leave scope empty
+        //
+        var document = UdapDcrBuilderForAuthorizationCode
+            .Cancel(clientCert)
+            .WithAudience(UdapAuthServerPipeline.RegistrationEndpoint)
+            .WithExpiration(TimeSpan.FromMinutes(5))
+            .WithJwtId()
+            .WithClientName("mock test")
+            .WithLogoUri("https://avatars.githubusercontent.com/u/77421324?s=48&v=4")
+            .WithContacts(new HashSet<string>
+            {
+                "mailto:Joseph.Shook@Surescripts.com", "mailto:JoeShook@gmail.com"
+            })
+            .WithTokenEndpointAuthMethod(UdapConstants.RegistrationDocumentValues.TokenEndpointAuthMethodValue)
+            .WithScope("")
+            .WithResponseTypes(new List<string> { "code" })
+            .WithRedirectUrls(new List<string> { "https://code_client/callback" })
+            
+            .Build();
+        
+
+        signedSoftwareStatement =
+            SignedSoftwareStatementBuilder<UdapDynamicClientRegistrationDocument>
+                .Create(clientCert, document)
+                .Build();
+
+        requestBody = new UdapRegisterRequest
+        (
+            signedSoftwareStatement,
+            UdapConstants.UdapVersionsSupportedValue,
+            Array.Empty<string>()
+        );
+
+
+        regResponse = await _mockPipeline.BrowserClient.PostAsync(
+            UdapAuthServerPipeline.RegistrationEndpoint,
+            new StringContent(JsonSerializer.Serialize(requestBody), new MediaTypeHeaderValue("application/json")));
+
+        regResponse.StatusCode.Should().Be(HttpStatusCode.OK); // Deleted finished so returns a 200 status code according to udap.org specifications
+
+        //
+        // Even during a cancel registration it is expected that he SoftwareStatement returned is the same.
+        //
+        regDocumentResult = await regResponse.Content.ReadFromJsonAsync<UdapDynamicClientRegistrationDocument>();
+        regDocumentResult!.SoftwareStatement.Should().Be(signedSoftwareStatement);
+        regDocumentResult.ClientId.Should().Be("removed");
+
+        //
+        // Repeated un-register should be 400 rather than not found (404).
+        // This is following section 5.2 of https://www.udap.org/udap-dynamic-client-registration.html
+        //
+        regResponse = await _mockPipeline.BrowserClient.PostAsync(
+            UdapAuthServerPipeline.RegistrationEndpoint,
+            new StringContent(JsonSerializer.Serialize(requestBody), new MediaTypeHeaderValue("application/json")));
+
+        regResponse.StatusCode.Should().Be(HttpStatusCode.BadRequest);
     }
 }
