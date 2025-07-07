@@ -24,7 +24,7 @@
     <PackageReference Include="Microsoft.Extensions.Configuration" />
     <PackageReference Include="Microsoft.Extensions.Configuration.Binder" />
     <PackageReference Include="Microsoft.Extensions.Options.ConfigurationExtensions" />
-    <PackageReference Include="Portable.BouncyCastle" />
+    <PackageReference Include="BouncyCastle.Cryptography" />
   </ItemGroup>
   
   <ItemGroup>

@@ -29,7 +29,7 @@ namespace Udap.Server.Hosting;
 /// for all errors in response to failed /connect/authorize? requests.
 ///
 /// UDAP is expecting 400-599 errors and or redirects to redirect_uri
-/// with a error and error_description in the query params.
+/// with an error and error_description in the query params.
 ///
 /// Require state parameter from clients by configuring the
 /// <see cref="ServerSettings.ForceStateParamOnAuthorizationCode"/> to true.
@@ -54,7 +54,7 @@ internal class UdapAuthorizationResponseMiddleware
     /// During a Server request to "/authorize", while Server is configured for
     /// <see cref="ServerSettings.ForceStateParamOnAuthorizationCode"/>, and the
     /// state parameter is missing and client has a <see cref="Duende.IdentityServer.Models.Secret"/>
-    /// of type  <see cref="UdapServerConstants.SecretTypes.UDAP_SAN_URI_ISS_NAME"/>
+    /// of type  <see cref="UdapServerConstants.SecretTypes.UDAP_SAN_URI_ISS_NAME"/> then return
     ///
     /// Comment regarding missing state.  Requiring in UDAP to encourage CSRF protection.  The client
     /// is already required in section 10.12 of RFC 6749 to implement CSRF.  But
