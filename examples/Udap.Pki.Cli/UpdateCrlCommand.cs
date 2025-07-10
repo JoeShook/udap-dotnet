@@ -160,8 +160,9 @@ public class UpdateCrlCommand : AsyncCommand<UpdateCrlSettings>
         X509Certificate2 p12Certificate)
     {
         var bouncyCertificate = DotNetUtilities.FromX509Certificate(p12Certificate);
-        var rsaPrivateKey = p12Certificate.GetRSAPrivateKey();
-        AnsiConsole.MarkupLine($"[yellow]Private key type:[/] {rsaPrivateKey?.GetType().FullName}");
+        using var rsaPrivateKey = p12Certificate.GetRSAPrivateKey();
+        if (rsaPrivateKey == null)
+            throw new InvalidOperationException("Certificate does not have an RSA private key.");
 
         RSA exportableRsa;
 
@@ -169,7 +170,8 @@ public class UpdateCrlCommand : AsyncCommand<UpdateCrlSettings>
         {
             if (!cng.Key.ExportPolicy.HasFlag(CngExportPolicies.AllowExport))
             {
-                throw new InvalidOperationException("The private key is not exportable. Re-create the P12 with an exportable key.");
+                throw new InvalidOperationException(
+                    "The private key is not exportable. Re-create the P12 with an exportable key.");
             }
 
             var encryptedPrivateKeyBytes = cng.ExportEncryptedPkcs8PrivateKey(
@@ -178,18 +180,18 @@ public class UpdateCrlCommand : AsyncCommand<UpdateCrlSettings>
                     PbeEncryptionAlgorithm.Aes256Cbc,
                     HashAlgorithmName.SHA256,
                     iterationCount: 100_000));
-
             exportableRsa = RSA.Create();
-            exportableRsa.ImportEncryptedPkcs8PrivateKey("ILikePasswords".AsSpan(), encryptedPrivateKeyBytes.AsSpan(), out _);
+            exportableRsa.ImportEncryptedPkcs8PrivateKey("ILikePasswords", encryptedPrivateKeyBytes, out _);
         }
         else
         {
-            var privateKeyBytes = rsaPrivateKey!.ExportPkcs8PrivateKey();
+            var privateKeyBytes = rsaPrivateKey.ExportPkcs8PrivateKey();
             exportableRsa = RSA.Create();
             exportableRsa.ImportPkcs8PrivateKey(privateKeyBytes, out _);
         }
 
         var privateKey = DotNetUtilities.GetKeyPair(exportableRsa).Private;
+        exportableRsa.Dispose();
         return (bouncyCertificate, privateKey);
     }
 
