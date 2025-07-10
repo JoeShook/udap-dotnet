@@ -173,15 +173,15 @@ public class UpdateCrlCommand : AsyncCommand<UpdateCrlSettings>
                 throw new InvalidOperationException(
                     "The private key is not exportable. Re-create the P12 with an exportable key.");
             }
-
+            var tempPassword = Guid.NewGuid().ToString("N");
             var encryptedPrivateKeyBytes = cng.ExportEncryptedPkcs8PrivateKey(
-                "ILikePasswords",
+                tempPassword,
                 new PbeParameters(
                     PbeEncryptionAlgorithm.Aes256Cbc,
                     HashAlgorithmName.SHA256,
                     iterationCount: 100_000));
             exportableRsa = RSA.Create();
-            exportableRsa.ImportEncryptedPkcs8PrivateKey("ILikePasswords", encryptedPrivateKeyBytes, out _);
+            exportableRsa.ImportEncryptedPkcs8PrivateKey(tempPassword, encryptedPrivateKeyBytes, out _);
         }
         else
         {
