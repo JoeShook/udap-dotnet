@@ -53,7 +53,7 @@ public class UdapMetadata
         ICollection<string> scopesSupported,
         ICollection<string>? tokenEndpointAuthMethodsSupported,
         ICollection<string>? tokenEndpointAuthSigningAlgValuesSupported,
-        ICollection<string>? registrationEndpointJwtSigningAlgValuesSupported)
+        ICollection<string>? registrationEndpointJwtSigningAlgValuesSupported) 
     {
         UdapMetadataConfigs = null;
         UdapVersionsSupported = udapVersionsSupported;
@@ -81,7 +81,8 @@ public class UdapMetadata
         ICollection<string>? tokenEndpointAuthMethodsSupported,
         ICollection<string>? tokenEndpointAuthSigningAlgValuesSupported,
         ICollection<string>? registrationEndpointJwtSigningAlgValuesSupported,
-        List<UdapMetadataConfig>? udapMetadataConfigs = null)
+        List<UdapMetadataConfig>? udapMetadataConfigs = null,
+        Dictionary<string, JsonElement>? extensionData = null)
     {
         UdapMetadataConfigs = udapMetadataConfigs;
         UdapVersionsSupported = udapVersionsSupported;
@@ -95,12 +96,13 @@ public class UdapMetadata
         TokenEndpointAuthMethodsSupported = tokenEndpointAuthMethodsSupported;
         TokenEndpointAuthSigningAlgValuesSupported = tokenEndpointAuthSigningAlgValuesSupported;
         RegistrationEndpointJwtSigningAlgValuesSupported = registrationEndpointJwtSigningAlgValuesSupported;
+        ExtensionData = extensionData;
     }
 
     /// <summary>
     /// <a href="http://hl7.org/fhir/us/udap-security/discovery.html#required-udap-metadata">2.2 Required UDAP Metadata</a>
     /// </summary>
-    public UdapMetadata(IOptionsMonitor<UdapMetadataOptions> udapMetadataOptions) : this(udapMetadataOptions.CurrentValue)
+    public UdapMetadata(IUdapMetadataOptionsProvider udapMetadataOptions) : this(udapMetadataOptions.Value)
     {
     }
 
@@ -145,6 +147,10 @@ public class UdapMetadata
                 UdapConstants.SupportedAlgorithm.ES256, UdapConstants.SupportedAlgorithm.ES384
             };
         }
+
+        ExtensionData = udapMetadataOptions.ExtensionData != null
+            ? new Dictionary<string, JsonElement>(udapMetadataOptions.ExtensionData)
+            : null;
     }
 
 
@@ -311,6 +317,8 @@ public class UdapMetadata
     [JsonPropertyName(UdapConstants.Discovery.SignedMetadata)]
     public string? SignedMetadata { get; set; }
 
+    [JsonExtensionData]
+    public Dictionary<string, JsonElement>? ExtensionData { get; set; }
 
     public ICollection<string> Communities()
     {
@@ -365,7 +373,8 @@ public class UdapMetadata
             TokenEndpointAuthMethodsSupported,
             TokenEndpointAuthSigningAlgValuesSupported.Clone(),
             RegistrationEndpointJwtSigningAlgValuesSupported.Clone(),
-            UdapMetadataConfigs);
+            UdapMetadataConfigs,
+            ExtensionData);
         
         return metaData;
     }

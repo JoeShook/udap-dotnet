@@ -22,6 +22,7 @@ try
         .ReadFrom.Configuration(ctx.Configuration));
 
     builder.Configuration.AddJsonFile("/secret/udap_idp2_appsettings", true, false);
+    builder.Configuration.AddJsonFile("/secret/metadata/udap.idp2.metadata.options.json", true, false);
 
     var app = builder
         .ConfigureServices(args)

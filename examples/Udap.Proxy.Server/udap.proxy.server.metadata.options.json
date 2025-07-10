@@ -1,0 +1,21 @@
+{
+  "UdapVersionsSupported": [ "1" ],
+  "UdapProfilesSupported": [ "udap_dcr", "udap_authn", "udap_authz", "udap_to" ],
+  "UdapAuthorizationExtensionsSupported": [ "hl7-b2b" ],
+  "UdapAuthorizationExtensionsRequired": [],
+  "ScopesSupported": [ "openid", "system/*.read", "user/*.read", "patient/*.read" ],
+
+  "UdapMetadataConfigs": [
+
+    {
+      "Community": "udap://fhirlabs1/",
+      "SignedMetadataConfig": {
+        "Issuer": "https://localhost:7074/fhir/r4",
+        "Subject": "https://localhost:7074/fhir/r4",
+        "AuthorizationEndpoint": "https://host.docker.internal:5002/connect/authorize",
+        "TokenEndpoint": "https://host.docker.internal:5002/connect/token",
+        "RegistrationEndpoint": "https://host.docker.internal:5002/connect/register"
+      }
+    }
+  ]
+}

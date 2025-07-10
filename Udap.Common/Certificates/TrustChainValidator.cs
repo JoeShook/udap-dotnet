@@ -222,7 +222,7 @@ namespace Udap.Common.Certificates
                         }
                     }
 
-                    if (!passedChainBuild && this.ChainElementHasProblems(chainElement))
+                    if (this.ChainElementHasProblems(chainElement))
                     {
                         // chain statuses can still be subscribed too.  There may be data to share with the consumer
                         // that do not mean the chain is invalid.  passedChainBuild is the final arbiter of trust
@@ -257,7 +257,7 @@ namespace Udap.Common.Certificates
                     this.NotifyUntrusted(certificate);
                 }
 
-                return passedChainBuild;
+                return passedChainBuild && foundAnchor;
             }
             catch (Exception ex)
             {
@@ -306,7 +306,10 @@ namespace Udap.Common.Certificates
 
         private void NotifyProblem(X509ChainElement chainElement)
         {
-            _logger.LogWarning("{Validator} Chain Problem: {ChainStatus}", nameof(TrustChainValidator), chainElement.ChainElementStatus.Summarize(_problemFlags));
+            _logger.LogWarning("{Validator} {chainElement} Chain Problem: {ChainStatus}", 
+                nameof(TrustChainValidator), 
+                chainElement.Certificate.Subject,
+                chainElement.ChainElementStatus.Summarize(_problemFlags));
 
             if (this.Problem != null)
             {

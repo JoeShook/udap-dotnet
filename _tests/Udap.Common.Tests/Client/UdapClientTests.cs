@@ -7,10 +7,6 @@
 // */
 #endregion
 
-using System.IdentityModel.Tokens.Jwt;
-using System.Net;
-using System.Security.Cryptography.X509Certificates;
-using System.Text.Json;
 using FluentAssertions;
 using MartinCostello.Logging.XUnit;
 using Microsoft.Extensions.Configuration;
@@ -18,6 +14,10 @@ using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using NSubstitute;
+using System.IdentityModel.Tokens.Jwt;
+using System.Net;
+using System.Security.Cryptography.X509Certificates;
+using System.Text.Json;
 using Udap.Client.Client;
 using Udap.Client.Configuration;
 using Udap.Common.Certificates;
@@ -25,12 +25,14 @@ using Udap.Common.Metadata;
 using Udap.Model;
 using Udap.Support.Tests.Client;
 using Xunit.Abstractions;
+using Xunit.Sdk;
 
 namespace Udap.Common.Tests.Client;
 
 
 public class UdapClientTests
 {
+    private readonly ITestOutputHelper _testOutputHelper;
     private readonly IConfigurationRoot _configuration;
     private readonly ServiceProvider _serviceProvider;
 
@@ -44,6 +46,7 @@ public class UdapClientTests
 
     public UdapClientTests(ITestOutputHelper testOutputHelper)
     {
+        _testOutputHelper = testOutputHelper;
         _configuration = new ConfigurationBuilder()
             .AddJsonFile("appsettings.json", false, true)
             .Build();
@@ -56,9 +59,6 @@ public class UdapClientTests
                 // builder.SetMinimumLevel(LogLevel.Warning); 
             })
             .BuildServiceProvider();
-
-
-
     }
 
     /// <summary>
@@ -214,7 +214,7 @@ public class UdapClientTests
     public async Task FullWellKnownAddressTest()
     {
         var (httpClientMock, udapClientDiscoveryValidator, udapClientIOptions, trustAnchorStore) = await BuildClientSupport();
-        
+
         var udapClient = new UdapClient(
             httpClientMock,
             udapClientDiscoveryValidator,
@@ -258,7 +258,7 @@ public class UdapClientTests
     public async Task IssMatchToSubjectAltNameTest()
     {
         var (httpClientMock, udapClientDiscoveryValidator, udapClientIOptions, trustAnchorStore) = await BuildClientSupport("https://fhirlabs.net/fhir/r4", "udap://Iss.Mismatch.To.SubjAltName/");
-        
+
         var udapClient = new UdapClient(
             httpClientMock,
             udapClientDiscoveryValidator,
@@ -318,21 +318,21 @@ public class UdapClientTests
     // }
 
     private async Task<(
-        HttpClient httpClientMock, 
-        UdapClientDiscoveryValidator udapClientDiscoveryValidator, 
-        IOptionsMonitor<UdapClientOptions> udapClientIOptions, 
+        HttpClient httpClientMock,
+        UdapClientDiscoveryValidator udapClientDiscoveryValidator,
+        IOptionsMonitor<UdapClientOptions> udapClientIOptions,
         ITrustAnchorStore trustAnchorFileStore)> BuildClientSupport(string baseUrl = "https://fhirlabs.net/fhir/r4", string? community = null)
     {
         //
         // Metadata for describing different UDAP metadata per community
         //
-        var udapMetadataOptions = new UdapMetadataOptions();
-        _configuration.GetSection(Constants.UDAP_METADATA_OPTIONS).Bind(udapMetadataOptions);
-        var udapMetadataOptionsMock = Substitute.For<IOptionsMonitor<UdapMetadataOptions>>();
-        udapMetadataOptionsMock.CurrentValue.Returns(udapMetadataOptions);
+        var file = _configuration["UdapMetadataOptionsFile"] ?? "udap.metadata.options.json";
+        var json = File.ReadAllText(file);
+        var udapMetadataOptions = JsonSerializer.Deserialize<UdapMetadataOptions>(json);
+        var udapMetadataOptionsProviderMock = Substitute.For<IUdapMetadataOptionsProvider>();
+        udapMetadataOptionsProviderMock.Value.Returns(udapMetadataOptions);
 
-
-        _ = new UdapMetadata(udapMetadataOptionsMock.CurrentValue)
+        _ = new UdapMetadata(udapMetadataOptionsProviderMock.Value)
         {
             // TODO:  Make scope configuration first class in DI
             ScopesSupported = new List<string>
@@ -360,8 +360,8 @@ public class UdapClientTests
         // MetadataBuilder helps build signed UDAP metadata using the previous metadata and IPrivateCertificateStore implementation
         //
         var metaDataBuilder = new UdapMetaDataBuilder<UdapMetadataOptions, UdapMetadata>(
-            udapMetadataOptionsMock, 
-            privateCertificateStore, 
+            udapMetadataOptionsProviderMock,
+            privateCertificateStore,
             _serviceProvider.GetRequiredService<ILogger<UdapMetaDataBuilder<UdapMetadataOptions, UdapMetadata>>>());
         var signedMetadata = await metaDataBuilder.SignMetaData(baseUrl, community);
 
@@ -378,7 +378,7 @@ public class UdapClientTests
         //
         // TrustChainValidator handle the x509 chain building, policy and validation
         //
-        var validator = new TrustChainValidator(new X509ChainPolicy(){RevocationMode = X509RevocationMode.NoCheck}, _problemFlags, _serviceProvider.GetRequiredService<ILogger<TrustChainValidator>>())!;
+        var validator = new TrustChainValidator(new X509ChainPolicy() { RevocationMode = X509RevocationMode.NoCheck }, _problemFlags, _serviceProvider.GetRequiredService<ILogger<TrustChainValidator>>())!;
 
         //
         // TrustAnchorStore is using an ITrustAnchorStore implemented as a file store.

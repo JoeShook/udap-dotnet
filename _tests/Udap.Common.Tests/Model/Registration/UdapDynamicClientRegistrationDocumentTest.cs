@@ -7,7 +7,6 @@
 // */
 #endregion
 
-using System.IdentityModel.Tokens.Jwt;
 using System.Security.Claims;
 using System.Security.Cryptography.X509Certificates;
 using System.Text.Json;
@@ -64,7 +63,7 @@ public class UdapDynamicClientRegistrationDocumentTest
 
         document.ClientId.Should().BeNull();
         document.Audience.Should().Be("https://securedcontrols.net/connect/register");
-        document.Expiration.Should().BeCloseTo(expirationEpochTime, 3);
+        document.Expiration.GetValueOrDefault().Should().BeCloseTo(expirationEpochTime, 3);
         document.JwtId.Should().NotBeNullOrWhiteSpace();
         document.ClientName.Should().Be("dotnet system test client");
         document.Contacts!.Count.Should().Be(2);
@@ -76,7 +75,7 @@ public class UdapDynamicClientRegistrationDocumentTest
         document.GrantTypes!.Count.Should().Be(1);
         document.GrantTypes.Should().Contain("client_credentials");
 
-        var iat = EpochTime.DateTime(document.IssuedAt).ToUniversalTime();
+        var iat = EpochTime.DateTime(document.IssuedAt.GetValueOrDefault()).ToUniversalTime();
 
 
         document.ClientId = "MyNewClientId"; // Simulate successful registration
@@ -812,7 +811,7 @@ public class UdapDynamicClientRegistrationDocumentTest
 
         document.ClientId.Should().BeNull();
         document.Audience.Should().Be("https://securedcontrols.net/connect/register");
-        document.Expiration.Should().BeCloseTo(expirationEpochTime, 3);
+        document.Expiration.GetValueOrDefault().Should().BeCloseTo(expirationEpochTime, 3);
         document.JwtId.Should().NotBeNullOrWhiteSpace();
         document.ClientName.Should().Be("dotnet system test client");
         document.Contacts!.Count.Should().Be(2);

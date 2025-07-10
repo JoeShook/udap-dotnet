@@ -7,24 +7,31 @@
 // */
 #endregion
 
+using Duende.IdentityModel;
+using Firely.Fhir.Packages;
+using Hl7.Fhir.Model;
+using Hl7.Fhir.Serialization;
+using Hl7.Fhir.Specification.Source;
+using Hl7.Fhir.Specification.Terminology;
+using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.ResponseCompression;
+using Microsoft.IdentityModel.Tokens;
+using Serilog;
 using System.IdentityModel.Tokens.Jwt;
 using System.Net.Http.Headers;
 using System.Text;
 using System.Text.Json.Serialization;
-using Google.Apis.Auth.OAuth2;
-using Hl7.Fhir.Model;
-using Hl7.Fhir.Serialization;
-using Duende.IdentityModel;
-using Microsoft.AspNetCore.Mvc;
-using Microsoft.IdentityModel.Tokens;
-using Serilog;
+using Firely.Fhir.Validation;
 using Udap.CdsHooks.Model;
 using Udap.Common;
 using Udap.Proxy.Server;
+using Udap.Proxy.Server.IDIPatientMatch;
+using Udap.Proxy.Server.Services;
 using Udap.Smart.Model;
 using Udap.Util.Extensions;
 using Yarp.ReverseProxy.Transforms;
 using ZiggyCreatures.Caching.Fusion;
+using Constants = Udap.Common.Constants;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -36,6 +43,7 @@ builder.Host.UseSerilog();
 
 // Mount Cloud Secrets
 builder.Configuration.AddJsonFile("/secret/udapproxyserverappsettings", true, false);
+builder.Configuration.AddJsonFile("/secret/metadata/udap.proxy.server.metadata.options.json", true, false);
 
 // Add services to the container.
 builder.Services.AddControllersWithViews();
@@ -94,39 +102,30 @@ builder.Services.AddReverseProxy()
     .LoadFromConfig(builder.Configuration.GetSection("ReverseProxy"))
     .ConfigureHttpClient((_, handler) =>
     {
-        // this is required to decompress automatically.  *******   troubleshooting only   *******
-        handler.AutomaticDecompression = System.Net.DecompressionMethods.All;
+        // Enable automatic decompression for gzip, deflate, and brotli
+        handler.AutomaticDecompression = System.Net.DecompressionMethods.GZip |
+                                          System.Net.DecompressionMethods.Deflate |
+                                          System.Net.DecompressionMethods.Brotli;
     })
     .AddTransforms(builderContext =>
     {
-        // Conditionally add a transform for routes that require auth.
-        if (builderContext.Route.Metadata != null &&
-            (builderContext.Route.Metadata.ContainsKey("GCPKeyResolve") || builderContext.Route.Metadata.ContainsKey("AccessToken")))
+        // Always forward encoding headers for all routes
+        builderContext.AddRequestTransform(context =>
         {
-            builderContext.AddRequestTransform(async context =>
-            {
-                var resolveAccessToken = await ResolveAccessToken(builderContext.Route.Metadata);
-                context.ProxyRequest.Headers.Authorization = new AuthenticationHeaderValue("Bearer", resolveAccessToken);
-                
-                SetProxyHeaders(context);
-            });
-        }
+            ForwardEncodingHeaders(context.HttpContext, context.ProxyRequest);
+            return ValueTask.CompletedTask;
+        });
 
-        // Use the default credentials.  Primary usage: running in Cloud Run under a specific service account
-        if (builderContext.Route.Metadata != null && (builderContext.Route.Metadata.TryGetValue("ADC", out string? adc)))
+
+        builderContext.AddRequestTransform(async context =>
         {
-            if (adc.Equals("True", StringComparison.OrdinalIgnoreCase))
-            {
-                builderContext.AddRequestTransform(async context =>
-                {
-                    var googleCredentials = GoogleCredential.GetApplicationDefault();
-                    string accessToken = await googleCredentials.UnderlyingCredential.GetAccessTokenForRequestAsync();
-                    context.ProxyRequest.Headers.Authorization = new AuthenticationHeaderValue("Bearer", accessToken);
-
-                    SetProxyHeaders(context);
-                });
-            }
-        }
+            var accessTokenService = context.HttpContext.RequestServices.GetRequiredService<IAccessTokenService>();
+            var accessToken = await accessTokenService.ResolveAccessTokenAsync(
+                context.HttpContext.RequestServices.GetRequiredService<ILogger<AccessTokenService>>(),
+                cancellationToken: context.HttpContext.RequestAborted);
+            context.ProxyRequest.Headers.Authorization = new AuthenticationHeaderValue("Bearer", accessToken);
+            SetProxyHeaders(context);
+        });
 
         builderContext.AddResponseTransform(async responseContext =>
         {
@@ -168,10 +167,82 @@ builder.Services.AddReverseProxy()
         });
     });
 
+var disableCompression = Environment.GetEnvironmentVariable("ASPNETCORE_RESPONSE_COMPRESSION_DISSABLED");
+if (!string.Equals(disableCompression, "true", StringComparison.OrdinalIgnoreCase))
+{
+    builder.Services.AddResponseCompression(options =>
+    {
+        options.EnableForHttps = true;
+        options.MimeTypes = ResponseCompressionDefaults.MimeTypes.Concat([
+            "application/fhir+xml",
+            "application/fhir+json"
+        ]);
+    });
+}
+
+builder.Services.AddHttpClient();
+builder.Services.AddSingleton<IAccessTokenService, AccessTokenService>();
+
+//
+// IDI Patient Match Operations
+//
+builder.Services.AddSingleton<Validator>(sp =>
+{
+    IAsyncResourceResolver packageSource = new FhirPackageSource(ModelInfo.ModelInspector, @"IDIPatientMatch/Packages/hl7.fhir.r4b.core-4.3.0.tgz");
+    var coreSource = new CachedResolver(packageSource);
+    var coreSnapshot = new SnapshotSource(coreSource);
+    var terminologySource = new LocalTerminologyService(coreSnapshot);
+    IAsyncResourceResolver idiSource = new FhirPackageSource(ModelInfo.ModelInspector, @"IDIPatientMatch/Packages/hl7.fhir.us.identity-matching-2.0.0-ballot.tgz");
+    var source = new MultiResolver(idiSource, coreSnapshot);
+    var settings = new ValidationSettings { ConformanceResourceResolver = source };
+    return new Validator(source, terminologySource, null, settings);
+
+});
+
+builder.Services.AddSingleton<IIdiPatientRules, IdiPatientRules>();
+builder.Services.AddSingleton<PatientMatchInValidator>();
+builder.Services.AddSingleton<IdiPatientMatchInValidator>();
+
+builder.Services.AddSingleton<IFhirOperation>(sp =>
+    new OpMatch(
+        sp.GetRequiredService<IConfiguration>(),
+        sp.GetRequiredService<IAccessTokenService>(),
+        sp.GetRequiredService<HttpClient>(),
+        sp.GetRequiredService<ILogger<OpMatch>>(),
+        sp.GetRequiredService<PatientMatchInValidator>()
+    ));
+
+builder.Services.AddSingleton<IFhirOperation>(sp =>
+    new OpIdiMatch(
+        sp.GetRequiredService<IConfiguration>(),
+        sp.GetRequiredService<IAccessTokenService>(),
+        sp.GetRequiredService<HttpClient>(),
+        sp.GetRequiredService<ILogger<OpIdiMatch>>(),
+        sp.GetRequiredService<IdiPatientMatchInValidator>()
+    ));
+
+
+
+
+
 var app = builder.Build();
+
+// Force Validator to expand/load packages at startup
+using (var scope = app.Services.CreateScope())
+{
+    var validator = scope.ServiceProvider.GetRequiredService<Validator>();
+    var dummyPatient = new Patient { Id = "init" };
+    validator.Validate(dummyPatient);
+}
 
 // Configure the HTTP request pipeline.
 app.UseCors("DefaultPolicy");
+
+if (!string.Equals(disableCompression, "true", StringComparison.OrdinalIgnoreCase))
+{
+    app.UseResponseCompression();
+}
+
 app.UseDefaultFiles();
 app.UseStaticFiles();
 
@@ -179,9 +250,15 @@ app.UseStaticFiles();
 // To use the default framework request logging instead, remove this line and set the "Microsoft"
 // level in appsettings.json to "Information".
 app.UseSerilogRequestLogging();
-
+    
 app.UseAuthentication();
 app.UseAuthorization();
+
+//
+// IDI Patient Match Operations
+//
+app.UseMiddleware<OperationMiddleware>();
+
 
 app.UseMiddleware<RouteLoggingMiddleware>();
 app.MapReverseProxy();
@@ -192,38 +269,6 @@ app.UseUdapMetadataServer("fhir/r4"); // Ensure metadata can only be called from
 
 app.Run();
 
-
-async Task<string?> ResolveAccessToken(IReadOnlyDictionary<string, string> metadata)
-{
-    try
-    {
-        if (metadata.ContainsKey("AccessToken"))
-        {
-            // You could pass AccessToken as an environment variable
-            return builder.Configuration.GetValue<string>(metadata["AccessToken"]);
-        }
-
-        var routeAuthorizationPolicy = metadata["GCPKeyResolve"];
-
-        var path = builder.Configuration.GetValue<string>(routeAuthorizationPolicy);
-
-        if (string.IsNullOrWhiteSpace(path))
-        {
-            throw new InvalidOperationException(
-                $"The route metadata '{routeAuthorizationPolicy}' must be set to a valid path.");
-        }
-
-        var credentials = new ServiceAccountCredentialCache();
-        return await credentials.GetAccessTokenAsync(path, "https://www.googleapis.com/auth/cloud-healthcare");
-    }
-    catch (Exception ex)
-    {
-        Console.WriteLine(ex); //todo: Logger
-
-        return string.Empty;
-    }
-
-}
 
 async Task<byte[]?> GetFhirMetadata(ResponseTransformContext responseTransformContext,
     WebApplicationBuilder webApplicationBuilder)
@@ -291,7 +336,7 @@ void SetProxyHeaders(RequestTransformContext requestTransformContext)
     var iss = jsonToken.Claims.Where(c => c.Type == "iss");
     // var sub = jsonToken.Claims.Where(c => c.Type == "sub"); // figure out what subject should be for GCP
 
-
+    //TODO:  This should be capable of introspection calls, because the token may not be a jwt.
     // Never let the requester set this header.
     requestTransformContext.ProxyRequest.Headers.Remove("X-Authorization-Scope");
     requestTransformContext.ProxyRequest.Headers.Remove("X-Authorization-Issuer");
@@ -304,4 +349,20 @@ void SetProxyHeaders(RequestTransformContext requestTransformContext)
     requestTransformContext.ProxyRequest.Headers.Add("X-Authorization-Scope", spaceSeparatedString);
     requestTransformContext.ProxyRequest.Headers.Add("X-Authorization-Issuer", iss.SingleOrDefault()?.Value);
     // context.ProxyRequest.Headers.Add("X-Authorization-Subject", sub.SingleOrDefault().Value);
+}
+
+void ForwardEncodingHeaders(HttpContext httpContext, HttpRequestMessage proxyRequest)
+{
+    // Forward Accept-Encoding from client to backend
+    if (httpContext.Request.Headers.TryGetValue("Accept-Encoding", out var encodings))
+    {
+        proxyRequest.Headers.Remove("Accept-Encoding");
+        proxyRequest.Headers.Add("Accept-Encoding", encodings.ToArray());
+    }
+    // Forward Content-Encoding if present
+    if (httpContext.Request.Headers.TryGetValue("Content-Encoding", out var contentEncodings))
+    {
+        proxyRequest.Headers.Remove("Content-Encoding");
+        proxyRequest.Headers.Add("Content-Encoding", contentEncodings.ToArray());
+    }
 }

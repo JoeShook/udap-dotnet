@@ -13,6 +13,7 @@ using System.Security.Cryptography.X509Certificates;
 using System.Text.Json;
 using FluentAssertions;
 using Duende.IdentityModel;
+using Hl7.Fhir.Model;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Mvc.Testing;
 using Microsoft.EntityFrameworkCore;
@@ -29,6 +30,7 @@ using Udap.Model.Registration;
 using Udap.Model.Statement;
 using Udap.Server.DbContexts;
 using Xunit.Abstractions;
+using Task = System.Threading.Tasks.Task;
 
 namespace UdapServer.Tests;
 
@@ -200,7 +202,7 @@ public class Hl7RegistrationTests : IClassFixture<Hl7ApiTestFixture>
             ResponseTypes = new HashSet<string> { "code" },
             RedirectUris = new List<string>(){ "http://localhost/signin-oidc" },
             TokenEndpointAuthMethod = UdapConstants.RegistrationDocumentValues.TokenEndpointAuthMethodValue,
-            Scope = "user/Patient.*"
+            Scope = "user/Patient.read"
         };
 
         document.Add("Extra", "Stuff" as string);
@@ -299,7 +301,7 @@ public class Hl7RegistrationTests : IClassFixture<Hl7ApiTestFixture>
             Contacts = new HashSet<string> { "FhirJoe@BridgeTown.lab", "FhirJoe@test.lab" },
             GrantTypes = new HashSet<string> { "client_credentials" },
             TokenEndpointAuthMethod = UdapConstants.RegistrationDocumentValues.TokenEndpointAuthMethodValue,
-            Scope = "system/Patient.* system/Practitioner.read"
+            Scope = "system/Patient.read system/Practitioner.read"
         };
 
         document.Add("Extra", "Stuff" as string);
@@ -1252,7 +1254,7 @@ public class Hl7RegistrationTests : IClassFixture<Hl7ApiTestFixture>
             GrantTypes = new HashSet<string> { "authorization_code", "refresh_bad" },
             ResponseTypes = new HashSet<string> { "code" },
             TokenEndpointAuthMethod = UdapConstants.RegistrationDocumentValues.TokenEndpointAuthMethodValue,
-            Scope = "user/Patient.* user/Practitioner.read",
+            Scope = "user/Patient.read user/Practitioner.read",
             RedirectUris = new List<string> { new Uri($"https://client.fhirlabs.net/redirect/{Guid.NewGuid()}").AbsoluteUri },
         };
 
@@ -1295,7 +1297,7 @@ public class Hl7RegistrationTests : IClassFixture<Hl7ApiTestFixture>
             GrantTypes = new HashSet<string> { "refresh_bad" },
             ResponseTypes = new HashSet<string> { "code" },
             TokenEndpointAuthMethod = UdapConstants.RegistrationDocumentValues.TokenEndpointAuthMethodValue,
-            Scope = "user/Patient.* user/Practitioner.read",
+            Scope = "user/Patient.read user/Practitioner.read",
             RedirectUris = new List<string> { new Uri($"https://client.fhirlabs.net/redirect/{Guid.NewGuid()}").AbsoluteUri },
         };
 

@@ -12,14 +12,16 @@
   </PropertyGroup>
 
   <ItemGroup>
-    <PackageReference Include="Google.Apis.Auth" Version="1.68.0" />
+    <PackageReference Include="Firely.Fhir.Packages" Version="4.9.1" />
+    <PackageReference Include="Firely.Fhir.Validation.R4B" Version="2.6.7" />
+    <PackageReference Include="Google.Apis.Auth" Version="1.69.0" />
     <PackageReference Include="LazyCache" Version="2.4.0" />
-    <PackageReference Include="Microsoft.AspNetCore.Authentication.JwtBearer" Version="9.0.0" />
-    <PackageReference Include="Microsoft.IdentityModel.Protocols.OpenIdConnect" Version="8.3.0" />
-    <PackageReference Include="Microsoft.VisualStudio.Azure.Containers.Tools.Targets" Version="1.21.0" />
-    <PackageReference Include="Npgsql" Version="9.0.2" />
-    <PackageReference Include="Yarp.ReverseProxy" Version="2.2.0" />
-    <PackageReference Include="ZiggyCreatures.FusionCache" Version="1.4.1" />
+    <PackageReference Include="Microsoft.AspNetCore.Authentication.JwtBearer" Version="9.0.7" />
+    <PackageReference Include="Microsoft.IdentityModel.Protocols.OpenIdConnect" Version="8.12.1" />
+    <PackageReference Include="Microsoft.VisualStudio.Azure.Containers.Tools.Targets" Version="1.22.1" />
+    <PackageReference Include="Npgsql" Version="9.0.3" />
+    <PackageReference Include="Yarp.ReverseProxy" Version="2.3.0" />
+    <PackageReference Include="ZiggyCreatures.FusionCache" Version="2.3.0" />
     <PackageReference Include="Serilog.AspNetCore" Version="9.0.0" />
     <PackageReference Include="Serilog.Enrichers.Thread" Version="4.0.0" />
     <PackageReference Include="Serilog.Expressions" Version="5.0.0" />
@@ -37,6 +39,15 @@
     <ProjectReference Include="../../Udap.Metadata.Server/Udap.Metadata.Server.csproj" />
     <ProjectReference Include="../../Udap.Smart.Metadata/Udap.Smart.Metadata.csproj" />
     <ProjectReference Include="../../Udap.Util/Udap.Util.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Content Update="IDIPatientMatch\Packages\iso3166-1-alpha3-codes.json">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </Content>
+    <Content Update="IDIPatientMatch\Packages\state-driver-license-oids.json">
+      <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+    </Content>
   </ItemGroup>
 
   <ItemGroup>
@@ -87,6 +98,12 @@
     </None>
     <None Update="host.docker.internal.pfx">
       <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+    </None>
+    <None Update="IDIPatientMatch\Packages\hl7.fhir.r4b.core-4.3.0.tgz">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </None>
+    <None Update="IDIPatientMatch\Packages\hl7.fhir.us.identity-matching-2.0.0-ballot.tgz">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
     </None>
   </ItemGroup>
 

@@ -172,7 +172,7 @@ public class UdapDynamicClientRegistrationValidator : IUdapDynamicClientRegistra
 
         if (_serverSettings.RegistrationJtiRequired)
         {
-            var result = await ValidateJti(document, document.Expiration);
+            var result = await ValidateJti(document, document.Expiration.GetValueOrDefault());
 
             if (result.IsError)
             {
@@ -248,7 +248,7 @@ public class UdapDynamicClientRegistrationValidator : IUdapDynamicClientRegistra
                 UdapDynamicClientRegistrationErrorDescriptions.IssuedAtMissing));
         }
 
-        var iat = EpochTime.DateTime(document.IssuedAt).ToUniversalTime();
+        var iat = EpochTime.DateTime(document.IssuedAt.GetValueOrDefault()).ToUniversalTime();
         // var exp = EpochTime.DateTime(document.Expiration).ToUniversalTime();
         //TODO Server Config for iat window (clock skew?)
         if (iat > DateTime.UtcNow.AddSeconds(5))
@@ -413,8 +413,7 @@ public class UdapDynamicClientRegistrationValidator : IUdapDynamicClientRegistra
                     if (uri.IsAbsoluteUri)
                     {
                         client.RedirectUris.Add(uri.OriginalString);
-                        //TODO: I need to create a policy engine or dig into the Duende policy stuff and see it if makes sense
-                        client.RequirePkce = false;
+                        client.RequirePkce = _serverSettings.RequirePkce;
                     }
                     else
                     {
@@ -466,7 +465,7 @@ public class UdapDynamicClientRegistrationValidator : IUdapDynamicClientRegistra
                 "scope is required"));
         }
         
-        if (document.Scope != null && document.Any())
+        if (!string.IsNullOrWhiteSpace(document.Scope))
         {
             var scopes = document.Scope.Split(' ', StringSplitOptions.RemoveEmptyEntries);
             // todo: ideally scope names get checked against configuration store?
@@ -475,13 +474,24 @@ public class UdapDynamicClientRegistrationValidator : IUdapDynamicClientRegistra
             var expandedScopes = _scopeExpander.Expand(scopes).ToList();
             var explodedScopes = _scopeExpander.WildCardExpand(expandedScopes, resources.ApiScopes.Select(a => a.Name).ToList()).ToList();
             var allowedApiScopes = resources.ApiScopes.Where(s => explodedScopes.Contains(s.Name));
-            
+            var allowedResourceScopes = resources.IdentityResources.Where(s => explodedScopes.Contains(s.Name));
+
+            var allValidScopes = allowedApiScopes.Select(s => s.Name)
+                .Concat(allowedResourceScopes.Select(s => s.Name))
+                .ToHashSet();
+
+            if (explodedScopes.All(s => !allValidScopes.Contains(s)))
+            {
+                return await Task.FromResult(new UdapDynamicClientRegistrationValidationResult(
+                    UdapDynamicClientRegistrationErrors.InvalidClientMetadata,
+                    "invalid_scope supplied"));
+            }
+
+
             foreach (var scope in allowedApiScopes)
             {
                 client?.AllowedScopes.Add(scope.Name);
             }
-            
-            var allowedResourceScopes = resources.IdentityResources.Where(s => explodedScopes.Contains(s.Name));
 
             foreach (var scope in allowedResourceScopes.Where(s => s.Enabled).Select(s => s.Name))
             {

@@ -470,6 +470,6 @@ public class UdapControllerTests : IClassFixture<ApiTestFixture>
         var iat = int.Parse(iatClaim.Value);
         var exp = int.Parse(expClaim.Value);
         var year = DateTimeOffset.FromUnixTimeSeconds(exp).AddYears(1).ToUnixTimeSeconds();
-        iat.Should().BeLessOrEqualTo((int)year);
+        iat.Should().BeLessThanOrEqualTo((int)year);
     }
 }

@@ -467,6 +467,7 @@ public class ScopeExpansionTests
         var tokenResponse = await _mockPipeline.BackChannelClient.UdapRequestClientCredentialsTokenAsync(clientRequest);
         tokenResponse.Scope.Should().Be("system/Practitioner.read", tokenResponse.Raw);
     }
+
     [Fact]
     public async Task ScopeV2WithAuthCodeTest()
     {
@@ -535,7 +536,147 @@ public class ScopeExpansionTests
         queryParams.Single(q => q.Key == "state").Value.Should().BeEquivalentTo(state);
 
     }
+
+    [Fact]
+    public async Task RegisterInvalidScopeTests()
+    {
+        var clientCert = new X509Certificate2("CertStore/issued/fhirlabs.net.client.pfx", "udap-test");
+        var regResponse = await RegisterClientWithAuthServerResponse("system/Mars.read", clientCert);
+        
+        _testOutputHelper.WriteLine(await regResponse.Content.ReadAsStringAsync());
+        regResponse.StatusCode.Should().Be(HttpStatusCode.BadRequest);
+        var errorResult = await regResponse.Content.ReadFromJsonAsync<UdapDynamicClientRegistrationErrorResponse>();
+        errorResult.Should().NotBeNull();
+        errorResult!.Error.Should().Be("invalid_client_metadata");
+        errorResult.ErrorDescription.Should().Be("invalid_scope supplied");
+    }
+
+    [Fact]
+    public async Task RegisterEmptyScopeTests()
+    {
+        var clientCert = new X509Certificate2("CertStore/issued/fhirlabs.net.client.pfx", "udap-test");
+        var regResponse = await RegisterClientWithAuthServerResponse("", clientCert);
+
+        _testOutputHelper.WriteLine(await regResponse.Content.ReadAsStringAsync());
+        regResponse.StatusCode.Should().Be(HttpStatusCode.BadRequest);
+        var errorResult = await regResponse.Content.ReadFromJsonAsync<UdapDynamicClientRegistrationErrorResponse>();
+        errorResult.Should().NotBeNull();
+        errorResult!.Error.Should().Be("invalid_client_metadata");
+        errorResult.ErrorDescription.Should().Be("scope is required");
+    }
+
+    [Fact]
+    public async Task TokenRequestWithInvalidScopeTest()
+    {
+        var clientCert = new X509Certificate2("CertStore/issued/fhirlabs.net.client.pfx", "udap-test");
+        var resultDocument = await RegisterClientWithAuthServer("system/*.read", clientCert);
+        resultDocument.Should().NotBeNull();
+        resultDocument!.ClientId.Should().NotBeNull();
+
+        resultDocument.Scope.Should().Be("system/Practitioner.read");
+
+        var now = DateTime.UtcNow;
+        var jwtPayload = new JwtPayLoadExtension(
+            resultDocument.ClientId,
+            IdentityServerPipeline.TokenEndpoint,
+            new List<Claim>()
+            {
+                new(JwtClaimTypes.Subject, resultDocument.ClientId!),
+                new(JwtClaimTypes.IssuedAt, EpochTime.GetIntDate(now.ToUniversalTime()).ToString(), ClaimValueTypes.Integer),
+                new(JwtClaimTypes.JwtId, CryptoRandom.CreateUniqueId()),
+                // new Claim(UdapConstants.JwtClaimTypes.Extensions, BuildHl7B2BExtensions() ) //see http://hl7.org/fhir/us/udap-security/b2b.html#constructing-authentication-token
+            },
+            now.ToUniversalTime(),
+            now.AddMinutes(5).ToUniversalTime()
+        );
+
+        var clientAssertion =
+            SignedSoftwareStatementBuilder<JwtPayLoadExtension>
+                .Create(clientCert, jwtPayload)
+                .Build("RS384");
+
+
+        var clientRequest = new UdapClientCredentialsTokenRequest
+        {
+            Address = IdentityServerPipeline.TokenEndpoint,
+            //ClientId = result.ClientId, we use Implicit ClientId in the iss claim
+            ClientAssertion = new ClientAssertion()
+            {
+                Type = OidcConstants.ClientAssertionTypes.JwtBearer,
+                Value = clientAssertion
+            },
+            Udap = UdapConstants.UdapVersionsSupportedValue,
+            Scope = "system/Mars.read"
+        };
+
+        var tokenResponse = await _mockPipeline.BackChannelClient.UdapRequestClientCredentialsTokenAsync(clientRequest);
+        tokenResponse.IsError.Should().BeTrue();
+        tokenResponse.Error.Should().Be("invalid_scope");
+    }
+
+    /// <summary>
+    /// Missing so return the registered scope.
+    /// </summary>
+    /// <returns></returns>
+    [Fact]
+    public async Task TokenRequestWithMissingScopeTest()
+    {
+        var clientCert = new X509Certificate2("CertStore/issued/fhirlabs.net.client.pfx", "udap-test");
+        var resultDocument = await RegisterClientWithAuthServer("system/*.read", clientCert);
+        resultDocument.Should().NotBeNull();
+        resultDocument!.ClientId.Should().NotBeNull();
+
+        resultDocument.Scope.Should().Be("system/Practitioner.read");
+
+        var now = DateTime.UtcNow;
+        var jwtPayload = new JwtPayLoadExtension(
+            resultDocument.ClientId,
+            IdentityServerPipeline.TokenEndpoint,
+            new List<Claim>()
+            {
+                new(JwtClaimTypes.Subject, resultDocument.ClientId!),
+                new(JwtClaimTypes.IssuedAt, EpochTime.GetIntDate(now.ToUniversalTime()).ToString(), ClaimValueTypes.Integer),
+                new(JwtClaimTypes.JwtId, CryptoRandom.CreateUniqueId()),
+                // new Claim(UdapConstants.JwtClaimTypes.Extensions, BuildHl7B2BExtensions() ) //see http://hl7.org/fhir/us/udap-security/b2b.html#constructing-authentication-token
+            },
+            now.ToUniversalTime(),
+            now.AddMinutes(5).ToUniversalTime()
+        );
+
+        var clientAssertion =
+            SignedSoftwareStatementBuilder<JwtPayLoadExtension>
+                .Create(clientCert, jwtPayload)
+                .Build("RS384");
+
+
+        var clientRequest = new UdapClientCredentialsTokenRequest
+        {
+            Address = IdentityServerPipeline.TokenEndpoint,
+            //ClientId = result.ClientId, we use Implicit ClientId in the iss claim
+            ClientAssertion = new ClientAssertion()
+            {
+                Type = OidcConstants.ClientAssertionTypes.JwtBearer,
+                Value = clientAssertion
+            },
+            Udap = UdapConstants.UdapVersionsSupportedValue
+        };
+
+        var tokenResponse = await _mockPipeline.BackChannelClient.UdapRequestClientCredentialsTokenAsync(clientRequest);
+        tokenResponse.Scope.Should().Be("system/Practitioner.read", tokenResponse.Raw);
+    }
+
+
     private async Task<UdapDynamicClientRegistrationDocument?> RegisterClientWithAuthServer(string scopes, X509Certificate2 clientCert)
+    {
+        var response = await RegisterClientWithAuthServerResponse(scopes, clientCert);
+
+        response.StatusCode.Should().Be(HttpStatusCode.Created);
+        var resultDocument = await response.Content.ReadFromJsonAsync<UdapDynamicClientRegistrationDocument>();
+
+        return resultDocument;
+    }
+
+    private async Task<HttpResponseMessage> RegisterClientWithAuthServerResponse(string scopes, X509Certificate2 clientCert)
     {
         // await _mockAuthorServerPipeline.LoginAsync("bob");
 
@@ -568,10 +709,6 @@ public class ScopeExpansionTests
         var response = await _mockPipeline.BrowserClient.PostAsync(
             UdapAuthServerPipeline.RegistrationEndpoint,
             new StringContent(JsonSerializer.Serialize(requestBody), new MediaTypeHeaderValue("application/json")));
-
-        response.StatusCode.Should().Be(HttpStatusCode.Created);
-        var resultDocument = await response.Content.ReadFromJsonAsync<UdapDynamicClientRegistrationDocument>();
-
-        return resultDocument;
+        return response;
     }
 }

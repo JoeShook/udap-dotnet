@@ -14,7 +14,6 @@ using Google.Apis.Auth.OAuth2;
 using Hl7.Fhir.Model;
 using Hl7.Fhir.Serialization;
 using Duende.IdentityModel;
-using Microsoft.Extensions.DependencyInjection;
 using Microsoft.IdentityModel.Tokens;
 using Serilog;
 using Serilog.Templates;
@@ -45,6 +44,7 @@ builder.Services.AddSerilog((services, lc) => lc
 
 // Mount Cloud Secrets
 builder.Configuration.AddJsonFile("/secret/tefcaproxyserverappsettings", true, false);
+builder.Configuration.AddJsonFile("/secret/udap.tefca.metadata.options.json", true, false);
 
 // Add services to the container.
 builder.Services.AddControllersWithViews();
