@@ -9,9 +9,7 @@
 
 using Duende.IdentityModel;
 using Firely.Fhir.Packages;
-using Google.Apis.Auth.OAuth2;
 using Hl7.Fhir.Model;
-using Hl7.Fhir.Model.CdsHooks;
 using Hl7.Fhir.Serialization;
 using Hl7.Fhir.Specification.Source;
 using Hl7.Fhir.Specification.Terminology;
