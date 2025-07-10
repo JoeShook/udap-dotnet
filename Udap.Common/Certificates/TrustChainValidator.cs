@@ -306,7 +306,10 @@ namespace Udap.Common.Certificates
 
         private void NotifyProblem(X509ChainElement chainElement)
         {
-            _logger.LogWarning("{Validator} Chain Problem: {ChainStatus}", nameof(TrustChainValidator), chainElement.ChainElementStatus.Summarize(_problemFlags));
+            _logger.LogWarning("{Validator} {chainElement} Chain Problem: {ChainStatus}", 
+                nameof(TrustChainValidator), 
+                chainElement.Certificate.Subject,
+                chainElement.ChainElementStatus.Summarize(_problemFlags));
 
             if (this.Problem != null)
             {

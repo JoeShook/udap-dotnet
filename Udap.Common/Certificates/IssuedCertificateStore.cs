@@ -10,7 +10,8 @@ public class IssuedCertificateStore : IPrivateCertificateStore
     private readonly IOptionsMonitor<UdapFileCertStoreManifest> _manifest;
     private readonly ILogger<IssuedCertificateStore> _logger;
     private bool _resolved;
-
+    private readonly SemaphoreSlim _resolveSemaphore = new SemaphoreSlim(1, 1);
+    
     public IssuedCertificateStore(
         IOptionsMonitor<UdapFileCertStoreManifest> manifest,
         ILogger<IssuedCertificateStore> logger)
@@ -28,9 +29,17 @@ public class IssuedCertificateStore : IPrivateCertificateStore
     {
         token.ThrowIfCancellationRequested();
 
-        if (_resolved == false)
+        await _resolveSemaphore.WaitAsync(token);
+        try
         {
-            await Task.Run(() => LoadCertificates(_manifest.CurrentValue), token);
+            if (_resolved == false)
+            {
+                await Task.Run(() => LoadCertificates(_manifest.CurrentValue), token);
+            }
+        }
+        finally
+        {
+            _resolveSemaphore.Release();
         }
         _resolved = true;
 
@@ -38,8 +47,6 @@ public class IssuedCertificateStore : IPrivateCertificateStore
     }
 
     public ICollection<IssuedCertificate> IssuedCertificates { get; set; } = new HashSet<IssuedCertificate>();
-
-    // TODO convert to Lazy<T> to protect from race conditions
 
     private void LoadCertificates(UdapFileCertStoreManifest manifestCurrentValue)
     {
