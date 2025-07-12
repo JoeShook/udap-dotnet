@@ -19,8 +19,8 @@ using System.Text.Json;
 using System.Text.Json.Nodes;
 using System.Text.Json.Serialization;
 using FluentAssertions;
-using IdentityModel;
-using IdentityModel.Client;
+using Duende.IdentityModel;
+using Duende.IdentityModel.Client;
 using Microsoft.Extensions.Configuration;
 using Microsoft.IdentityModel.JsonWebTokens;
 using Microsoft.IdentityModel.Tokens;
@@ -33,7 +33,7 @@ using Udap.Model.Registration;
 using Udap.Model.Statement;
 using Udap.Util.Extensions;
 using Xunit.Abstractions;
-using static IdentityModel.OidcConstants;
+using static Duende.IdentityModel.OidcConstants;
 #pragma warning disable xUnit1004
 
 namespace Udap.Client.System.Tests;

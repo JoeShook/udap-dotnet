@@ -5,8 +5,18 @@
       "launchBrowser": true,
       "launchUrl": "index.html",
       "environmentVariables": {
+        "ASPNETCORE_ENVIRONMENT": "Development"
+      },
+      "dotnetRunMessages": true,
+      "applicationUrl": "https://localhost:7074;https://proxy.fhirlabs.net:7074"
+    },
+    "https-no-compression": {
+      "commandName": "Project",
+      "launchBrowser": true,
+      "launchUrl": "index.html",
+      "environmentVariables": {
         "ASPNETCORE_ENVIRONMENT": "Development",
-        "AccessToken": "your bearer token"
+        "ASPNETCORE_RESPONSE_COMPRESSION_DISSABLED": "true"
       },
       "dotnetRunMessages": true,
       "applicationUrl": "https://localhost:7074;https://proxy.fhirlabs.net:7074"

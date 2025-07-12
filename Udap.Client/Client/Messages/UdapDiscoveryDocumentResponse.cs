@@ -14,9 +14,9 @@
 
 
 using System.Text.Json;
-using IdentityModel;
-using IdentityModel.Client;
-using IdentityModel.Jwk;
+using Duende.IdentityModel;
+using Duende.IdentityModel.Client;
+using Duende.IdentityModel.Jwk;
 using Udap.Common.Extensions;
 using Udap.Model;
 

@@ -27,7 +27,7 @@ using System.Text.Json;
 using Duende.IdentityServer.Models;
 using Duende.IdentityServer.Test;
 using FluentAssertions;
-using IdentityModel;
+using Duende.IdentityModel;
 using Microsoft.AspNetCore.WebUtilities;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;

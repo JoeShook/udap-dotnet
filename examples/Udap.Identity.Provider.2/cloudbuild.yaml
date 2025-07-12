@@ -21,7 +21,7 @@ steps:
   '--vpc-connector', 'alloydb-connector', 
   '--vpc-egress', 'all-traffic',
   '--ingress', 'internal-and-cloud-load-balancing',
-  '--set-secrets', '/secret/udap_idp2_appsettings=udap_idp2_appsettings:latest'  
+  '--set-secrets', '/secret/udap_idp2_appsettings=udap_idp2_appsettings:latest,/secret/metadata/udap.idp2.metadata.options.json=udap_idp2_metadata_options:latest'  
   ]
 
 images:

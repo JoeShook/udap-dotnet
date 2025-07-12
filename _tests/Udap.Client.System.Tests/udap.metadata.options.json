@@ -1,0 +1,24 @@
+{
+  "UdapMetadataConfigs": [
+    {
+      "Community": "udap://fhirlabs.net",
+      "SignedMetadataConfig": {
+        "Issuer": "https://fhirlabs.net:7016/fhir/r4",
+        "Subject": "https://fhirlabs.net:7016/fhir/r4",
+        "AuthorizationEndpoint": "https://securedcontrols.net:5001/connect/authorize",
+        "TokenEndpoint": "https://securedcontrols.net:5001/connect/token",
+        "RegistrationEndpoint": "https://securedcontrols.net:5001/connect/register"
+      }
+    },
+    {
+      "Community": "http://localhost",
+      "SignedMetadataConfig": {
+        "Issuer": "http://localhost/fhir/r4",
+        "Subject": "http://localhost/fhir/r4",
+        "AuthorizationEndpoint": "https://securedcontrols.net:5001/connect/authorize",
+        "TokenEndpoint": "https://securedcontrols.net:5001/connect/token",
+        "RegistrationEndpoint": "https://securedcontrols.net:5001/connect/register"
+      }
+    }
+  ]
+}

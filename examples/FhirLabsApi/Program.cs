@@ -13,7 +13,7 @@ using FhirLabsApi;
 using Hl7.Fhir.DemoFileSystemFhirServer;
 using Hl7.Fhir.NetCoreApi;
 using Hl7.Fhir.WebApi;
-using IdentityModel;
+using Duende.IdentityModel;
 using Microsoft.AspNetCore.Mvc.Formatters;
 using Microsoft.Extensions.Options;
 using Microsoft.IdentityModel.Tokens;

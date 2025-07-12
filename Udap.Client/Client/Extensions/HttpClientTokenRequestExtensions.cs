@@ -17,12 +17,12 @@
 
 using System.Text;
 using System.Text.Json;
-using IdentityModel;
-using IdentityModel.Client;
+using Duende.IdentityModel;
+using Duende.IdentityModel.Client;
 using Udap.Client.Authentication;
 using Udap.Model;
 using Udap.Model.Access;
-using TokenResponse = IdentityModel.Client.TokenResponse;
+using TokenResponse = Duende.IdentityModel.Client.TokenResponse;
 
 namespace Udap.Client.Client.Extensions;
 

@@ -87,88 +87,94 @@ public class BuildNginxProxySSLCerts : CertificateBase
 
     public static IEnumerable<object[]> SSLProxyCerts()
     {
-        yield return new object[]
-        {
-            "CN=fhirlabs.net",                  //DistinguishedName
-            "fhirlabs.net"                      //SubjAltName
-            
-        };
+        // yield return new object[]
+        // {
+        //     "CN=fhirlabs.net",                  //DistinguishedName
+        //     "fhirlabs.net"                      //SubjAltName
+        //     
+        // };
+        //
+        // yield return new object[]
+        // {
+        //     "CN=securedcontrols.net",                  //DistinguishedName
+        //     "securedcontrols.net"                      //SubjAltName
+        //     
+        // };
+        //
+        // yield return new object[]
+        // {
+        //     "CN=idp1.securedcontrols.net",                  //DistinguishedName
+        //     "idp1.securedcontrols.net"                      //SubjAltName
+        //     
+        // };
+        //
+        // yield return new object[]
+        // {
+        //     "CN=idp2.securedcontrols.net",                  //DistinguishedName
+        //     "idp2.securedcontrols.net"                      //SubjAltName
+        //     
+        // };
+        //
+        // yield return new object[]
+        // {
+        //     "CN=qk1rg.wiremockapi.cloud",                  //DistinguishedName
+        //     "qk1rg.wiremockapi.cloud"                      //SubjAltName
+        //     
+        // };
+        //
+        // yield return new object[]
+        // {
+        //     "CN=securefhir.zimt.work",                  //DistinguishedName
+        //     "securefhir.zimt.work"                      //SubjAltName
+        //     
+        // };
+        //
+        // yield return new object[]
+        // {
+        //     "CN=udap.zimt.work",                  //DistinguishedName
+        //     "udap.zimt.work"                      //SubjAltName
+        //     
+        // };
+        //
+        // yield return new object[]
+        // {
+        //     "CN=test.udap.org",                  //DistinguishedName
+        //     "test.udap.org"                      //SubjAltName
+        //     
+        // };
+        //
+        // yield return new object[]
+        // {
+        //     "CN=mktac-restapis-stable.meditech.com",                  //DistinguishedName
+        //     "mktac-restapis-stable.meditech.com"                      //SubjAltName
+        //     
+        // };
+        //
+        // yield return new object[]
+        // {
+        //     "CN=udap.fhir.poolnook.me",                  //DistinguishedName
+        //     "udap.fhir.poolnook.me"                      //SubjAltName
+        //
+        // };
+        //
+        // yield return new object[]
+        // {
+        //     "CN=udap.fast.poolnook.me", //DistinguishedName
+        //     "udap.fast.poolnook.me" //SubjAltName
+        //
+        // };
+        //
+        // yield return new object[]
+        // {
+        //     "CN=stage.healthtogo.me",                  //DistinguishedName
+        //     "stage.healthtogo.me"                      //SubjAltName
+        //
+        // };
 
         yield return new object[]
         {
-            "CN=securedcontrols.net",                  //DistinguishedName
-            "securedcontrols.net"                      //SubjAltName
-            
-        };
-
-        yield return new object[]
-        {
-            "CN=idp1.securedcontrols.net",                  //DistinguishedName
-            "idp1.securedcontrols.net"                      //SubjAltName
-            
-        };
-
-        yield return new object[]
-        {
-            "CN=idp2.securedcontrols.net",                  //DistinguishedName
-            "idp2.securedcontrols.net"                      //SubjAltName
-            
-        };
-
-        yield return new object[]
-        {
-            "CN=qk1rg.wiremockapi.cloud",                  //DistinguishedName
-            "qk1rg.wiremockapi.cloud"                      //SubjAltName
-            
-        };
-
-        yield return new object[]
-        {
-            "CN=securefhir.zimt.work",                  //DistinguishedName
-            "securefhir.zimt.work"                      //SubjAltName
-            
-        };
-
-        yield return new object[]
-        {
-            "CN=udap.zimt.work",                  //DistinguishedName
-            "udap.zimt.work"                      //SubjAltName
-            
-        };
-
-        yield return new object[]
-        {
-            "CN=test.udap.org",                  //DistinguishedName
-            "test.udap.org"                      //SubjAltName
-            
-        };
-
-        yield return new object[]
-        {
-            "CN=mktac-restapis-stable.meditech.com",                  //DistinguishedName
-            "mktac-restapis-stable.meditech.com"                      //SubjAltName
-            
-        };
-
-        yield return new object[]
-        {
-            "CN=udap.fhir.poolnook.me",                  //DistinguishedName
-            "udap.fhir.poolnook.me"                      //SubjAltName
-
-        };
-
-        yield return new object[]
-        {
-            "CN=udap.fast.poolnook.me", //DistinguishedName
-            "udap.fast.poolnook.me" //SubjAltName
-
-        };
-
-        yield return new object[]
-        {
-            "CN=stage.healthtogo.me",                  //DistinguishedName
-            "stage.healthtogo.me"                      //SubjAltName
-
+            "CN=ihe-nimbus.epic.com",                  //DistinguishedName
+            "ihe-nimbus.epic.com"                      //SubjAltName        
         };
     }
 
@@ -197,7 +203,7 @@ public class BuildNginxProxySSLCerts : CertificateBase
     [Theory(Skip = "Enabled on desktop when needed.")]
 #pragma warning disable xUnit1042
     [MemberData(nameof(SSLProxyCerts))]
-    [MemberData(nameof(Hl7SRI))]
+    // [MemberData(nameof(Hl7SRI))]
 #pragma warning restore xUnit1042
     public void MakeIdentityProviderCertificates(string dn, string san)
     {

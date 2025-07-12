@@ -1,0 +1,22 @@
+{
+  "Enabled": true,
+
+  "UdapProfilesSupported": [
+    "udap_dcr",
+    "udap_authn",
+    "udap_authz",
+    "udap_to"
+  ],
+
+
+  "UdapMetadataConfigs": [
+    {
+      "Community": "udap://idp-community-2",
+      "SignedMetadataConfig": {
+        "AuthorizationEndpoint": "https://idpserver2/connect/authorize",
+        "TokenEndpoint": "https://idpserver2/connect/token",
+        "RegistrationEndpoint": "https://idpserver2/connect/register"
+      }
+    }
+  ]
+}

@@ -15,8 +15,8 @@ using System.Text;
 using System.Text.Encodings.Web;
 using System.Text.Json;
 using System.Web;
-using IdentityModel;
-using IdentityModel.Client;
+using Duende.IdentityModel;
+using Duende.IdentityModel.Client;
 using Microsoft.AspNetCore.Authentication;
 using Microsoft.AspNetCore.Authentication.OAuth;
 using Microsoft.AspNetCore.Http;
@@ -259,7 +259,7 @@ public class TieredOAuthAuthenticationHandler : OAuthHandler<TieredOAuthAuthenti
             var request = new DiscoveryDocumentRequest
             {
                 Address = tieredClient.IdPBaseUrl,
-                Policy = new IdentityModel.Client.DiscoveryPolicy()
+                Policy = new Duende.IdentityModel.Client.DiscoveryPolicy()
                 {
                     //TODO: Promote to TieredOAuthOptions.  Maybe even injectable for advanced use cases.
                     EndpointValidationExcludeList = new List<string>{ OidcConstants.Discovery.RegistrationEndpoint }

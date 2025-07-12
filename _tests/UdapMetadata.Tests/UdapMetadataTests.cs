@@ -8,6 +8,7 @@
 #endregion
 
 using FluentAssertions;
+using System.Text.Json;
 
 namespace UdapMetadata.Tests;
 
@@ -107,5 +108,44 @@ public class UdapMetadataTests
         udapMetadata.RegistrationEndpointJwtSigningAlgValuesSupported.Should().BeEquivalentTo(registrationEndpointJwtSigningAlgValuesSupported);
         udapMetadata.AuthorizationEndpoint.Should().Be(authorizationEndpoint);
         udapMetadata.TokenEndpoint.Should().Be(tokenEndpoint);
+    }
+
+    [Fact]
+    public void UdapMetadataOptions_ExtensionData_RoundTrip_Works()
+    {
+        // Arrange: JSON with an extra property
+        var json = @"{
+        ""udapVersionsSupported"": [""1.0""],
+        ""extra_property"": ""extra_value"",
+        ""custom_extensions"": [""https://fhirlabs.net/extension_1"", ""https://fhirlabs.net/extension_2""]
+    }";
+
+        // Act: Deserialize to UdapMetadataOptions
+        var options = JsonSerializer.Deserialize<Udap.Model.UdapMetadataOptions>(json);
+
+        // Assert: ExtensionData contains the extra property
+        options.Should().NotBeNull();
+        options!.ExtensionData.Should().NotBeNull();
+        options.ExtensionData.Should().ContainKey("extra_property");
+        options.ExtensionData["extra_property"].GetString().Should().Be("extra_value");
+
+        var customExtensions = options.ExtensionData["custom_extensions"];
+        customExtensions.ValueKind.Should().Be(JsonValueKind.Array);
+        var urls = customExtensions.EnumerateArray().Select(e => e.GetString()).ToList();
+        urls.Should().BeEquivalentTo(new[] { "https://fhirlabs.net/extension_1", "https://fhirlabs.net/extension_2" });
+
+        // Act: Transfer to UdapMetadata and serialize
+        var metadata = new Udap.Model.UdapMetadata(options);
+        var serializerOptions = new JsonSerializerOptions
+        {
+            PropertyNamingPolicy = JsonNamingPolicy.SnakeCaseLower,
+            DictionaryKeyPolicy = JsonNamingPolicy.SnakeCaseLower
+        };
+        var serialized = JsonSerializer.Serialize(metadata, serializerOptions);
+
+        // Assert: Serialized JSON contains the extra property in snake_case
+        serialized.Should().Contain(@"""extra_property"":""extra_value""");
+
+        serialized.Should().Contain(@"""custom_extensions"":[""https://fhirlabs.net/extension_1"",""https://fhirlabs.net/extension_2""]");
     }
 }

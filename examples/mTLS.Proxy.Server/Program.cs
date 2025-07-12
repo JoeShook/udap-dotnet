@@ -164,15 +164,12 @@ builder.Services.AddReverseProxy()
         });
     });
 
-
-// Add services to the container.
-
 var app = builder.Build();
 
 // Configure the HTTP request pipeline.
-
 if (Environment.GetEnvironmentVariable("GCLOUD_PROJECT") != null)
 {
+    // This code ensures the app correctly recognizes the original request protocol (HTTP/HTTPS) when running behind a proxy in Google Cloud.
     app.Use((ctx, next) =>
     {
         var header = ctx.Request.Headers[ForwardedHeadersDefaults.XForwardedProtoHeaderName].FirstOrDefault();

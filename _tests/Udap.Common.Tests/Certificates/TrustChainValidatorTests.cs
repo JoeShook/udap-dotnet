@@ -9,6 +9,7 @@
 
 using System.IdentityModel.Tokens.Jwt;
 using System.Security.Cryptography.X509Certificates;
+using System.Text.Json;
 using System.Text.Json.Nodes;
 using FluentAssertions;
 using Microsoft.Extensions.Configuration;
@@ -43,12 +44,11 @@ public class TrustChainValidatorTests
     [Fact]
     public async Task GoodValidatorTest()
     {
-        var udapMetadataOptions = new UdapMetadataOptions();
-        _configuration.GetSection(Constants.UDAP_METADATA_OPTIONS).Bind(udapMetadataOptions);
-        var udapMetadataOptionsMock = Substitute.For<IOptionsMonitor<UdapMetadataOptions>>();
-        udapMetadataOptionsMock.CurrentValue.Returns(udapMetadataOptions);
-
-        _configuration.GetSection(Constants.UDAP_METADATA_OPTIONS).Bind(udapMetadataOptions);
+        var file = _configuration["UdapMetadataOptionsFile"] ?? "udap.metadata.options.json";
+        var json = File.ReadAllText(file);
+        var udapMetadataOptions = JsonSerializer.Deserialize<UdapMetadataOptions>(json);
+        var udapMetadataOptionsMock = Substitute.For<IUdapMetadataOptionsProvider>();
+        udapMetadataOptionsMock.Value.Returns(udapMetadataOptions);
         
         var udapFileCertStoreManifest = new UdapFileCertStoreManifest();
         _configuration.GetSection(Constants.UDAP_FILE_STORE_MANIFEST).Bind(udapFileCertStoreManifest);
@@ -104,8 +104,8 @@ public class TrustChainValidatorTests
     {
         var udapMetadataOptions = new UdapMetadataOptions();
         _configuration.GetSection(Constants.UDAP_METADATA_OPTIONS).Bind(udapMetadataOptions);
-        var udapMetadataOptionsMock = Substitute.For<IOptionsMonitor<UdapMetadataOptions>>();
-        udapMetadataOptionsMock.CurrentValue.Returns(udapMetadataOptions);
+        var udapMetadataOptionsProviderMock = Substitute.For<IUdapMetadataOptionsProvider>();
+        udapMetadataOptionsProviderMock.Value.Returns(udapMetadataOptions);
 
         _configuration.GetSection(Constants.UDAP_METADATA_OPTIONS).Bind(udapMetadataOptions);
 
@@ -117,7 +117,7 @@ public class TrustChainValidatorTests
 
         var privateCertificateStore = new IssuedCertificateStore(udapFileCertStoreManifestOptions, Substitute.For<ILogger<IssuedCertificateStore>>());
         var metaDataBuilder = new UdapMetaDataBuilder<UdapMetadataOptions, UdapMetadata>(
-            udapMetadataOptionsMock, 
+            udapMetadataOptionsProviderMock, 
             privateCertificateStore, 
             Substitute.For<ILogger<UdapMetaDataBuilder<UdapMetadataOptions, UdapMetadata>>>());
         var metadata = await metaDataBuilder.SignMetaData("https://fhirlabs.net/fhir/r4", "http://MissingCertificate");
@@ -128,9 +128,9 @@ public class TrustChainValidatorTests
     [Fact]
     public async Task UnkownCommunityTest()
     {
-        var udapMetadataOptions = Substitute.For<IOptionsMonitor<UdapMetadataOptions>>();
-        udapMetadataOptions.CurrentValue.Returns(new UdapMetadataOptions());
-        _configuration.GetSection(Constants.UDAP_METADATA_OPTIONS).Bind(udapMetadataOptions);
+        var udapMetadataOptionsProvider = Substitute.For<IUdapMetadataOptionsProvider>();
+        udapMetadataOptionsProvider.Value.Returns(new UdapMetadataOptions());
+        _configuration.GetSection(Constants.UDAP_METADATA_OPTIONS).Bind(udapMetadataOptionsProvider);
 
         var udapFileCertStoreManifest = new UdapFileCertStoreManifest();
         _configuration.GetSection(Constants.UDAP_FILE_STORE_MANIFEST).Bind(udapFileCertStoreManifest);
@@ -140,7 +140,7 @@ public class TrustChainValidatorTests
 
         var privateCertificateStore = new IssuedCertificateStore(udapFileCertStoreManifestOptions, Substitute.For<ILogger<IssuedCertificateStore>>());
         var metaDataBuilder = new UdapMetaDataBuilder<UdapMetadataOptions, UdapMetadata>(
-            udapMetadataOptions, 
+            udapMetadataOptionsProvider, 
             privateCertificateStore, 
             Substitute.For<ILogger<UdapMetaDataBuilder<UdapMetadataOptions, UdapMetadata>>>());
         var metadata = await metaDataBuilder.SignMetaData("https://fhirlabs.net/fhir/r4", "udap://unknown");
@@ -151,10 +151,11 @@ public class TrustChainValidatorTests
     [Fact]
     public Task FindCommunityTest()
     {
-        var udapMetadataOptions = new UdapMetadataOptions();
-        _configuration.GetSection(Constants.UDAP_METADATA_OPTIONS).Bind(udapMetadataOptions);
-        var udapMetadataOptionsMock = Substitute.For<IOptionsMonitor<UdapMetadataOptions>>();
-        udapMetadataOptionsMock.CurrentValue.Returns(udapMetadataOptions);
+        var file = _configuration["UdapMetadataOptionsFile"] ?? "udap.metadata.options.json";
+        var json = File.ReadAllText(file);
+        var udapMetadataOptions = JsonSerializer.Deserialize<UdapMetadataOptions>(json);
+        var udapMetadataOptionsProviderMock = Substitute.For<IUdapMetadataOptionsProvider>();
+        udapMetadataOptionsProviderMock.Value.Returns(udapMetadataOptions);
 
         var udapFileCertStoreManifest = new UdapFileCertStoreManifest();
         _configuration.GetSection(Constants.UDAP_FILE_STORE_MANIFEST).Bind(udapFileCertStoreManifest);
@@ -164,7 +165,7 @@ public class TrustChainValidatorTests
 
         var privateCertificateStore = new IssuedCertificateStore(udapFileCertStoreManifestOptions, Substitute.For<ILogger<IssuedCertificateStore>>());
         var metaDataBuilder = new UdapMetaDataBuilder<UdapMetadataOptions, UdapMetadata>(
-            udapMetadataOptionsMock, 
+            udapMetadataOptionsProviderMock, 
             privateCertificateStore, 
             Substitute.For<ILogger<UdapMetaDataBuilder<UdapMetadataOptions, UdapMetadata>>>());
         var communities = metaDataBuilder.GetCommunities();
@@ -182,6 +183,79 @@ public class TrustChainValidatorTests
         return Task.CompletedTask;
     }
 
+    [Fact]
+    public async Task ValidateUntrustedCertificate()
+    {
+        var problemFlags = X509ChainStatusFlags.NotTimeValid |
+                           X509ChainStatusFlags.Revoked |
+                           X509ChainStatusFlags.NotSignatureValid |
+                           X509ChainStatusFlags.InvalidBasicConstraints |
+                           X509ChainStatusFlags.CtlNotTimeValid |
+                           // X509ChainStatusFlags.OfflineRevocation |
+                           X509ChainStatusFlags.CtlNotSignatureValid;
+
+        var configuration = new ConfigurationBuilder()
+            .AddJsonFile("appsettings.json", false, true)
+            .Build();
+
+        var services = new ServiceCollection();
+
+        // UDAP CertStore
+        services.Configure<UdapFileCertStoreManifest>(configuration.GetSection(Constants.UDAP_FILE_STORE_MANIFEST));
+        services.AddSingleton<ITrustAnchorStore>(sp =>
+            new TrustAnchorFileStore(
+                sp.GetRequiredService<IOptionsMonitor<UdapFileCertStoreManifest>>(),
+                Substitute.For<ILogger<TrustAnchorFileStore>>()));
+        
+        var sp = services.BuildServiceProvider();
+        var certStore = sp.GetRequiredService<ITrustAnchorStore>();
+
+        var certificateStore = await certStore.Resolve();
+        var anchors = certificateStore.AnchorCertificates.ToList();
+
+        // Coverage for frameworks not hosted in example projects.  Funky but works.
+        certStore.AnchorCertificates.AsEnumerable().ToX509Collection().Should().NotBeNullOrEmpty();
+
+        var intermediates = anchors
+            .SelectMany(a => a.Intermediates!.Select(i => X509Certificate2.CreateFromPem(i.Certificate))).ToArray()
+            .ToX509Collection();
+
+        var anchorCertificates = anchors
+            .Select(c => X509Certificate2.CreateFromPem(c.Certificate))
+            .OrderBy(certificate => certificate.NotBefore)
+            .ToArray()
+            .ToX509Collection();
+
+
+        var validator = new TrustChainValidator(new X509ChainPolicy()
+        {
+            RevocationMode = X509RevocationMode.Offline,
+            VerificationFlags = X509VerificationFlags.IgnoreCertificateAuthorityRevocationUnknown |
+                                X509VerificationFlags.IgnoreEndRevocationUnknown |
+                                X509VerificationFlags.AllowUnknownCertificateAuthority |
+                                X509VerificationFlags.IgnoreWrongUsage,
+            RevocationFlag = X509RevocationFlag.ExcludeRoot
+        }, problemFlags, _testOutputHelper.ToLogger<TrustChainValidator>());
+
+        validator.Problem += _diagnosticsChainValidator.OnChainProblem;
+
+        // Help while writing tests to see problems summarized.
+        validator.Error += (_, exception) => _testOutputHelper.WriteLine("Error: " + exception.Message);
+        validator.Problem += element => _testOutputHelper.WriteLine("Problem: " + element.ChainElementStatus.Summarize(problemFlags));
+        validator.Untrusted += certificate2 => _testOutputHelper.WriteLine("Untrusted: " + certificate2.Subject);
+
+        var cert = new X509Certificate2("CertStore/issued/fhirlabs.net.untrusted.client.pfx", "udap-test", X509KeyStorageFlags.Exportable);
+        
+        var trusted = validator.IsTrustedCertificate(
+            "client_name",
+            cert,
+            intermediates,
+            anchorCertificates!,
+            out _,
+            out _);
+
+        trusted.Should().BeFalse();
+    }
 
     public async Task<bool> ValidateCertificateChain(
             X509Certificate2 issuedCertificate2,

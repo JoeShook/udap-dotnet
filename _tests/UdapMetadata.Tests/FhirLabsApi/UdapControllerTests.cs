@@ -14,7 +14,7 @@ using System.Security.Claims;
 using System.Security.Cryptography.X509Certificates;
 using System.Text.RegularExpressions;
 using FluentAssertions;
-using IdentityModel;
+using Duende.IdentityModel;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Mvc.Testing;
 using Microsoft.Extensions.Configuration;
@@ -470,6 +470,6 @@ public class UdapControllerTests : IClassFixture<ApiTestFixture>
         var iat = int.Parse(iatClaim.Value);
         var exp = int.Parse(expClaim.Value);
         var year = DateTimeOffset.FromUnixTimeSeconds(exp).AddYears(1).ToUnixTimeSeconds();
-        iat.Should().BeLessOrEqualTo((int)year);
+        iat.Should().BeLessThanOrEqualTo((int)year);
     }
 }

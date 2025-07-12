@@ -19,6 +19,7 @@ using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection.Extensions;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
+using System.Text.Json;
 using Udap.Common;
 using Udap.Common.Certificates;
 using Udap.Common.Extensions;
@@ -51,7 +52,7 @@ public static class ServiceCollectionExtensions
                 sp.GetRequiredService<IOptionsMonitor<UdapFileCertStoreManifest>>(),
                 sp.GetRequiredService<ILogger<IssuedCertificateStore>>()));
 
-        services.Configure<TUdapMetadataOptions>(configuration.GetSection("UdapMetadataOptions"));
+        services.TryAddSingleton<IUdapMetadataOptionsProvider, UdapMetadataOptionsProvider>();
         services.TryAddScoped<UdapMetaDataBuilder<TUdapMetadataOptions, TUdapMetadata>>();
         services.AddScoped<UdapMetaDataEndpoint<TUdapMetadataOptions, TUdapMetadata>>();
 

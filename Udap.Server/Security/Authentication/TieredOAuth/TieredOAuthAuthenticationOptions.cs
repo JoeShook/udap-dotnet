@@ -10,7 +10,7 @@
 using Microsoft.AspNetCore.Authentication.OAuth;
 using Microsoft.IdentityModel.Tokens;
 using System.IdentityModel.Tokens.Jwt;
-using IdentityModel;
+using Duende.IdentityModel;
 using Udap.Model;
 
 namespace Udap.Server.Security.Authentication.TieredOAuth;

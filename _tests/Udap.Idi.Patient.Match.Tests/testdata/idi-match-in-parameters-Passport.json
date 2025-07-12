@@ -1,0 +1,45 @@
+{
+  "resourceType": "Parameters",
+  "id": "UdapEd.ffdc2bd45f714c1f9d6fc7f1706da0a5",
+  "meta": {
+    "profile": [
+      "http://hl7.org/fhir/us/identity-matching/StructureDefinition/idi-match-input-parameters"
+    ]
+  },
+  "parameter": [
+    {
+      "name": "patient",
+      "resource": {
+        "resourceType": "Patient",
+        "meta": {
+          "profile": [
+            "http://hl7.org/fhir/us/identity-matching/StructureDefinition/IDI-Patient-L0"
+          ]
+        },
+        "identifier": [
+          {
+            "type": {
+              "coding": [
+                {
+                  "system": "http://terminology.hl7.org/CodeSystem/v2-0203",
+                  "code": "PPN"
+                }
+              ]
+            },
+            "system": "http://hl7.org/fhir/sid/passport-AUS",
+            "value": "1234-234-1243-12345678901"
+          }
+        ],
+        "name": [
+          {
+            "family": "Patient",
+            "given": [
+              "Max"
+            ]
+          }
+        ],
+        "birthDate": "1992-05-17"
+      }
+    }
+  ]
+}

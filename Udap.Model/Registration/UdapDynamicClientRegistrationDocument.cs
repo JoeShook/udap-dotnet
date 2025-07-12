@@ -20,13 +20,11 @@ using System;
 using System.Collections.Generic;
 using System.Globalization;
 using System.IdentityModel.Tokens.Jwt;
-using System.Linq;
 using System.Security.Claims;
 using System.Text.Json;
 using System.Text.Json.Nodes;
 using System.Text.Json.Serialization;
 using Microsoft.IdentityModel.Tokens;
-using Udap.Model.UdapAuthenticationExtensions;
 
 namespace Udap.Model.Registration;
 
@@ -41,8 +39,8 @@ public class UdapDynamicClientRegistrationDocument : Dictionary<string, object>,
     private string? _issuer;
     private string? _subject;
     private string? _audience;
-    private long _expiration;
-    private long _issuedAt;
+    private long? _expiration;
+    private long? _issuedAt;
     private string? _jwtId;
     private string? _clientName;
     private ICollection<string>? _redirectUris = [];
@@ -159,14 +157,11 @@ public class UdapDynamicClientRegistrationDocument : Dictionary<string, object>,
     /// the value of the iat claim.
     /// </summary>
     [JsonPropertyName(UdapConstants.RegistrationDocumentValues.Expiration)]
-    public long Expiration
+    public long? Expiration
     {
         get
         {
-            if (_expiration == 0)
-            {
-                _expiration = GetStandardInt64Claim(UdapConstants.RegistrationDocumentValues.Expiration);
-            }
+            _expiration = GetStandardInt64Claim(UdapConstants.RegistrationDocumentValues.Expiration);
 
             return _expiration;
         }
@@ -181,14 +176,11 @@ public class UdapDynamicClientRegistrationDocument : Dictionary<string, object>,
     /// Issued time integer for this software statement, expressed in seconds since the "Epoch"
     /// </summary>
     [JsonPropertyName(UdapConstants.RegistrationDocumentValues.IssuedAt)]
-    public long IssuedAt
+    public long? IssuedAt
     {
         get
         {
-            if (_issuedAt == 0)
-            {
-                _issuedAt = GetStandardInt64Claim(UdapConstants.RegistrationDocumentValues.IssuedAt);
-            }
+            _issuedAt = GetStandardInt64Claim(UdapConstants.RegistrationDocumentValues.IssuedAt);
 
             return _issuedAt;
         }
@@ -732,8 +724,21 @@ public class UdapDynamicClientRegistrationDocument : Dictionary<string, object>,
         return JsonSerializer.Serialize(this, indent ? IndentedOptions : DefaultOptions);
     }
 
-    private static readonly JsonSerializerOptions DefaultOptions = new JsonSerializerOptions { WriteIndented = false };
-    private static readonly JsonSerializerOptions IndentedOptions = new JsonSerializerOptions { WriteIndented = true };
+    private static readonly JsonSerializerOptions DefaultOptions = new JsonSerializerOptions
+    {
+        Converters = {
+            new UdapDynamicClientRegistrationDocumentConverter(),
+        },
+        WriteIndented = false
+    };
+
+    private static readonly JsonSerializerOptions IndentedOptions = new JsonSerializerOptions
+    {
+        Converters = {
+            new UdapDynamicClientRegistrationDocumentConverter(),
+        },
+        WriteIndented = true
+    };
 
     /// <summary>
     /// Serializes this instance to JSON.
@@ -754,8 +759,78 @@ public class UdapDynamicClientRegistrationDocument : Dictionary<string, object>,
     }
 }
 
-public interface ISoftwareStatementSerializer
+
+public class UdapDynamicClientRegistrationDocumentConverter : JsonConverter<UdapDynamicClientRegistrationDocument>
 {
-    public string SerializeToJson();
-    public string Base64UrlEncode();
+    public override UdapDynamicClientRegistrationDocument Read(ref Utf8JsonReader reader, Type typeToConvert, JsonSerializerOptions options)
+    {
+        var document = new UdapDynamicClientRegistrationDocument();
+
+        using (JsonDocument jsonDocument = JsonDocument.ParseValue(ref reader))
+        {
+            foreach (JsonProperty property in jsonDocument.RootElement.EnumerateObject())
+            {
+                if (property.NameEquals(UdapConstants.RegistrationDocumentValues.Expiration))
+                {
+                    if (property.Value.ValueKind == JsonValueKind.String && long.TryParse(property.Value.GetString(), out var expiration))
+                    {
+                        document.Expiration = expiration;
+                    }
+                    else if (property.Value.ValueKind == JsonValueKind.Number)
+                    {
+                        document.Expiration = property.Value.GetInt64();
+                    }
+                }
+                else if (property.NameEquals(UdapConstants.RegistrationDocumentValues.IssuedAt))
+                {
+                    if (property.Value.ValueKind == JsonValueKind.String && long.TryParse(property.Value.GetString(), out var issuedAt))
+                    {
+                        document.IssuedAt = issuedAt;
+                    }
+                    else if (property.Value.ValueKind == JsonValueKind.Number)
+                    {
+                        document.IssuedAt = property.Value.GetInt64();
+                    }
+                }
+                else
+                {
+                    document[property.Name] = property.Value.Clone();
+                }
+            }
+        }
+
+        return document;
+    }
+
+    public override void Write(Utf8JsonWriter writer, UdapDynamicClientRegistrationDocument value, JsonSerializerOptions options)
+    {
+        writer.WriteStartObject();
+
+        foreach (var kvp in value)
+        {
+            writer.WritePropertyName(kvp.Key);
+
+            if (kvp.Key == UdapConstants.RegistrationDocumentValues.Expiration || kvp.Key == UdapConstants.RegistrationDocumentValues.IssuedAt)
+            {
+                if (kvp.Value is string stringValue && long.TryParse(stringValue, out var longValue))
+                {
+                    writer.WriteNumberValue(longValue);
+                }
+                else if (kvp.Value is JsonElement jsonElement && jsonElement.ValueKind == JsonValueKind.String && long.TryParse(jsonElement.GetString(), out var jsonLongValue))
+                {
+                    writer.WriteNumberValue(jsonLongValue);
+                }
+                else
+                {
+                    JsonSerializer.Serialize(writer, kvp.Value, options);
+                }
+            }
+            else
+            {
+                JsonSerializer.Serialize(writer, kvp.Value, options);
+            }
+        }
+
+        writer.WriteEndObject();
+    }
 }

@@ -7,17 +7,18 @@
 // */
 #endregion
 
-using System.IdentityModel.Tokens.Jwt;
-using System.Security.Cryptography.X509Certificates;
-using System.Text.Json;
-using System.Text.Json.Nodes;
 using FluentAssertions;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.DependencyInjection.Extensions;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using Microsoft.IdentityModel.Tokens;
 using NSubstitute;
+using System.IdentityModel.Tokens.Jwt;
+using System.Security.Cryptography.X509Certificates;
+using System.Text.Json;
+using System.Text.Json.Nodes;
 using Udap.Client.Client.Extensions;
 using Udap.Client.Client.Messages;
 using Udap.Common;
@@ -278,7 +279,9 @@ namespace Udap.Client.System.Tests
             .Build();
 
             var services = new ServiceCollection();
-            
+
+            services.TryAddSingleton<IUdapMetadataOptionsProvider, UdapMetadataOptionsProvider>();
+
             // UDAP CertStore
             services.Configure<UdapFileCertStoreManifest>(configuration.GetSection(Common.Constants.UDAP_FILE_STORE_MANIFEST));
             services.AddSingleton<ITrustAnchorStore>(sp =>

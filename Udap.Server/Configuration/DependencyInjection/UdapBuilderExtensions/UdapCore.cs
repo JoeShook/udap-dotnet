@@ -14,7 +14,7 @@
 using Duende.IdentityServer.Configuration;
 using Duende.IdentityServer.Hosting;
 using Duende.IdentityServer.ResponseHandling;
-using IdentityModel;
+using Duende.IdentityModel;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection.Extensions;
 using Microsoft.Extensions.Logging;

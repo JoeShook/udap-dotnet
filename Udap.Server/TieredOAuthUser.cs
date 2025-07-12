@@ -9,7 +9,7 @@
 
 using System.Security.Claims;
 using Duende.IdentityServer;
-using IdentityModel;
+using Duende.IdentityModel;
 using Udap.Common.Extensions;
 
 namespace Udap.Server;

@@ -17,7 +17,7 @@ using Duende.IdentityServer.EntityFramework.Options;
 using Duende.IdentityServer.EntityFramework.Storage;
 using Duende.IdentityServer.Models;
 using FluentAssertions;
-using IdentityModel;
+using Duende.IdentityModel;
 using Microsoft.AspNetCore.Http;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;

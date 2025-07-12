@@ -25,7 +25,11 @@
   </ItemGroup>
 
   <ItemGroup>
-    <PackageReference Include="IdentityModel" />
+    <PackageReference Include="Duende.IdentityModel" />
+    <PackageReference Include="Microsoft.SourceLink.GitHub">
+      <PrivateAssets>all</PrivateAssets>
+      <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
+    </PackageReference>
   </ItemGroup>
 
   <ItemGroup>

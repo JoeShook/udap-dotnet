@@ -12,7 +12,7 @@
 // */
 #endregion
 
-using IdentityModel.Client;
+using Duende.IdentityModel.Client;
 using Udap.Client.Client.Messages;
 using Udap.Common.Extensions;
 
