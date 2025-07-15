@@ -75,10 +75,10 @@ public class UpdateCrlCommand : AsyncCommand<UpdateCrlSettings>
         // Parse CRL and show version
         var crlParser = new X509CrlParser();
         var crl = crlParser.ReadCrl(crlBytes);
-        AnsiConsole.MarkupLine($"[blue]Current CRL version:[/] {crl.Version}");
+        AnsiConsole.MarkupLine($"[blue]Current CRL number:[/] {GetCurrentCrlNumber(crl)}");
 
         // Generate new CRL
-        var newCrlBytes = GenerateNewCrl(caCert, caPassword, crlBytes);
+        var newCrlBytes = GenerateNewCrl(caCert, caPassword, crlBytes, settings.Days);
 
         if (isProduction)
         {
@@ -109,7 +109,7 @@ public class UpdateCrlCommand : AsyncCommand<UpdateCrlSettings>
         return 0;
     }
 
-    public static byte[] GenerateNewCrl(X509Certificate2 caCert, string caPassword, byte[] previousCrlBytes)
+    public static byte[] GenerateNewCrl(X509Certificate2 caCert, string caPassword, byte[] previousCrlBytes, int days)
     {
         var (bouncyCertificate, privateKey) = GetCertificateData(caCert);
 
@@ -121,7 +121,7 @@ public class UpdateCrlCommand : AsyncCommand<UpdateCrlSettings>
         crlGen.SetIssuerDN(bouncyCertificate.SubjectDN);
         var now = DateTime.UtcNow;
         crlGen.SetThisUpdate(now);
-        crlGen.SetNextUpdate(DateTime.UtcNow.AddDays(1));
+        crlGen.SetNextUpdate(DateTime.UtcNow.AddDays(days));
 
         foreach (X509CrlEntry entry in previousCrl.GetRevokedCertificates() ?? Enumerable.Empty<X509CrlEntry>())
         {
@@ -195,6 +195,19 @@ public class UpdateCrlCommand : AsyncCommand<UpdateCrlSettings>
         return (bouncyCertificate, privateKey);
     }
 
+    public static string GetCurrentCrlNumber(X509Crl crl)
+    {
+        var crlNumExt = crl.GetExtensionValue(X509Extensions.CrlNumber);
+
+        if (crlNumExt == null)
+        {
+            return BigInteger.Zero.ToString();
+        }
+
+        var asn1Object = X509ExtensionUtilities.FromExtensionValue(crlNumExt);
+        return DerInteger.GetInstance(asn1Object).PositiveValue.ToString();
+    }
+
     public static CrlNumber GetNextCrlNumber(X509Crl crl)
     {
         var crlNumExt = crl.GetExtensionValue(X509Extensions.CrlNumber);
@@ -207,7 +220,9 @@ public class UpdateCrlCommand : AsyncCommand<UpdateCrlSettings>
 
         var asn1Object = X509ExtensionUtilities.FromExtensionValue(crlNumExt);
         var prevCrlNum = DerInteger.GetInstance(asn1Object).PositiveValue;
+        var nextCrlNum = prevCrlNum.Add(BigInteger.One);
+        AnsiConsole.MarkupLine($"[blue]New CRL number:[/] {nextCrlNum}");
 
-        return new CrlNumber(prevCrlNum.Add(BigInteger.One));
+        return new CrlNumber(nextCrlNum);
     }
 }
