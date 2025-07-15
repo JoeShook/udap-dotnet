@@ -13,7 +13,6 @@ using Hl7.Fhir.Model;
 using Hl7.Fhir.Serialization;
 using Hl7.Fhir.Specification.Source;
 using Hl7.Fhir.Specification.Terminology;
-using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.ResponseCompression;
 using Microsoft.IdentityModel.Tokens;
 using Serilog;
@@ -22,6 +21,7 @@ using System.Net.Http.Headers;
 using System.Text;
 using System.Text.Json.Serialization;
 using Firely.Fhir.Validation;
+using Microsoft.AspNetCore.Http.Json;
 using Udap.CdsHooks.Model;
 using Udap.Common;
 using Udap.Proxy.Server;
@@ -50,9 +50,9 @@ builder.Services.AddControllersWithViews();
 
 builder.Services.Configure<JsonOptions>(options =>
 {
-    options.JsonSerializerOptions.DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull;
-    options.JsonSerializerOptions.PropertyNameCaseInsensitive = true;
-    options.JsonSerializerOptions.Converters.Add(new FhirResourceConverter());
+    options.SerializerOptions.DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull;
+    options.SerializerOptions.PropertyNameCaseInsensitive = true;
+    options.SerializerOptions.Converters.Add(new FhirResourceConverter());
 });
 
 builder.Services.Configure<CdsServices>(builder.Configuration.GetRequiredSection("CdsServices"));

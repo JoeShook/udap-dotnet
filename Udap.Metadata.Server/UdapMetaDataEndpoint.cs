@@ -10,6 +10,8 @@
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Http.Extensions;
 using Microsoft.Extensions.Logging;
+using System.Text.Json;
+using System.Text.Json.Serialization;
 using Udap.Common.Extensions;
 using Udap.Common.Metadata;
 using Udap.Model;
@@ -31,13 +33,27 @@ public class UdapMetaDataEndpoint<TUdapMetadataOptions, TUdapMetadata>
 
     public async Task<IResult?> Process(HttpContext httpContext, string? community, CancellationToken token)
     {
-        return await _metaDataBuilder.SignMetaData(
-                httpContext.Request.GetDisplayUrl().GetBaseUrlFromMetadataUrl(),
-                community, 
-                token)
-            is { } udapMetadata
-            ? Results.Ok(udapMetadata)
-            : Results.NotFound();
+        var udapMetadata = await _metaDataBuilder.SignMetaData(
+            httpContext.Request.GetDisplayUrl().GetBaseUrlFromMetadataUrl(),
+            community,
+            token);
+
+        if (udapMetadata != null)
+        {
+            if (udapMetadata.UdapCertificationsSupported == null || udapMetadata.UdapCertificationsSupported.Count == 0)
+            {
+                udapMetadata.UdapCertificationsRequired = null;
+            }
+
+            var options = new JsonSerializerOptions(JsonSerializerDefaults.Web)
+            {
+                DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull
+            };
+
+            return Results.Ok(udapMetadata);
+        }
+        
+        return Results.NotFound();
     }
 
     
