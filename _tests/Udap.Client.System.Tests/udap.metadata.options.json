@@ -1,7 +1,7 @@
 {
   "UdapMetadataConfigs": [
     {
-      "Community": "udap://fhirlabs.net",
+      "Community": "udap://fhirlabs.net/",
       "SignedMetadataConfig": {
         "Issuer": "https://fhirlabs.net:7016/fhir/r4",
         "Subject": "https://fhirlabs.net:7016/fhir/r4",

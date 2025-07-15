@@ -19,8 +19,10 @@ using System.IdentityModel.Tokens.Jwt;
 using System.Security.Cryptography.X509Certificates;
 using System.Text.Json;
 using System.Text.Json.Nodes;
+using Udap.Client.Client;
 using Udap.Client.Client.Extensions;
 using Udap.Client.Client.Messages;
+using Udap.Client.Configuration;
 using Udap.Common;
 using Udap.Common.Certificates;
 using Udap.Model;
@@ -173,7 +175,7 @@ namespace Udap.Client.System.Tests
             var disco = await client.GetUdapDiscoveryDocument(new UdapDiscoveryDocumentRequest()
             {
                 Address = "https://fhirlabs.net/fhir/r4", 
-                Community = "udap://fhirlabs.net",
+                Community = "udap://fhirlabs.net/",
                 Policy = new DiscoveryPolicy { 
                     ValidateEndpoints = false   // Authority endpoints are not hosted on same domain as Identity Provider.
                 }
@@ -212,10 +214,25 @@ namespace Udap.Client.System.Tests
                                X509ChainStatusFlags.OfflineRevocation |
                                X509ChainStatusFlags.CtlNotSignatureValid;
 
-            (await ValidateCertificateChain(cert, problemFlags, "udap://fhirlabs.net")).Should().BeTrue();
+            (await ValidateCertificateChain(cert, problemFlags, "udap://fhirlabs.net/")).Should().BeTrue();
             _diagnosticsChainValidator.Called.Should().BeFalse();
         }
 
+        [Fact]
+        public async Task UdapClientDiscoveryForMeditechFhirServer()
+        {
+            var udapClient = await GetUdapClient();
+            udapClient.TokenError += message =>
+            {
+                _testOutputHelper.WriteLine($"Token Error: {message}");
+            };
+            
+            var result = await udapClient.ValidateResource("https://dev-mtx-interop.meditech.com", "urn:oid:4.5.6");
+            result.IsError.Should().BeFalse(result.Error);
+            
+            var metaData = udapClient.UdapServerMetaData;
+            metaData.Should().NotBeNull();
+        }
 
         [Fact]
         public async Task UdapClientDiscoveryForHealthToGo()
@@ -267,7 +284,36 @@ namespace Udap.Client.System.Tests
             _diagnosticsChainValidator.Called.Should().BeFalse();
         }
 
-        
+
+        public async Task<IUdapClient> GetUdapClient()
+        {
+            var configuration = new ConfigurationBuilder()
+                .AddJsonFile("appsettings.json", false, true)
+                .AddUserSecrets<GeneralTests>()
+                .Build();
+
+            var services = new ServiceCollection();
+
+            services.AddScoped<TrustChainValidator>();
+            services.AddScoped<UdapClientDiscoveryValidator>();
+            services.AddHttpClient<IUdapClient, UdapClient>()
+                .AddHttpMessageHandler(sp =>
+                    new HeaderAugmentationHandler(sp.GetRequiredService<IOptionsMonitor<UdapClientOptions>>()));
+
+            services.TryAddSingleton<IUdapMetadataOptionsProvider, UdapMetadataOptionsProvider>();
+
+            // UDAP CertStore
+            services.Configure<UdapFileCertStoreManifest>(configuration.GetSection(Common.Constants.UDAP_FILE_STORE_MANIFEST));
+            services.AddSingleton<ITrustAnchorStore>(sp =>
+                new TrustAnchorFileStore(
+                    sp.GetRequiredService<IOptionsMonitor<UdapFileCertStoreManifest>>(),
+                    Substitute.For<ILogger<TrustAnchorFileStore>>()));
+
+            var sp = services.BuildServiceProvider();
+
+            return sp.GetRequiredService<IUdapClient>();
+        }
+
         public async Task<bool> ValidateCertificateChain(
             X509Certificate2 issuedCertificate2, 
             X509ChainStatusFlags problemFlags,
