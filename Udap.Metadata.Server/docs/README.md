@@ -89,7 +89,7 @@ udap.metadata.options.json:
       {
         "Community": "http://localhost",
         "SignedMetadataConfig": {
-          "AuthorizationEndPoint": "https://securedcontrols.net:5001/connect/authorize",
+          "AuthorizationEndpoint": "https://securedcontrols.net:5001/connect/authorize",
           "TokenEndpoint": "https://securedcontrols.net:5001/connect/token",
           "RegistrationEndpoint": "https://securedcontrols.net:5001/connect/register"
         }
