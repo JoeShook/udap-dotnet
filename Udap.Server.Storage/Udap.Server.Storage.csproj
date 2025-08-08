@@ -32,6 +32,8 @@
 			<IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
 		</PackageReference>
 		<PackageReference Include="System.IdentityModel.Tokens.Jwt" Version="8.12.1" />
+		<None Include="docs\README.md" Pack="true" PackagePath="\" />
+		<None Include="../artwork/UDAP_Ecosystem_Gears 48X48.jpg" Pack="true" PackagePath="\" />
 	</ItemGroup>
 
 	<ItemGroup>

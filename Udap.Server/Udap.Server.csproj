@@ -22,6 +22,12 @@
   </PropertyGroup>
 
   <ItemGroup>
+    <Compile Remove="Infrastructure\**" />
+    <EmbeddedResource Remove="Infrastructure\**" />
+    <None Remove="Infrastructure\**" />
+  </ItemGroup>
+
+  <ItemGroup>
     <PackageReference Include="AutoMapper" Version="14.0.0" />
     <PackageReference Include="Duende.IdentityServer" Version="7.2.4" />
     <PackageReference Include="Duende.IdentityServer.AspNetIdentity" Version="7.2.4" />
@@ -45,12 +51,6 @@
     <ProjectReference Include="..\Udap.Server.Storage\Udap.Server.Storage.csproj" />
     <None Include="docs\README.md" Pack="true" PackagePath="\" />
     <None Include="../artwork/UDAP_Ecosystem_Gears 48X48.jpg" Pack="true" PackagePath="\" />
-  </ItemGroup>
- 
-  <ItemGroup>
-    <Folder Include="DbContexts\" />
-    <Folder Include="Infrastructure\" />
-    <Folder Include="Storage\Stores\" />
   </ItemGroup>
 
 </Project>
