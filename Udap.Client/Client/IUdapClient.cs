@@ -10,8 +10,8 @@
 using System.Security.Cryptography.X509Certificates;
 using Duende.IdentityModel.Client;
 using Microsoft.IdentityModel.Tokens;
-using Udap.Client.Authentication;
 using Udap.Client.Client.Messages;
+using Udap.Common.Authentication;
 using Udap.Common.Certificates;
 using Udap.Model;
 using Udap.Model.Access;

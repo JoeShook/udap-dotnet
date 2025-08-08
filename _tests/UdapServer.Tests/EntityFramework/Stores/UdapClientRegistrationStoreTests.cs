@@ -1,4 +1,4 @@
-﻿#region (c) 2023 Joseph Shook. All rights reserved.
+﻿#region (c) 2023-2025 Joseph Shook. All rights reserved.
 // /*
 //  Authors:
 //     Joseph Shook   Joseph.Shook@Surescripts.com
@@ -12,10 +12,10 @@ using FluentAssertions;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
 using NSubstitute;
-using Udap.Server;
-using Udap.Server.DbContexts;
-using Udap.Server.Options;
-using Udap.Server.Stores;
+using Udap.Server.Storage;
+using Udap.Server.Storage.DbContexts;
+using Udap.Server.Storage.Options;
+using Udap.Server.Storage.Stores;
 
 namespace UdapServer.Tests.EntityFramework.Stores;
 

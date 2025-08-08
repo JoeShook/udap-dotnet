@@ -42,12 +42,15 @@
     <ProjectReference Include="..\Udap.Client\Udap.Client.csproj" />
     <ProjectReference Include="..\Udap.Common\Udap.Common.csproj" />
     <ProjectReference Include="..\Udap.Model\Udap.Model.csproj" />
+    <ProjectReference Include="..\Udap.Server.Storage\Udap.Server.Storage.csproj" />
     <None Include="docs\README.md" Pack="true" PackagePath="\" />
     <None Include="../artwork/UDAP_Ecosystem_Gears 48X48.jpg" Pack="true" PackagePath="\" />
   </ItemGroup>
  
   <ItemGroup>
+    <Folder Include="DbContexts\" />
     <Folder Include="Infrastructure\" />
+    <Folder Include="Storage\Stores\" />
   </ItemGroup>
 
 </Project>

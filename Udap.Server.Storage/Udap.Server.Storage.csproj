@@ -1,0 +1,45 @@
+﻿<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+		<TargetFrameworks>net8.0;net9.0</TargetFrameworks>
+	  <ImplicitUsings>enable</ImplicitUsings>
+	  <Nullable>enable</Nullable>
+	  <AssemblyName>Udap.Server.Storage</AssemblyName>
+	  <RootNamespace>Udap.Server.Storage</RootNamespace>
+	  <RepositoryType>git</RepositoryType>
+	  <RepositoryUrl>https://github.com/JoeShook/udap-dotnet</RepositoryUrl>
+	  <PackageReadmeFile>README.md</PackageReadmeFile>
+	  <Authors>Joseph Shook</Authors>
+	  <Copyright>Copyright © Joseph.Shook@Surescripts.com 2025</Copyright>
+	  <PackageLicenseExpression>MIT</PackageLicenseExpression>
+	  <PackageRequireLicenseAcceptance>true</PackageRequireLicenseAcceptance>
+	  <PackageIcon>UDAP_Ecosystem_Gears 48X48.jpg</PackageIcon>
+	  <PackageTags>UDAP;FHIR;HL7</PackageTags>
+	  <Description>Package is a part of the UDAP reference implementation for .NET.</Description>
+
+	  <ManagePackageVersionsCentrally>false</ManagePackageVersionsCentrally>
+  </PropertyGroup>
+
+	<ItemGroup>
+		<PackageReference Include="AutoMapper" Version="14.0.0" />
+		<PackageReference Include="Duende.IdentityServer.EntityFramework.Storage" Version="7.2.4" />
+		<PackageReference Include="Duende.IdentityServer.Storage" Version="7.2.4" />
+		<PackageReference Include="Microsoft.AspNetCore.DataProtection.EntityFrameworkCore" Version="8.0.16" Condition="'$(TargetFramework)' == 'net8.0'" />
+		<PackageReference Include="Microsoft.AspNetCore.DataProtection.EntityFrameworkCore" Version="9.0.7" Condition="'$(TargetFramework)' == 'net9.0'" />
+		<PackageReference Include="Microsoft.EntityFrameworkCore" Version="9.0.7" />
+		<PackageReference Include="Microsoft.SourceLink.GitHub" Version="8.0.0">
+			<PrivateAssets>all</PrivateAssets>
+			<IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
+		</PackageReference>
+		<PackageReference Include="System.IdentityModel.Tokens.Jwt" Version="8.12.1" />
+	</ItemGroup>
+
+	<ItemGroup>
+	  <Folder Include="Options\" />
+	</ItemGroup>
+
+	<ItemGroup>
+	  <ProjectReference Include="..\Udap.Common\Udap.Common.csproj" />
+	</ItemGroup>
+
+</Project>

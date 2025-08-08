@@ -1,5 +1,5 @@
 ﻿/*
- Copyright (c) Joseph Shook. All rights reserved.
+ Copyright (c) 2022-2025 Joseph Shook. All rights reserved.
  Authors:
     Joseph Shook   Joseph.Shook@Surescripts.com
 
@@ -7,24 +7,19 @@
 */
 
 
-using System.Linq;
 using System.Reflection;
 using System.Security.Cryptography.X509Certificates;
-using System.Text;
 using Duende.IdentityServer;
-using Duende.IdentityServer.EntityFramework.DbContexts;
 using Duende.IdentityServer.EntityFramework.Mappers;
 using Duende.IdentityServer.EntityFramework.Storage;
 using Duende.IdentityServer.Models;
 using Microsoft.EntityFrameworkCore;
 using Serilog;
-using Udap.Common.Extensions;
 using Udap.Model;
-using Udap.Server.DbContexts;
-using Udap.Server.Entities;
+using Udap.Server.Storage.Entities;
 using Udap.Server.Models;
+using Udap.Server.Storage.DbContexts;
 using Udap.Server.Storage.Stores;
-using Udap.Server.Stores;
 using Udap.Util.Extensions;
 using ILogger = Serilog.ILogger;
 using Task = System.Threading.Tasks.Task;

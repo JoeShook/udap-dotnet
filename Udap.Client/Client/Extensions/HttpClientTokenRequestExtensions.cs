@@ -19,7 +19,7 @@ using System.Text;
 using System.Text.Json;
 using Duende.IdentityModel;
 using Duende.IdentityModel.Client;
-using Udap.Client.Authentication;
+using Udap.Common.Authentication;
 using Udap.Model;
 using Udap.Model.Access;
 using TokenResponse = Duende.IdentityModel.Client.TokenResponse;

@@ -1,5 +1,5 @@
 ﻿/*
- Copyright (c) Joseph Shook. All rights reserved.
+ Copyright (c) 2022-2025 Joseph Shook. All rights reserved.
  Authors:
     Joseph Shook   Joseph.Shook@Surescripts.com
 
@@ -14,8 +14,8 @@ using System.Text.Json.Serialization;
 using Udap.Auth.Server.Admin.Services;
 using Udap.Auth.Server.Admin.Services.DataBase;
 using Udap.Auth.Server.Admin.Services.State;
-using Udap.Server.DbContexts;
-using Udap.Server.Entities;
+using Udap.Server.Storage.DbContexts;
+using Udap.Server.Storage.Entities;
 using ILogger = Serilog.ILogger;
 
 namespace Udap.Auth.Server.Admin;

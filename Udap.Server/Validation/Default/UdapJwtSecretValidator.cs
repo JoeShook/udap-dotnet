@@ -21,6 +21,7 @@ using Udap.Common.Certificates;
 using Udap.Common.Extensions;
 using Udap.Model;
 using Udap.Server.Extensions;
+using Udap.Server.Storage.Extensions;
 using Udap.Server.Storage.Stores;
 using Udap.Util.Extensions;
 
@@ -187,7 +188,7 @@ public class UdapJwtSecretValidator : ISecretValidator
 
             if (certChainList == null && secretList.Count == 0)
             {
-                var rolledSecrets = await _clientStore.RolloverClientSecrets(parsedSecret);
+                var rolledSecrets = await _clientStore.RolloverClientSecrets(parsedSecret.ToModel());
                 if (rolledSecrets == null || rolledSecrets.Count == 0)
                 {
                     _logger.LogWarning("Could not roll secret for client id: {ClientId}", parsedSecret.Id);
@@ -215,7 +216,7 @@ public class UdapJwtSecretValidator : ISecretValidator
         //
         if (_trustChainValidator.IsTrustedCertificate(
                 parsedSecret.Id,
-                parsedSecret.GetUdapEndCert()!,
+                parsedSecret.ToModel().GetUdapEndCert()!,
                 new X509Certificate2Collection(certChainList.ToArray()),
                 new X509Certificate2Collection(certChainList.ToRootCertArray()),
                 out X509ChainElementCollection? _,
