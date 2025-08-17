@@ -1,4 +1,4 @@
-﻿#region (c) 2022 Joseph Shook. All rights reserved.
+﻿#region (c) 2022-2025 Joseph Shook. All rights reserved.
 // /*
 //  Authors:
 //     Joseph Shook   Joseph.Shook@Surescripts.com
@@ -13,7 +13,6 @@ using System.Security.Cryptography.X509Certificates;
 using System.Text.Json;
 using FluentAssertions;
 using Duende.IdentityModel;
-using Hl7.Fhir.Model;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Mvc.Testing;
 using Microsoft.EntityFrameworkCore;
@@ -28,7 +27,7 @@ using Udap.Common.Certificates;
 using Udap.Model;
 using Udap.Model.Registration;
 using Udap.Model.Statement;
-using Udap.Server.DbContexts;
+using Udap.Server.Storage.DbContexts;
 using Xunit.Abstractions;
 using Task = System.Threading.Tasks.Task;
 

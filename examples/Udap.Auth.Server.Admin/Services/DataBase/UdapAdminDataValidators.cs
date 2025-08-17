@@ -8,7 +8,7 @@
 #endregion
 
 using System.Security.Cryptography.X509Certificates;
-using Udap.Server.Entities;
+using Udap.Server.Storage.Entities;
 
 namespace Udap.Auth.Server.Admin.Services.DataBase;
 

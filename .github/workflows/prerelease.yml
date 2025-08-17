@@ -30,6 +30,7 @@ jobs:
         dotnet pack -v normal -c Release --include-source -p:PackageVersion=${VERSION} ./Udap.Common/Udap.Common.csproj 
         dotnet pack -v normal -c Release --include-source -p:PackageVersion=${VERSION} ./Udap.Metadata.Server/Udap.Metadata.Server.csproj 
         dotnet pack -v normal -c Release --include-source -p:PackageVersion=${VERSION} ./Udap.Server/Udap.Server.csproj 
+        dotnet pack -v normal -c Release --include-source -p:PackageVersion=${VERSION} ./Udap.Server.Storage/Udap.Server.Storage.csproj 
         dotnet pack -v normal -c Release --include-source -p:PackageVersion=0${VERSION} ./Udap.Client/Udap.Client.csproj    
         dotnet pack -v normal -c Release --include-source -p:PackageVersion=0${VERSION} ./Udap.UI/Udap.UI.csproj
 
@@ -46,6 +47,7 @@ jobs:
         dotnet nuget push ./Udap.Common/bin/Release/*.symbols.nupkg --source https://api.nuget.org/v3/index.json --api-key ${{ secrets.NUGET_API_KEY }}
         dotnet nuget push ./Udap.Metadata.Server/bin/Release/*.symbols.nupkg --source https://api.nuget.org/v3/index.json --api-key ${{ secrets.NUGET_API_KEY }}
         dotnet nuget push ./Udap.Server/bin/Release/*.symbols.nupkg --source https://api.nuget.org/v3/index.json --api-key ${{ secrets.NUGET_API_KEY }}
+        dotnet nuget push ./Udap.Server.Storage/bin/Release/*.symbols.nupkg --source https://api.nuget.org/v3/index.json --api-key ${{ secrets.NUGET_API_KEY }}
         dotnet nuget push ./Udap.Client/bin/Release/*.symbols.nupkg --source https://api.nuget.org/v3/index.json --api-key ${{ secrets.NUGET_API_KEY }}
         dotnet nuget push ./Udap.UI/bin/Release/*.symbols.nupkg --source https://api.nuget.org/v3/index.json --api-key ${{ secrets.NUGET_API_KEY }}
       

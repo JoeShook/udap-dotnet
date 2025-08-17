@@ -1,4 +1,4 @@
-﻿#region (c) 2023 Joseph Shook. All rights reserved.
+﻿#region (c) 2023-2025 Joseph Shook. All rights reserved.
 // /*
 //  Authors:
 //     Joseph Shook   Joseph.Shook@Surescripts.com
@@ -11,8 +11,10 @@ using System.Security.Cryptography.X509Certificates;
 using Duende.IdentityServer.Models;
 using Udap.Common;
 using Udap.Common.Models;
-using Udap.Server.Extensions;
+using Udap.Server.Storage;
+using Udap.Server.Storage.Extensions;
 using Udap.Server.Storage.Stores;
+using ParsedSecret = Udap.Common.Models.ParsedSecret;
 
 namespace Udap.Server.Stores.InMemory;
 

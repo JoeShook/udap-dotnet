@@ -1,5 +1,4 @@
 ﻿using System.Security.Cryptography.X509Certificates;
-using Udap.Server.Entities;
 
 namespace Udap.Auth.Server.Admin.ViewModel
 {

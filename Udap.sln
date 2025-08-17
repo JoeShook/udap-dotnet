@@ -101,6 +101,8 @@ Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Udap.Idi.Patient.Match.Test
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Udap.Pki.Cli", "examples\Udap.Pki.Cli\Udap.Pki.Cli.csproj", "{B899C796-D7D0-4C02-AEAE-E2C0DD61802E}"
 EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Udap.Server.Storage", "Udap.Server.Storage\Udap.Server.Storage.csproj", "{81BCE5EC-B7D4-EC0F-1EB5-4F7C13E8FC33}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -312,6 +314,12 @@ Global
 		{B899C796-D7D0-4C02-AEAE-E2C0DD61802E}.FullDebug|Any CPU.Build.0 = Debug|Any CPU
 		{B899C796-D7D0-4C02-AEAE-E2C0DD61802E}.Release|Any CPU.ActiveCfg = Release|Any CPU
 		{B899C796-D7D0-4C02-AEAE-E2C0DD61802E}.Release|Any CPU.Build.0 = Release|Any CPU
+		{81BCE5EC-B7D4-EC0F-1EB5-4F7C13E8FC33}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{81BCE5EC-B7D4-EC0F-1EB5-4F7C13E8FC33}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{81BCE5EC-B7D4-EC0F-1EB5-4F7C13E8FC33}.FullDebug|Any CPU.ActiveCfg = Debug|Any CPU
+		{81BCE5EC-B7D4-EC0F-1EB5-4F7C13E8FC33}.FullDebug|Any CPU.Build.0 = Debug|Any CPU
+		{81BCE5EC-B7D4-EC0F-1EB5-4F7C13E8FC33}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{81BCE5EC-B7D4-EC0F-1EB5-4F7C13E8FC33}.Release|Any CPU.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE

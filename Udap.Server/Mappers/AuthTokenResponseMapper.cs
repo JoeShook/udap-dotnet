@@ -8,7 +8,7 @@
 #endregion
 
 using AutoMapper;
-using Udap.Client.Authentication;
+using Udap.Common.Authentication;
 
 namespace Udap.Server.Mappers;
 public static class AuthTokenResponseMapper
