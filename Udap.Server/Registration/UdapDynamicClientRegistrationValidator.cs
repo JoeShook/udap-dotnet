@@ -15,29 +15,30 @@
 // 
 //
 
+using Duende.IdentityModel;
+using Duende.IdentityServer.Models;
+using Duende.IdentityServer.Services;
+using Duende.IdentityServer.Stores;
+using Microsoft.AspNetCore.Http;
+using Microsoft.AspNetCore.Http.Extensions;
+using Microsoft.AspNetCore.WebUtilities; // added
+using Microsoft.Extensions.Logging;
+using Microsoft.IdentityModel.JsonWebTokens;
+using Microsoft.IdentityModel.Tokens;
 using System.IdentityModel.Tokens.Jwt;
 using System.Net.Mime;
 using System.Security.Cryptography.X509Certificates;
 using System.Text;
-using Duende.IdentityServer.Models;
-using Duende.IdentityServer.Services;
-using Duende.IdentityServer.Stores;
-using Duende.IdentityModel;
-using Microsoft.AspNetCore.Http;
-using Microsoft.AspNetCore.Http.Extensions;
-using Microsoft.Extensions.Logging;
-using Microsoft.IdentityModel.JsonWebTokens;
-using Microsoft.IdentityModel.Tokens;
 using Udap.Common;
 using Udap.Common.Certificates;
 using Udap.Common.Extensions;
 using Udap.Common.Models;
+using Udap.Model;
 using Udap.Model.Registration;
 using Udap.Server.Configuration;
 using Udap.Server.Storage;
 using Udap.Server.Validation;
 using Udap.Util.Extensions;
-using static Udap.Model.UdapConstants;
 
 namespace Udap.Server.Registration;
 
@@ -181,8 +182,6 @@ public class UdapDynamicClientRegistrationValidator : IUdapDynamicClientRegistra
             }
         }
 
-
-
         if (document.Subject == null)
         {
             _logger.LogWarning("{Error}::{Description}", 
@@ -196,7 +195,6 @@ public class UdapDynamicClientRegistrationValidator : IUdapDynamicClientRegistra
 
         if (document.Subject != document.Issuer)
         {
-            
             _logger.LogWarning("{Error}::{Description}", 
                 UdapDynamicClientRegistrationErrors.InvalidSoftwareStatement, 
                 UdapDynamicClientRegistrationErrorDescriptions.SubNotEqualToIss);
@@ -218,7 +216,6 @@ public class UdapDynamicClientRegistrationValidator : IUdapDynamicClientRegistra
                 $"{UdapDynamicClientRegistrationErrorDescriptions.InvalidAud}: {aud}"));
         }
 
-
         var endpoint = new Uri(_httpContextAccessor.HttpContext!.Request.GetDisplayUrl());
 
         if (Uri.Compare(endpoint, aud,
@@ -235,8 +232,6 @@ public class UdapDynamicClientRegistrationValidator : IUdapDynamicClientRegistra
                 $"{UdapDynamicClientRegistrationErrorDescriptions.InvalidMatchAud}"));
         }
 
-        
-
         //TODO Server Config for iat window (clock skew?)
         if (document.IssuedAt == 0)
         {
@@ -250,7 +245,6 @@ public class UdapDynamicClientRegistrationValidator : IUdapDynamicClientRegistra
         }
 
         var iat = EpochTime.DateTime(document.IssuedAt.GetValueOrDefault()).ToUniversalTime();
-        // var exp = EpochTime.DateTime(document.Expiration).ToUniversalTime();
         //TODO Server Config for iat window (clock skew?)
         if (iat > DateTime.UtcNow.AddSeconds(5))
         {
@@ -323,10 +317,22 @@ public class UdapDynamicClientRegistrationValidator : IUdapDynamicClientRegistra
 
         _logger.LogDebug("Chain Validated {ClientId}", client.ClientId);
 
+        var (org, dataHolder) = ResolveOrgAndDataHolder(_httpContextAccessor.HttpContext, aud);
+        if (!string.IsNullOrWhiteSpace(org) && !string.IsNullOrWhiteSpace(dataHolder))
+        {
+            client.Properties[UdapServerConstants.ClientPropertyConstants.Organization] = org;
+            client.Properties[UdapServerConstants.ClientPropertyConstants.DataHolder] = dataHolder;
+        }
+        else
+        {
+            client.Properties[UdapServerConstants.ClientPropertyConstants.Organization] = UdapServerConstants.ClientPropertyConstants.DefaultOrgMap;
+            client.Properties[UdapServerConstants.ClientPropertyConstants.DataHolder] = UdapServerConstants.ClientPropertyConstants.DefaultOrgMap;
+        }
+
         //////////////////////////////
         // validate grant_types
         //////////////////////////////
-        if (jsonWebToken.Claims.FirstOrDefault(c => c.Type == RegistrationDocumentValues.GrantTypes) == null)
+        if (jsonWebToken.Claims.FirstOrDefault(c => c.Type == UdapConstants.RegistrationDocumentValues.GrantTypes) == null)
         {
             //
             // The jsonWeToken.Claims will always drop an empty array.  So we can not tell the difference
@@ -334,10 +340,10 @@ public class UdapDynamicClientRegistrationValidator : IUdapDynamicClientRegistra
             // So in this path we look at the payload for the grant_types string.
             //
             var payload = Base64UrlEncoder.Decode(jsonWebToken.EncodedPayload);
-            
+
             if (payload != null)
             {
-                if (!payload.Contains(RegistrationDocumentValues.GrantTypes))
+                if (!payload.Contains(UdapConstants.RegistrationDocumentValues.GrantTypes))
                 {
                     _logger.LogWarning("{Error}::{Description}",
                                        UdapDynamicClientRegistrationErrors.InvalidClientMetadata,
@@ -522,6 +528,60 @@ public class UdapDynamicClientRegistrationValidator : IUdapDynamicClientRegistra
 
         return await Task.FromResult(new UdapDynamicClientRegistrationValidationResult(client, document));
     }
+
+    // Extracts org/dataholder from:
+    //   Query:  /connect/register?{org}={dataholder}
+    // org is the parameter name; the value is any non-empty string.
+    private static (string? Org, string? Holder) ResolveOrgAndDataHolder(HttpContext? http, Uri aud)
+    {
+        if (TryGetOrgHolderFromQuery(aud, out var org, out var holder))
+        {
+            return (org, holder);
+        }
+
+        if (http is not null)
+        {
+            var requestUri = new Uri(http.Request.GetDisplayUrl());
+            if (TryGetOrgHolderFromQuery(requestUri, out org, out holder))
+            {
+                return (org, holder);
+            }
+        }
+
+        return (null, null);
+    }
+
+    private static bool TryGetOrgHolderFromQuery(Uri uri, out string? org, out string? holder)
+    {
+        org = null;
+        holder = null;
+
+        if (string.IsNullOrEmpty(uri.Query))
+        {
+            return false;
+        }
+
+        var q = QueryHelpers.ParseQuery(uri.Query);
+
+        // Select the first query parameter with a non-empty key and value.
+        foreach (var kv in q)
+        {
+            var key = kv.Key;
+            var value = kv.Value.FirstOrDefault();
+
+            if (string.IsNullOrWhiteSpace(key) || string.IsNullOrWhiteSpace(value))
+            {
+                continue;
+            }
+
+            org = key;
+            holder = value;
+            return true;
+        }
+
+        return false;
+    }
+
 
     public async Task<(bool, UdapDynamicClientRegistrationValidationResult?)> ValidateLogoUri(UdapDynamicClientRegistrationDocument document)
     {
