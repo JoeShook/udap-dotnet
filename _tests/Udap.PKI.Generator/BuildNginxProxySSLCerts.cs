@@ -159,13 +159,6 @@ public class BuildNginxProxySSLCerts : CertificateBase
         //
         // yield return new object[]
         // {
-        //     "CN=udap.fast.poolnook.me", //DistinguishedName
-        //     "udap.fast.poolnook.me" //SubjAltName
-        //
-        // };
-        //
-        // yield return new object[]
-        // {
         //     "CN=stage.healthtogo.me",                  //DistinguishedName
         //     "stage.healthtogo.me"                      //SubjAltName
         //
