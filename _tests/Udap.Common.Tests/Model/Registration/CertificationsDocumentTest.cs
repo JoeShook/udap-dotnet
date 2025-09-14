@@ -1,4 +1,4 @@
-#region (c) 2024 Joseph Shook. All rights reserved.
+#region (c) 2024-2025 Joseph Shook. All rights reserved;
 // /*
 //  Authors:
 //     Joseph Shook   Joseph.Shook@Surescripts.com
@@ -7,9 +7,9 @@
 // */
 #endregion
 
+using System.Security.Cryptography;
 using System.Security.Cryptography.X509Certificates;
 using System.Text.Json;
-using System.Text.Json.Serialization;
 using FluentAssertions;
 using Duende.IdentityModel;
 using Udap.Model.Registration;
@@ -426,6 +426,102 @@ namespace Udap.Common.Tests.Model.Registration
                 // The additional value private_key_jwt may also be used.
                 //
                 .BuildSoftwareStatement();
+        }
+
+        [Fact]
+        public void ClampedExpiration_DefaultsToFiveMinutes()
+        {
+            var cert = new X509Certificate2(Path.Combine("CertStore/issued", "FhirLabsAdminCertification.pfx"), "udap-test");
+            var before = DateTime.UtcNow.AddMinutes(5).AddSeconds(-5);
+            var after = DateTime.UtcNow.AddMinutes(5).AddSeconds(5);
+
+            var exp = UdapCertificationsAndEndorsementBuilder.WithClampedExpiration(TimeSpan.Zero, cert);
+
+            var expDt = DateTimeOffset.FromUnixTimeSeconds(exp).UtcDateTime;
+            expDt.Should().BeAfter(before).And.BeBefore(after);
+            expDt.Should().BeOnOrBefore(cert.NotAfter.ToUniversalTime());
+        }
+
+        [Fact]
+        public void ClampedExpiration_NegativeOffset_Throws()
+        {
+            var cert = new X509Certificate2(Path.Combine("CertStore/issued", "FhirLabsAdminCertification.pfx"), "udap-test");
+
+            Action act = () => UdapCertificationsAndEndorsementBuilder.WithClampedExpiration(TimeSpan.FromSeconds(-1), cert);
+            act.Should()
+                .Throw<ArgumentOutOfRangeException>()
+                .WithParameterName("expirationOffset");
+        }
+
+        [Fact]
+        public void ClampedExpiration_ExceedsThreeYearPolicy_Clamped()
+        {
+            var cert = new X509Certificate2(Path.Combine("CertStore/issued", "FhirLabsAdminCertification.pfx"), "udap-test");
+
+            var requested = TimeSpan.FromDays(365 * 5); // 5 years
+            var exp = UdapCertificationsAndEndorsementBuilder.WithClampedExpiration(requested, cert);
+
+            var expDt = DateTimeOffset.FromUnixTimeSeconds(exp).UtcDateTime;
+            var maxPolicy = DateTime.UtcNow.AddYears(3).AddSeconds(10); // allow small timing drift
+            expDt.Should().BeBefore(maxPolicy);
+        }
+
+        [Fact]
+        public void ClampedExpiration_ExceedsCertificate_NotAfterSafetyApplied()
+        {
+            var cert = new X509Certificate2(Path.Combine("CertStore/issued", "FhirLabsAdminCertification.pfx"), "udap-test");
+            var safetySeconds = 7;
+            var huge = TimeSpan.FromDays(2000);
+
+            var exp = UdapCertificationsAndEndorsementBuilder.WithClampedExpiration(huge, cert, safetySeconds);
+
+            var expected = cert.NotAfter.ToUniversalTime().AddSeconds(-safetySeconds);
+            var expDt = DateTimeOffset.FromUnixTimeSeconds(exp).UtcDateTime;
+
+            (expected - expDt).Duration().Should().BeLessThan(TimeSpan.FromSeconds(2));
+        }
+
+        [Fact]
+        public void ClampedExpiration_CertificateTooShort_Throws()
+        {
+            //
+            // This must create a certificate whose NotAfter is within (<=) safetySeconds of now
+            // so that certLimit = NotAfter - safetySeconds is <= now and the method throws.
+            //
+            using var rsa = RSA.Create(2048);
+            var now = DateTimeOffset.UtcNow;
+            var req = new CertificateRequest("CN=ShortLived", rsa, HashAlgorithmName.SHA256, RSASignaturePadding.Pkcs1);
+
+            // NotBefore slightly in past, NotAfter only 4 seconds in the future.
+            // Default safetySeconds = 5  => certLimit = (now + 4s) - 5s = now - 1s  => triggers the throw condition.
+            var veryShortCert = req.CreateSelfSigned(now.AddSeconds(-30), now.AddSeconds(4));
+
+            Action act = () => UdapCertificationsAndEndorsementBuilder.WithClampedExpiration(TimeSpan.Zero, veryShortCert);
+            act.Should()
+                .Throw<ArgumentOutOfRangeException>()
+                .WithParameterName("certificate");
+        }
+
+        [Fact]
+        public void ClampedExpiration_CertificateSoonButNotTooSoon_IsClampedNotThrown()
+        {
+            //
+            // Certificate that expires soon (e.g. 90 seconds) but still outside safety window.
+            // Should clamp (not throw) and set exp to NotAfter - safetySeconds.
+            //
+            using var rsa = RSA.Create(2048);
+            var now = DateTimeOffset.UtcNow;
+            var req = new CertificateRequest("CN=ShortButValid", rsa, HashAlgorithmName.SHA256, RSASignaturePadding.Pkcs1);
+            var shortButValidCert = req.CreateSelfSigned(now.AddSeconds(-10), now.AddSeconds(90)); // ~90s lifetime remaining
+
+            var safetySeconds = 5;
+            var exp = UdapCertificationsAndEndorsementBuilder.WithClampedExpiration(TimeSpan.Zero, shortButValidCert, safetySeconds);
+
+            var expDt = DateTimeOffset.FromUnixTimeSeconds(exp).UtcDateTime;
+            var expected = shortButValidCert.NotAfter.ToUniversalTime().AddSeconds(-safetySeconds);
+
+            // Allow tiny drift
+            (expected - expDt).Duration().Should().BeLessThan(TimeSpan.FromSeconds(2));
         }
     }
 

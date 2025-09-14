@@ -1,4 +1,4 @@
-﻿#region (c) 2024 Joseph Shook. All rights reserved.
+﻿#region (c) 2024-2025 Joseph Shook. All rights reserved.
 // /*
 //  Authors:
 //     Joseph Shook   Joseph.Shook@Surescripts.com
@@ -21,7 +21,7 @@ namespace Udap.Model.Registration;
 /// </summary>
 public class UdapCertificationsAndEndorsementBuilder
 {
-    private readonly DateTime _noUniversal;
+    private readonly DateTime _nowUtc;
     private readonly UdapCertificationAndEndorsementDocument _document;
     private X509Certificate2? _certificate;
 
@@ -33,13 +33,13 @@ public class UdapCertificationsAndEndorsementBuilder
     protected UdapCertificationsAndEndorsementBuilder(string certificationName, X509Certificate2 certificate) : this(certificationName)
     {
         
-        _noUniversal = DateTime.Now.ToUniversalTime();
+        _nowUtc = DateTime.Now.ToUniversalTime();
         this.WithCertificate(certificate);
     }
 
     protected UdapCertificationsAndEndorsementBuilder(string certificationName)
     {
-        _noUniversal = DateTime.Now.ToUniversalTime();
+        _nowUtc = DateTime.Now.ToUniversalTime();
         _document = new UdapCertificationAndEndorsementDocument(certificationName);
     }
 
@@ -83,7 +83,7 @@ public class UdapCertificationsAndEndorsementBuilder
     /// <returns></returns>
     public UdapCertificationsAndEndorsementBuilder WithExpiration(TimeSpan expirationOffset)
     {
-        if (expirationOffset > _noUniversal.AddYears(3) - _noUniversal)
+        if (expirationOffset > _nowUtc.AddYears(3) - _nowUtc)
         {
             throw new ArgumentOutOfRangeException(nameof(expirationOffset), "Expiration limit to 3 years");
         }
@@ -93,12 +93,12 @@ public class UdapCertificationsAndEndorsementBuilder
             throw new Exception("Certificate required");
         }
 
-        if (_certificate.NotAfter.ToUniversalTime() < (_noUniversal.Add(expirationOffset)))
+        if (_certificate.NotAfter.ToUniversalTime() < (_nowUtc.Add(expirationOffset)))
         {
-            throw new ArgumentOutOfRangeException(nameof(expirationOffset), "Expiration must not expire after certificate");
+            throw new ArgumentOutOfRangeException(nameof(expirationOffset), "Expiration must not expire after certificate.  Consider using ");
         }
 
-        _document.Expiration = EpochTime.GetIntDate(_noUniversal.Add(expirationOffset));
+        _document.Expiration = EpochTime.GetIntDate(_nowUtc.Add(expirationOffset));
         return this;
     }
 
@@ -109,7 +109,7 @@ public class UdapCertificationsAndEndorsementBuilder
     /// <returns></returns>
     public UdapCertificationsAndEndorsementBuilder WithExpiration(DateTime expiration)
     {
-        return WithExpiration(expiration.ToUniversalTime() - _noUniversal);
+        return WithExpiration(expiration.ToUniversalTime() - _nowUtc);
     }
 
     /// <summary>
@@ -120,6 +120,110 @@ public class UdapCertificationsAndEndorsementBuilder
     public UdapCertificationsAndEndorsementBuilder WithExpiration(long secondsSinceEpoch)
     {
         return WithExpiration(EpochTime.DateTime(secondsSinceEpoch).ToLocalTime());
+    }
+
+    /// <summary>
+    /// Computes a clamped expiration (Unix time seconds) based on the requested offset.
+    /// Behavior:
+    /// - If expirationOffset == TimeSpan.Zero a default of now + 5 minutes is used.
+    /// - Result will never be later than:
+    ///     1) now + 3 years (UDAP rule), AND
+    ///     2) certificate.NotAfter (minus safetySeconds).
+    /// - If requested offset exceeds limits it is clamped (not thrown) down to the maximum allowed.
+    /// - Throws only if the certificate is too close to expiry to allow any valid expiration.
+    /// - Negative offsets are rejected.
+    /// </summary>
+    /// <param name="expirationOffset">Requested lifetime relative to now; TimeSpan.Zero triggers default (5 minutes).</param>
+    /// <param name="certificate">Client certificate whose NotAfter bounds the expiration.</param>
+    /// <param name="safetySeconds">Number of seconds subtracted from certificate.NotAfter to avoid equality boundary issues.</param>
+    /// <returns>Unix time seconds (int) representing the clamped expiration.</returns>
+    public static int WithClampedExpiration(
+        TimeSpan expirationOffset,
+        X509Certificate2 certificate,
+        int safetySeconds = 5)
+    {
+        if (certificate == null)
+        {
+            throw new ArgumentNullException(nameof(certificate));
+        }
+
+        if (safetySeconds < 0)
+        {
+            throw new ArgumentOutOfRangeException(nameof(safetySeconds), "Safety margin cannot be negative.");
+        }
+
+        if (expirationOffset < TimeSpan.Zero)
+        {
+            throw new ArgumentOutOfRangeException(nameof(expirationOffset), "Expiration offset cannot be negative.");
+        }
+
+        var nowUtc = DateTime.UtcNow;
+
+        // Certificate limit (minus safety margin)
+        var certNotAfterUtc = certificate.NotAfter.ToUniversalTime();
+        var certLimit = certNotAfterUtc.AddSeconds(-safetySeconds);
+
+        if (certLimit <= nowUtc)
+        {
+            throw new ArgumentOutOfRangeException(nameof(certificate),
+                "Certificate expires too soon to establish a valid expiration.");
+        }
+
+        // Policy limit: max 3 years
+        var policyLimit = nowUtc.AddYears(3);
+
+        // Effective upper bound
+        var absoluteMax = certLimit < policyLimit ? certLimit : policyLimit;
+
+        // Default of 5 minutes if zero offset was supplied.
+        var requestedExpiry = expirationOffset == TimeSpan.Zero
+            ? nowUtc.AddMinutes(5)
+            : nowUtc.Add(expirationOffset);
+
+        // Clamp to maximum allowed.
+        if (requestedExpiry > absoluteMax)
+        {
+            requestedExpiry = absoluteMax;
+        }
+
+        // Ensure expiration is at least > now (add 1 second if necessary)
+        if (requestedExpiry <= nowUtc)
+        {
+            requestedExpiry = nowUtc.AddSeconds(1);
+        }
+
+        // EpochTime.GetIntDate returns a long. We cast to int per method signature (valid until 2038).
+        return (int)EpochTime.GetIntDate(requestedExpiry);
+    }
+
+    /// <summary>
+    /// Sets a clamped expiration using a requested offset. See static WithClampedExpiration for rules.
+    /// </summary>
+    public UdapCertificationsAndEndorsementBuilder WithClampedExpiration(TimeSpan expirationOffset)
+    {
+        if (_certificate == null)
+        {
+            throw new Exception("Certificate required");
+        }
+
+        _document.Expiration = WithClampedExpiration(expirationOffset, _certificate);
+        return this;
+    }
+
+    /// <summary>
+    /// Sets a clamped expiration using an absolute DateTime (converted to offset from builder's now, then clamped).
+    /// </summary>
+    public UdapCertificationsAndEndorsementBuilder WithClampedExpiration(DateTime expiration)
+    {
+        return WithClampedExpiration(expiration.ToUniversalTime() - _nowUtc);
+    }
+
+    /// <summary>
+    /// Sets a clamped expiration using seconds since epoch (converted to DateTime then clamped).
+    /// </summary>
+    public UdapCertificationsAndEndorsementBuilder WithClampedExpiration(long secondsSinceEpoch)
+    {
+        return WithClampedExpiration(EpochTime.DateTime(secondsSinceEpoch).ToUniversalTime() - _nowUtc);
     }
 
     /// <summary>
