@@ -366,7 +366,7 @@ public class UdapDynamicClientRegistrationValidator : IUdapDynamicClientRegistra
         }
 
         // we only support the two above grant types but, an empty GrantType is an indication of a cancel registration action.
-        // TODO: This whole method needs to be migrated into a better software pattern.  Also, UdapTieredOAuthMiddleware now has this logic
+        // TODO: This whole method needs to be migrated into a better software pattern.
         if (client.AllowedGrantTypes.Count == 0 && 
             document.GrantTypes != null && 
             document.GrantTypes.Count != 0)
