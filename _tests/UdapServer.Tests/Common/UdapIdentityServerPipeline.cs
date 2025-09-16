@@ -304,7 +304,7 @@ public class UdapIdentityServerPipeline
         });
 
         app.UseUdapMetadataServer();
-        app.UseUdapIdPServer();
+        app.UseUdapServer();
         app.UseIdentityServer();
 
         
