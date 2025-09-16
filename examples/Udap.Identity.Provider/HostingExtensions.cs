@@ -226,7 +226,7 @@ internal static class HostingExtensions
         app.UseRouting();
 
         app.UseUdapMetadataServer();
-        app.UseUdapIdPServer();
+        app.UseUdapServer();
         app.UseIdentityServer();
         
         

@@ -7,16 +7,11 @@
 // */
 #endregion
 
-using System.Net;
-using System.Net.Http.Headers;
-using System.Net.Http.Json;
-using System.Security.Claims;
-using System.Security.Cryptography.X509Certificates;
-using System.Text.Json;
-using Duende.IdentityServer.Models;
-using FluentAssertions;
 using Duende.IdentityModel;
 using Duende.IdentityModel.Client;
+using Duende.IdentityServer;
+using Duende.IdentityServer.Models;
+using FluentAssertions;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
@@ -24,6 +19,12 @@ using Microsoft.IdentityModel.JsonWebTokens;
 using Microsoft.IdentityModel.Tokens;
 using Newtonsoft.Json.Linq;
 using NSubstitute;
+using System.Net;
+using System.Net.Http.Headers;
+using System.Net.Http.Json;
+using System.Security.Claims;
+using System.Security.Cryptography.X509Certificates;
+using System.Text.Json;
 using Udap.Client.Client;
 using Udap.Client.Client.Extensions;
 using Udap.Client.Configuration;
@@ -1280,5 +1281,68 @@ public class ClientCredentialsUdapModeTests
         
     }
 
+    /// <summary>
+    /// Don't forget to add .AddJwtBearerClientAuthentication() to the IdentityServer configuration
+    /// if you are going to enable compact JWS that are not UDAP.  They can coexist with UDAP
+    /// in your client store. 
+    /// </summary>
+    /// <returns></returns>
+    [Fact]
+    public async Task GetAccessToken_With_Standard_X509CertificateBase64_Secret()
+    {
+        var clientCert = new X509Certificate2("CertStore/issued/fhirlabs.net.client.pfx", "udap-test");
+        var clientId = "test_client_x509";
 
+        _mockPipeline.Clients.Add(new Client
+        {
+            ClientId = clientId,
+            AllowedGrantTypes = GrantTypes.ClientCredentials,
+            AllowedScopes = { "system/Patient.rs" },
+            RequireClientSecret = true,
+            ClientSecrets = new List<Secret>
+            {
+                new Secret(Convert.ToBase64String(clientCert.RawData), "Test X509 Cert")
+                {
+                    Type = IdentityServerConstants.SecretTypes.X509CertificateBase64
+                }
+            }
+        });
+
+        //
+        // Get Access Token
+        //
+        var now = DateTime.UtcNow;
+        var tokenDescriptor = new SecurityTokenDescriptor
+        {
+            Issuer = clientId,
+            Subject = new ClaimsIdentity(new[] { new Claim(JwtClaimTypes.Subject, clientId) }),
+            Audience = IdentityServerPipeline.TokenEndpoint,
+            Expires = now.AddMinutes(5),
+            IssuedAt = now,
+            NotBefore = now,
+            SigningCredentials = new SigningCredentials(new X509SecurityKey(clientCert), "RS384"),
+            Claims = new Dictionary<string, object> { { JwtClaimTypes.JwtId, CryptoRandom.CreateUniqueId() } }
+        };
+
+        var tokenHandler = new JsonWebTokenHandler();
+        var clientAssertion = tokenHandler.CreateToken(tokenDescriptor);
+        _testOutputHelper.WriteLine(clientAssertion);
+        var clientRequest = new ClientCredentialsTokenRequest
+        {
+            Address = IdentityServerPipeline.TokenEndpoint,
+            ClientId = clientId,
+            Scope = "system/Patient.rs",
+            ClientCredentialStyle = ClientCredentialStyle.PostBody,
+            ClientAssertion = new ClientAssertion
+            {
+                Type = OidcConstants.ClientAssertionTypes.JwtBearer,
+                Value = clientAssertion
+            }
+        };
+
+        var tokenResponse = await _mockPipeline.BackChannelClient.RequestClientCredentialsTokenAsync(clientRequest);
+
+        tokenResponse.IsError.Should().BeFalse(tokenResponse.Error);
+        tokenResponse.Scope.Should().Be("system/Patient.rs", tokenResponse.Raw);
+    }
 }

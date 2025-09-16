@@ -80,6 +80,9 @@ public class InMemoryUdapClientRegistrationStore : IUdapClientRegistrationStore
             .SingleOrDefault(cs => cs.Type == UdapServerConstants.SecretTypes.UDAP_COMMUNITY)
             ?.Value;
 
+        client.Properties.TryGetValue(UdapServerConstants.ClientPropertyConstants.Organization, out var org);
+        client.Properties.TryGetValue(UdapServerConstants.ClientPropertyConstants.DataHolder, out var dataHolder);
+        
         var existingClient = _clients.SingleOrDefault(c => 
             // ISS
             c.ClientSecrets.Any(cs =>
@@ -88,7 +91,9 @@ public class InMemoryUdapClientRegistrationStore : IUdapClientRegistrationStore
             // Community
             c.ClientSecrets.Any(cs =>
                 cs.Type == UdapServerConstants.SecretTypes.UDAP_COMMUNITY &&
-                cs.Value == community));
+                cs.Value == community) &&
+            c.Properties.Any(p => p.Key == UdapServerConstants.ClientPropertyConstants.Organization && p.Value == org) &&
+            c.Properties.Any(p => p.Key == UdapServerConstants.ClientPropertyConstants.DataHolder && p.Value == dataHolder));
 
         if (existingClient != null)
         {
@@ -147,6 +152,9 @@ public class InMemoryUdapClientRegistrationStore : IUdapClientRegistrationStore
             .SingleOrDefault(cs => cs.Type == UdapServerConstants.SecretTypes.UDAP_COMMUNITY)
             ?.Value;
 
+        client.Properties.TryGetValue(UdapServerConstants.ClientPropertyConstants.Organization, out var org);
+        client.Properties.TryGetValue(UdapServerConstants.ClientPropertyConstants.DataHolder, out var dataHolder);
+
         var clientsFound = _clients.Where(c => 
             // ISS
             c.ClientSecrets.Any(cs =>
@@ -155,7 +163,9 @@ public class InMemoryUdapClientRegistrationStore : IUdapClientRegistrationStore
             // Community
             c.ClientSecrets.Any(cs =>
                 cs.Type == UdapServerConstants.SecretTypes.UDAP_COMMUNITY &&
-                cs.Value == community))
+                cs.Value == community) &&
+            c.Properties.Any(p => p.Key == UdapServerConstants.ClientPropertyConstants.Organization && p.Value == org) &&
+            c.Properties.Any(p => p.Key == UdapServerConstants.ClientPropertyConstants.DataHolder && p.Value == dataHolder))
             .Select(c => c)
             .ToList();
 

@@ -191,7 +191,8 @@ public class UdapAuthServerPipeline
             .AddInMemoryIdentityResources(IdentityScopes)
             .AddInMemoryApiResources(ApiResources)
             .AddTestUsers(Users)
-            .AddDeveloperSigningCredential(persistKey: false);
+            .AddDeveloperSigningCredential(persistKey: false)
+            .AddJwtBearerClientAuthentication();
             
 
         // BackChannelMessageHandler is used by .AddTieredOAuthForTest()

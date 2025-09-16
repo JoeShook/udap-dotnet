@@ -20,6 +20,24 @@
       }
     },
 
+    //
+    //  Many dataholder in the same organization can be client isolated by adding
+    //  the {org}={dataholder} query parameter to the endpoints.
+    //  This will inform the Authorization server to register a unique client per dataholder
+    //  even if using the same UDAP client certificate and subject-alt name.
+    //
+    //  /connect/register?{org}={dataholder}
+    //  /connect/token?{org}={dataholder}
+    //
+    // {
+    //  "Community": "udap://fhirlabs1/",
+    //  "SignedMetadataConfig": {
+    //    "AuthorizationEndpoint": "https://host.docker.internal:5002/connect/authorize",
+    //    "TokenEndpoint": "https://host.docker.internal:5002/connect/token?orgA=https://host.docker.internal:7016/fhir/r4",
+    //    "RegistrationEndpoint": "https://host.docker.internal:5002/connect/register?orgA=https://host.docker.internal:7016/fhir/r4"
+    //  }
+    //},
+
     {
       "Community": "udap://Provider2",
       "SignedMetadataConfig": {

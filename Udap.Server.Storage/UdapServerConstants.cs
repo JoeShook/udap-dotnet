@@ -16,4 +16,11 @@ public static class UdapServerConstants
         public const string UDAP_SAN_URI_ISS_NAME = "UDAP_SAN_URI_ISS_NAME";
         public const string UDAP_COMMUNITY = "UDAP_COMMUNITY";
     }
+
+    public static class ClientPropertyConstants
+    {
+        public const string Organization = "org";
+        public const string DataHolder = "data_holder";
+        public const string DefaultOrgMap = "empty";
+    }
 }

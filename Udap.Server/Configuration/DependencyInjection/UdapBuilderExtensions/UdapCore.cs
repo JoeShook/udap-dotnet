@@ -77,12 +77,7 @@ public static  class UdapServiceBuilderExtensionsCore
         return builder;
     }
 
-    public static IUdapServiceBuilder AddUdapConfigurationStore(
-        this IUdapServiceBuilder builder,
-        Action<UdapConfigurationStoreOptions>? storeOptionAction = null)
-    {
-        return builder.AddUdapConfigurationStore<UdapDbContext>(storeOptionAction);
-    }
+    
 
     public static IUdapServiceBuilder AddUdapConfigurationStore<TContext>(
         this IUdapServiceBuilder builder,

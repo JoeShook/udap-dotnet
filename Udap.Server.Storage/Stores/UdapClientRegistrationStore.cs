@@ -56,19 +56,27 @@ namespace Udap.Server.Storage.Stores
                 .SingleOrDefault(cs => cs.Type == UdapServerConstants.SecretTypes.UDAP_COMMUNITY)
                 ?.Value;
 
+            client.Properties.TryGetValue(UdapServerConstants.ClientPropertyConstants.Organization, out var org);
+            client.Properties.TryGetValue(UdapServerConstants.ClientPropertyConstants.DataHolder, out var dataHolder);
+
             var existingClient = await _dbContext.Clients
                 .Include(c => c.AllowedScopes)
                 .Include(c => c.RedirectUris)
                 .Include(c => c.AllowedGrantTypes)
+                .Include(c => c.Properties)
                 .SingleOrDefaultAsync(c =>
-                // ISS
-                c.ClientSecrets.Any(cs =>
-                cs.Type == UdapServerConstants.SecretTypes.UDAP_SAN_URI_ISS_NAME &&
-                cs.Value == iss) &&
-                // Community
-                c.ClientSecrets.Any(cs =>
-                cs.Type == UdapServerConstants.SecretTypes.UDAP_COMMUNITY &&
-                cs.Value == community), cancellationToken: token);
+                    // ISS
+                    c.ClientSecrets.Any(cs =>
+                    cs.Type == UdapServerConstants.SecretTypes.UDAP_SAN_URI_ISS_NAME &&
+                    cs.Value == iss) &&
+                    // Community
+                    c.ClientSecrets.Any(cs =>
+                    cs.Type == UdapServerConstants.SecretTypes.UDAP_COMMUNITY &&
+                    cs.Value == community) &&
+                    // Must have BOTH key/value properties
+                    c.Properties.Any(p => p.Key == UdapServerConstants.ClientPropertyConstants.Organization && p.Value == org) &&
+                    c.Properties.Any(p => p.Key == UdapServerConstants.ClientPropertyConstants.DataHolder && p.Value == dataHolder),
+                    cancellationToken: token);
 
             if (existingClient != null)
             {
@@ -145,18 +153,25 @@ namespace Udap.Server.Storage.Stores
                 .SingleOrDefault(cs => cs.Type == UdapServerConstants.SecretTypes.UDAP_COMMUNITY)
                 ?.Value;
 
-            var clientsFound = _dbContext.Clients
+            client.Properties.TryGetValue(UdapServerConstants.ClientPropertyConstants.Organization, out var org);
+            client.Properties.TryGetValue(UdapServerConstants.ClientPropertyConstants.DataHolder, out var dataHolder);
+
+            var clientsFound = await _dbContext.Clients
                 // ISS
                 .Where(c =>
                     c.ClientSecrets.Any(cs =>
                         cs.Type == UdapServerConstants.SecretTypes.UDAP_SAN_URI_ISS_NAME &&
                         cs.Value == iss) &&
-                // Community
+                    // Community
                     c.ClientSecrets.Any(cs =>
                         cs.Type == UdapServerConstants.SecretTypes.UDAP_COMMUNITY &&
-                        cs.Value == community))
+                        cs.Value == community) &&
+                    // Must have BOTH key/value properties
+                    c.Properties.Any(p => p.Key == UdapServerConstants.ClientPropertyConstants.Organization && p.Value == org) &&
+                    c.Properties.Any(p => p.Key == UdapServerConstants.ClientPropertyConstants.DataHolder && p.Value == dataHolder)
+                )
                 .Select(c => c)
-                .ToList();
+                .ToListAsync(cancellationToken: token);
 
             if (clientsFound.Count != 0)
             {
