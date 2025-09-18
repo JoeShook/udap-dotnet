@@ -31,7 +31,7 @@
     <PackageReference Include="AutoMapper" Version="14.0.0" />
     <PackageReference Include="Duende.IdentityServer" Version="7.3.1" />
     <PackageReference Include="Duende.IdentityServer.AspNetIdentity" Version="7.3.1" />
-    <PackageReference Include="Duende.IdentityServer.EntityFramework.Storage" Version="7.3.1" />
+    <PackageReference Include="Duende.IdentityServer.EntityFramework.Storage" Version="7.3.2" />
     <PackageReference Include="Microsoft.AspNetCore.Authentication.OpenIdConnect" Version="8.0.19" Condition="'$(TargetFramework)' == 'net8.0'" />
     <PackageReference Include="Microsoft.AspNetCore.Authentication.OpenIdConnect" Version="9.0.8" Condition="'$(TargetFramework)' == 'net9.0'" />
     <PackageReference Include="Microsoft.AspNetCore.DataProtection.EntityFrameworkCore" Version="8.0.19" Condition="'$(TargetFramework)' == 'net8.0'" />
