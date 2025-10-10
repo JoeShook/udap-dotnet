@@ -143,7 +143,8 @@ public class UdapDbContext<TContext> : DbContext, IUdapDbAdminContext, IUdapDbCo
 
         if (Database.ProviderName == "Npgsql.EntityFrameworkCore.PostgreSQL")
         {
-            modelBuilder.HasDefaultSchema("udap");
+            var schema = UdapStoreOptions?.DefaultSchema?.Trim() ?? "udap";
+            modelBuilder.HasDefaultSchema(schema);
 
             foreach (var entity in modelBuilder.Model.GetEntityTypes())
             {
