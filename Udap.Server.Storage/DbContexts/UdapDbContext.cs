@@ -82,6 +82,7 @@ public class UdapDbContext<TContext> : DbContext, IUdapDbAdminContext, IUdapDbCo
     public UdapDbContext(DbContextOptions<TContext> options, bool migrateClientTables = false) : base(options)
     {
         _migrateClientTables = migrateClientTables;
+        UdapStoreOptions = this.GetService<UdapConfigurationStoreOptions>();
     }
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
