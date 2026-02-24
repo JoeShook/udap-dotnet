@@ -16,4 +16,8 @@ public class UpdateCrlSettings : CommandSettings
     [CommandOption("--prod")]
     [Description("Run in production mode (default is test mode)")]
     public bool IsProduction { get; set; }
+
+    [CommandOption("--password")]
+    [Description("CA P12 password for non-interactive use. Can also be set via CA_P12_PASSWORD env var.")]
+    public string? Password { get; set; }
 }

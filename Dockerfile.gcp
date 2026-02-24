@@ -1,0 +1,91 @@
+# Build from repo root:
+#   docker build -t udap-gcp -f Dockerfile.gcp .
+#
+# Run interactively (first time — creates named volume for gcloud creds):
+#   docker run -it --name udap-gcp -v udap-gcloud-config:/root/.config/gcloud udap-gcp
+#
+# Re-enter after stopping:
+#   docker start -ai udap-gcp
+#
+# gcloud credentials persist in the "udap-gcloud-config" named volume across
+# container restarts. Authenticate once with:
+#   gcloud auth application-default login
+#   gcloud config set project <YOUR_PROJECT_ID>
+
+FROM mcr.microsoft.com/dotnet/sdk:9.0
+
+# Install gcloud CLI
+RUN apt-get update && \
+    apt-get install -y --no-install-recommends \
+        curl gnupg apt-transport-https ca-certificates && \
+    echo "deb [signed-by=/usr/share/keyrings/cloud.google.gpg] https://packages.cloud.google.com/apt cloud-sdk main" \
+      > /etc/apt/sources.list.d/google-cloud-sdk.list && \
+    curl -fsSL https://packages.cloud.google.com/apt/doc/apt-key.gpg \
+      | gpg --dearmor -o /usr/share/keyrings/cloud.google.gpg && \
+    apt-get update && \
+    apt-get install -y --no-install-recommends google-cloud-cli && \
+    apt-get clean && \
+    rm -rf /var/lib/apt/lists/*
+
+WORKDIR /src
+
+# Copy solution and build infrastructure files first (better layer caching)
+COPY ["global.json", "."]
+COPY ["nuget.config", "."]
+COPY ["Directory.Build.props", "."]
+COPY ["Common.props", "."]
+COPY ["Directory.Packages.props", "."]
+COPY ["_tests/Directory.Packages.props", "_tests/"]
+COPY ["Udap.sln", "."]
+
+# Copy all project files for restore (cached unless .csproj files change)
+# -- Core libraries --
+COPY ["Udap.Model/Udap.Model.csproj", "Udap.Model/"]
+COPY ["Udap.Util/Udap.Util.csproj", "Udap.Util/"]
+COPY ["Udap.Common/Udap.Common.csproj", "Udap.Common/"]
+COPY ["Udap.Client/Udap.Client.csproj", "Udap.Client/"]
+COPY ["Udap.Metadata.Server/Udap.Metadata.Server.csproj", "Udap.Metadata.Server/"]
+COPY ["Udap.Server/Udap.Server.csproj", "Udap.Server/"]
+COPY ["Udap.Server.Storage/Udap.Server.Storage.csproj", "Udap.Server.Storage/"]
+COPY ["Udap.UI/Udap.UI.csproj", "Udap.UI/"]
+COPY ["Udap.Smart.Model/Udap.Smart.Model.csproj", "Udap.Smart.Model/"]
+COPY ["Udap.Smart.Metadata/Udap.Smart.Metadata.csproj", "Udap.Smart.Metadata/"]
+COPY ["Udap.CdsHooks.Model/Udap.CdsHooks.Model.csproj", "Udap.CdsHooks.Model/"]
+COPY ["Udap.CdsHooks.Endpoint/Udap.CdsHooks.Endpoint.csproj", "Udap.CdsHooks.Endpoint/"]
+# -- Examples --
+COPY ["examples/FhirLabsApi/FhirLabsApi.csproj", "examples/FhirLabsApi/"]
+COPY ["examples/Udap.Auth.Server/Udap.Auth.Server.csproj", "examples/Udap.Auth.Server/"]
+COPY ["examples/Udap.Auth.Server.Admin/Udap.Auth.Server.Admin.csproj", "examples/Udap.Auth.Server.Admin/"]
+COPY ["examples/Udap.Identity.Provider/Udap.Identity.Provider.csproj", "examples/Udap.Identity.Provider/"]
+COPY ["examples/Udap.Identity.Provider.2/Udap.Identity.Provider.2.csproj", "examples/Udap.Identity.Provider.2/"]
+COPY ["examples/Udap.Proxy.Server/Udap.Proxy.Server.csproj", "examples/Udap.Proxy.Server/"]
+COPY ["examples/Udap.CA/Udap.CA.csproj", "examples/Udap.CA/"]
+COPY ["examples/Udap.Pki.Cli/Udap.Pki.Cli.csproj", "examples/Udap.Pki.Cli/"]
+COPY ["examples/Udap.Certificates.Server/Udap.Certificates.Server.csproj", "examples/Udap.Certificates.Server/"]
+COPY ["examples/mTLS.Proxy.Server/mTLS.Proxy.Server.csproj", "examples/mTLS.Proxy.Server/"]
+COPY ["examples/Tefca.Proxy.Server/Tefca.Proxy.Server.csproj", "examples/Tefca.Proxy.Server/"]
+COPY ["examples/clients/1_UdapClientMetadata/1_UdapClientMetadata.csproj", "examples/clients/1_UdapClientMetadata/"]
+COPY ["examples/clients/2_UdapClientMetadata/2_UdapClientMetadata.csproj", "examples/clients/2_UdapClientMetadata/"]
+# -- Migrations --
+COPY ["migrations/UdapDb.SqlServer/UdapDb.SqlServer.csproj", "migrations/UdapDb.SqlServer/"]
+COPY ["migrations/UdapDb.Postgres/UdapDb.Postgres.csproj", "migrations/UdapDb.Postgres/"]
+# -- Tests --
+COPY ["_tests/Udap.Common.Tests/Udap.Common.Tests.csproj", "_tests/Udap.Common.Tests/"]
+COPY ["_tests/Udap.Support.Tests/Udap.Support.Tests.csproj", "_tests/Udap.Support.Tests/"]
+COPY ["_tests/Udap.PKI.Generator/Udap.PKI.Generator.csproj", "_tests/Udap.PKI.Generator/"]
+COPY ["_tests/UdapServer.Tests/UdapServer.Tests.csproj", "_tests/UdapServer.Tests/"]
+COPY ["_tests/UdapMetadata.Tests/UdapMetadata.Tests.csproj", "_tests/UdapMetadata.Tests/"]
+COPY ["_tests/Udap.CA.Tests/Udap.CA.Tests.csproj", "_tests/Udap.CA.Tests/"]
+COPY ["_tests/Udap.Client.System.Tests/Udap.Client.System.Tests.csproj", "_tests/Udap.Client.System.Tests/"]
+COPY ["_tests/Udap.Idi.Patient.Match.Tests/Udap.Idi.Patient.Match.Tests.csproj", "_tests/Udap.Idi.Patient.Match.Tests/"]
+
+RUN dotnet restore "Udap.sln"
+
+# Copy everything else and build
+COPY . .
+RUN dotnet build "Udap.sln" -c Release --no-restore
+
+# Volume mount point for gcloud credentials
+VOLUME ["/root/.config/gcloud"]
+
+ENTRYPOINT ["/bin/bash"]
