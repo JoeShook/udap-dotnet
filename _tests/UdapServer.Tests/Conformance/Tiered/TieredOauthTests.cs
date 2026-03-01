@@ -77,7 +77,8 @@ public class TieredOauthTests
             {
                 ForceStateParamOnAuthorizationCode = true, //false (default)
                 RequirePkce = false,
-                RequireConsent = false
+                RequireConsent = false,
+                SsraaVersion = SsraaVersion.V1_1
             });
 
             services.AddSingleton<IOptionsMonitor<UdapClientOptions>>(new OptionsMonitorForTests<UdapClientOptions>(
@@ -242,6 +243,7 @@ public class TieredOauthTests
                     serverSettings.AlwaysIncludeUserClaimsInIdToken = true;
                     serverSettings.RequireConsent = false;
                     serverSettings.RequirePkce = false;
+                    serverSettings.SsraaVersion = SsraaVersion.V1_1;
                     return serverSettings;
                 });
            
@@ -326,6 +328,7 @@ public class TieredOauthTests
                     serverSettings.AlwaysIncludeUserClaimsInIdToken = true;
                     serverSettings.RequireConsent = false;
                     serverSettings.RequirePkce = false;
+                    serverSettings.SsraaVersion = SsraaVersion.V1_1;
                     return serverSettings;
                 });
             

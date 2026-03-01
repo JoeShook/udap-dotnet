@@ -53,5 +53,6 @@ public static class UdapDynamicClientRegistrationErrorDescriptions
     public const string UnsupportedGrantType = "Unsupported grant type";
     public const string MalformedRedirectUri = "Malformed redirect uri";
     public const string RedirectUriRequiredForAuthCode = "Redirect uri is required for authorization_code grant type";
-    
+    public const string UnsupportedUdapVersion = "Unsupported UDAP version. Server supports: {0}";
+    public const string MissingUdapVersion = "udap version is missing from registration request";
 }

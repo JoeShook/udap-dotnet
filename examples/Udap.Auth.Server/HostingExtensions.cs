@@ -67,13 +67,7 @@ internal static class HostingExtensions
         builder.Services.AddUdapServer(
                 options =>
                 {
-                    var udapServerOptions = builder.Configuration.GetOption<ServerSettings>("ServerSettings");
-                    options.DefaultSystemScopes = udapServerOptions.DefaultSystemScopes;
-                    options.DefaultUserScopes = udapServerOptions.DefaultUserScopes;
-                    options.ForceStateParamOnAuthorizationCode = udapServerOptions.ForceStateParamOnAuthorizationCode;
-                    options.LogoRequired = udapServerOptions.LogoRequired;
-                    options.RequireConsent = udapServerOptions.RequireConsent;
-                    options.AllowRememberConsent = udapServerOptions.AllowRememberConsent;
+                    builder.Configuration.GetSection("ServerSettings").Bind(options);
                 },
                 // udapClientOptions =>
                 // {

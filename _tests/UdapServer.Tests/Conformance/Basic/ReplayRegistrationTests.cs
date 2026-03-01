@@ -47,7 +47,8 @@ public class ReplayRegistrationTests
             {
                 DefaultUserScopes = "udap",
                 DefaultSystemScopes = "udap",
-                ForceStateParamOnAuthorizationCode = true
+                ForceStateParamOnAuthorizationCode = true,
+                SsraaVersion = SsraaVersion.V1_1
             });
 
             s.AddSingleton<UdapClientOptions>(new UdapClientOptions
@@ -66,7 +67,8 @@ public class ReplayRegistrationTests
                 DefaultUserScopes = "udap",
                 DefaultSystemScopes = "udap",
                 ForceStateParamOnAuthorizationCode = true,
-                RegistrationJtiRequired = false
+                RegistrationJtiRequired = false,
+                SsraaVersion = SsraaVersion.V1_1
             });
 
             s.AddSingleton<UdapClientOptions>(new UdapClientOptions

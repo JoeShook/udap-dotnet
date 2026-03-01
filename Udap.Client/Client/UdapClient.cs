@@ -523,8 +523,7 @@ namespace Udap.Client.Client
                 var requestBody = new UdapRegisterRequest
                 (
                     signedSoftwareStatement,
-                    UdapConstants.UdapVersionsSupportedValue
-                    // Array.Empty<string>()
+                    _udapClientOptions.UdapVersion
                 );
 
                 // New StringContent constructor taking a MediaTypeHeaderValue to ensure CharSet can be controlled
@@ -633,8 +632,7 @@ namespace Udap.Client.Client
                 var requestBody = new UdapRegisterRequest
                 (
                     signedSoftwareStatement,
-                    UdapConstants.UdapVersionsSupportedValue
-                // Array.Empty<string>()
+                    _udapClientOptions.UdapVersion
                 );
 
                 // New StringContent constructor taking a MediaTypeHeaderValue to ensure CharSet can be controlled

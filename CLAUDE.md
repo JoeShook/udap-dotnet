@@ -10,6 +10,16 @@ UDAP SDK for .NET - A comprehensive implementation of the UDAP (Unified Data Acc
 **Target Frameworks**: .NET 8.0 and 9.0
 **Primary Maintainer**: Joseph Shook (Surescripts)
 
+## Line Endings
+
+**CRITICAL: This is a Windows repository using CRLF line endings. Never change line endings.**
+
+- All files in this repository use CRLF (`\r\n`) line endings
+- Do NOT use the Write tool to rewrite files that only need targeted edits — use the Edit tool instead, which preserves line endings
+- Do NOT use bash `sed`, `awk`, or other Unix tools that strip CRLF
+- After any bulk file operations, verify with `git diff --stat` that only intended files show code changes (not just line-ending diffs)
+- Files showing only CRLF→LF changes in `git diff` must be restored with `git restore <file>`
+
 ## Build Commands
 
 ```bash

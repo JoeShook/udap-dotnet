@@ -322,7 +322,7 @@ namespace UdapServer.Tests
 
             services.AddScoped<IUdapClientRegistrationStore, UdapClientRegistrationStore>();
             services.AddScoped<UdapDynamicClientRegistrationEndpoint, UdapDynamicClientRegistrationEndpoint>();
-            services.AddSingleton(new ServerSettings());
+            services.AddSingleton(new ServerSettings { SsraaVersion = SsraaVersion.V1_1 });
             
             var mockHttpContextAccessor = Substitute.For<IHttpContextAccessor>();
             var context = new DefaultHttpContext();
@@ -439,7 +439,7 @@ namespace UdapServer.Tests
 
             services.AddScoped<IUdapClientRegistrationStore, UdapClientRegistrationStore>();
             services.AddScoped<UdapDynamicClientRegistrationEndpoint, UdapDynamicClientRegistrationEndpoint>();
-            services.AddSingleton(new ServerSettings());
+            services.AddSingleton(new ServerSettings { SsraaVersion = SsraaVersion.V1_1 });
 
             var mockHttpContextAccessor = Substitute.For<IHttpContextAccessor>();
             var context = new DefaultHttpContext();
@@ -520,7 +520,7 @@ namespace UdapServer.Tests
         /// certificate included in the x5c JWT header
         ///
         /// The unique client URI used for the iss claim SHALL match the uriName entry in the Subject Alternative Name
-        /// extension of the client app operator’s X.509 certificate, and SHALL uniquely identify a single client app
+        /// extension of the client app operatorï¿½s X.509 certificate, and SHALL uniquely identify a single client app
         /// operator and application over time. 
         /// </summary>
         /// <returns></returns>
@@ -535,7 +535,7 @@ namespace UdapServer.Tests
         /// (1970-01-01T00:00:00Z UTC). The exp time SHALL be no more than 5 minutes after the value of the iat claim.
         ///
         /// The software statement is intended for one-time use with a single OAuth 2.0 server. As such, the aud
-        /// claim SHALL list the URL of the OAuth Server’s registration endpoint, and the lifetime of the software
+        /// claim SHALL list the URL of the OAuth Serverï¿½s registration endpoint, and the lifetime of the software
         /// statement (exp minus iat) SHALL be 5 minutes.
         /// </summary>
         /// <returns></returns>

@@ -1,0 +1,20 @@
+{
+  "permissions": {
+    "allow": [
+      "WebFetch(domain:hl7.org)",
+      "Bash(dotnet build:*)",
+      "Bash(dotnet test:*)",
+      "Bash(Get-ChildItem -Path \"$env:USERPROFILE\\\\.claude\\\\projects\" -Recurse -Filter \"*.jsonl\")",
+      "Bash(Where-Object { $_LastWriteTime -ge \"2025-01-26\" -and $_LastWriteTime -lt \"2025-01-27\" })",
+      "Bash(Select-Object FullName, LastWriteTime, Length)",
+      "Bash(ls:*)",
+      "Bash(claude /stats:*)",
+      "Bash(python3:*)",
+      "Bash(powershell:*)",
+      "Bash(dotnet sln:*)",
+      "Bash(find:*)",
+      "Bash(cd:*)",
+      "WebFetch(domain:build.fhir.org)"
+    ]
+  }
+}

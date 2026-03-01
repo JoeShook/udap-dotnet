@@ -63,7 +63,8 @@ public class ClientCredentialsUdapModeTests
             services.AddSingleton(new ServerSettings
             {
                 DefaultUserScopes = "udap",
-                DefaultSystemScopes = "udap"
+                DefaultSystemScopes = "udap",
+                SsraaVersion = SsraaVersion.V1_1 // Support both V1 and V2 for backward compatibility
             });
 
             services.AddSingleton<IOptionsMonitor<UdapClientOptions>>(new OptionsMonitorForTests<UdapClientOptions>(

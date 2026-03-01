@@ -87,6 +87,9 @@
     <None Update="CertStore\issued\sandbox.UdapLabsFhirStore.healthcare.client.pfx">
       <CopyToOutputDirectory>Always</CopyToOutputDirectory>
     </None>
+    <None Update="CertStore\issued\TefacaRce_FhirLabs.pfx">
+      <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+    </None>
     <None Update="CertStore\issued\touchstone.aegis.net.pfx">
       <CopyToOutputDirectory>Always</CopyToOutputDirectory>
     </None>

@@ -135,7 +135,7 @@ gcloud scheduler jobs create http udap-crl-weekly \
 From the repository root, submit via Cloud Build:
 
 ```bash
-gcloud builds submit --config examples/Udap.Pki.Cli/cloudbuild.yaml --substitutions=TAG_NAME="0.0.1"
+gcloud builds submit --config cloudbuild.yaml --substitutions=TAG_NAME="0.0.1"
 ```
 
 Subsequent deployments can also be automated via a Cloud Build trigger on tag push (step 7 above).
