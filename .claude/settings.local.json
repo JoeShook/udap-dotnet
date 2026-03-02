@@ -23,7 +23,9 @@
       "WebFetch(domain:automapper.io)",
       "WebFetch(domain:docs.automapper.io)",
       "WebFetch(domain:www.nuget.org)",
-      "Bash(head:*)"
+      "Bash(head:*)",
+      "Bash(tail:*)",
+      "Bash(dotnet tool list -g)"
     ]
   }
 }
