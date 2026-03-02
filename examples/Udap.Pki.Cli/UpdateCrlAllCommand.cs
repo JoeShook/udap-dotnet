@@ -5,7 +5,7 @@ namespace Udap.Pki.Cli;
 
 public class UpdateCrlAllCommand : AsyncCommand<UpdateCrlSettings>
 {
-    public override async Task<int> ExecuteAsync(CommandContext context, UpdateCrlSettings settings)
+    public override async Task<int> ExecuteAsync(CommandContext context, UpdateCrlSettings settings, CancellationToken cancellationToken)
     {
         var password = UpdateCrlCommand.ResolvePassword(settings);
 

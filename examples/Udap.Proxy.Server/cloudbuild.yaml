@@ -18,7 +18,7 @@ steps:
   '--service-account=udap-proxy-server@udap-idp.iam.gserviceaccount.com', 
   '--max-instances', '1',
   '--concurrency', '8', 
-  '--set-env-vars', 'GCLOUD_PROJECT=true,GCPDeploy=true,ServerSettings__SsraaVersion=V2_0',
+  '--set-env-vars', 'GCLOUD_PROJECT=true,GCPDeploy=true',
   '--set-secrets', '/secret/udapproxyserverappsettings=udapproxyserverappsettings:latest,/secret/metadata/udap.proxy.server.metadata.options.json=udap_proxy_server_metadata_options:latest',
   '--allow-unauthenticated'
   ]

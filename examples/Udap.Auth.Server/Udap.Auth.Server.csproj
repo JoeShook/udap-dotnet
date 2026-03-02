@@ -1,7 +1,7 @@
 ﻿<Project Sdk="Microsoft.NET.Sdk.Web">
 
   <PropertyGroup>
-    <TargetFramework>net9.0</TargetFramework>
+    <TargetFramework>net10.0</TargetFramework>
     <ImplicitUsings>enable</ImplicitUsings>
     <!-- Local dev box secretes TODO -->
     <!-- <UserSecretsId>e17eb5d1-fcd6-4149-b420-26b7e7d50e28</UserSecretsId> -->
@@ -16,25 +16,25 @@
   
   <ItemGroup>
     <PackageReference Include="AspNetCoreRateLimit" Version="5.0.0" />
-    <PackageReference Include="Duende.IdentityServer" Version="7.3.2" />
-    <PackageReference Include="Duende.IdentityServer.EntityFramework" Version="7.3.2" />
-    <PackageReference Include="EFCore.NamingConventions" Version="9.0.0" />
-    <PackageReference Include="Microsoft.EntityFrameworkCore.Design" Version="9.0.8">
+    <PackageReference Include="Duende.IdentityServer" Version="7.4.6" />
+    <PackageReference Include="Duende.IdentityServer.EntityFramework" Version="7.4.6" />
+    <PackageReference Include="EFCore.NamingConventions" Version="10.0.1" />
+    <PackageReference Include="Microsoft.EntityFrameworkCore.Design" Version="10.0.3">
       <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
       <PrivateAssets>all</PrivateAssets>
     </PackageReference>
-    <PackageReference Include="Microsoft.EntityFrameworkCore.Sqlite" Version="9.0.8" />
-    <PackageReference Include="Microsoft.EntityFrameworkCore.SqlServer" Version="9.0.8" />
-    <PackageReference Include="Microsoft.VisualStudio.Azure.Containers.Tools.Targets" Version="1.22.1" />
-    <PackageReference Include="Npgsql.EntityFrameworkCore.PostgreSQL" Version="9.0.4" />
-    <PackageReference Include="OpenTelemetry" Version="1.12.0" />
-    <PackageReference Include="OpenTelemetry.Exporter.Console" Version="1.12.0" />
-    <PackageReference Include="OpenTelemetry.Exporter.OpenTelemetryProtocol" Version="1.12.0" />
-    <PackageReference Include="OpenTelemetry.Extensions.Hosting" Version="1.12.0" />
-    <PackageReference Include="OpenTelemetry.Instrumentation.AspNetCore" Version="1.12.0" />
-    <PackageReference Include="OpenTelemetry.Instrumentation.Http" Version="1.12.0" />
-    <PackageReference Include="OpenTelemetry.Instrumentation.SqlClient" Version="1.0.0-rc9.14" />
-    <PackageReference Include="Serilog.AspNetCore" Version="9.0.0" />
+    <PackageReference Include="Microsoft.EntityFrameworkCore.Sqlite" Version="10.0.3" />
+    <PackageReference Include="Microsoft.EntityFrameworkCore.SqlServer" Version="10.0.3" />
+    <PackageReference Include="Microsoft.VisualStudio.Azure.Containers.Tools.Targets" Version="1.23.0" />
+    <PackageReference Include="Npgsql.EntityFrameworkCore.PostgreSQL" Version="10.0.0" />
+    <PackageReference Include="OpenTelemetry" Version="1.15.0" />
+    <PackageReference Include="OpenTelemetry.Exporter.Console" Version="1.15.0" />
+    <PackageReference Include="OpenTelemetry.Exporter.OpenTelemetryProtocol" Version="1.15.0" />
+    <PackageReference Include="OpenTelemetry.Extensions.Hosting" Version="1.15.0" />
+    <PackageReference Include="OpenTelemetry.Instrumentation.AspNetCore" Version="1.15.0" />
+    <PackageReference Include="OpenTelemetry.Instrumentation.Http" Version="1.15.0" />
+    <PackageReference Include="OpenTelemetry.Instrumentation.SqlClient" Version="1.15.0" />
+    <PackageReference Include="Serilog.AspNetCore" Version="10.0.0" />
     <PackageReference Include="Serilog.Enrichers.Thread" Version="4.0.0" />
   </ItemGroup>
 

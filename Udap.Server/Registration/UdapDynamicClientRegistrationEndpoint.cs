@@ -161,7 +161,7 @@ public class UdapDynamicClientRegistrationEndpoint
                 }
                 else
                 {
-                    if (_serverSettings.RequirePkce)
+                    if (_serverSettings.EffectiveRequirePkce)
                     {
                         result.Client.RequirePkce = true;
                     }

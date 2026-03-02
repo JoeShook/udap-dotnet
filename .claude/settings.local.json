@@ -14,7 +14,16 @@
       "Bash(dotnet sln:*)",
       "Bash(find:*)",
       "Bash(cd:*)",
-      "WebFetch(domain:build.fhir.org)"
+      "WebFetch(domain:build.fhir.org)",
+      "Bash(dotnet package:*)",
+      "WebFetch(domain:api.nuget.org)",
+      "WebFetch(domain:github.com)",
+      "WebSearch",
+      "WebFetch(domain:docs.automapper.org)",
+      "WebFetch(domain:automapper.io)",
+      "WebFetch(domain:docs.automapper.io)",
+      "WebFetch(domain:www.nuget.org)",
+      "Bash(head:*)"
     ]
   }
 }

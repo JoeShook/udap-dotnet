@@ -61,7 +61,7 @@ public class PayloadSerializerTest
         var parser = new FhirJsonParser();
         var personResource = parser.Parse<Person>(userPersonJson);
         personResource.Should().NotBeNull();
-        var serializer = new FhirJsonSerializer(new SerializerSettings() { Pretty = false });
+        var serializer = new FhirJsonSerializer();
         var userPerson = serializer.SerializeToString(personResource);
         userPerson.Should().NotBeNullOrEmpty();
         // _testOutputHelper.WriteLine(userPerson);

@@ -12,7 +12,7 @@
 #   gcloud auth application-default login
 #   gcloud config set project <YOUR_PROJECT_ID>
 
-FROM mcr.microsoft.com/dotnet/sdk:9.0
+FROM mcr.microsoft.com/dotnet/sdk:10.0
 
 # Install gcloud CLI
 RUN apt-get update && \

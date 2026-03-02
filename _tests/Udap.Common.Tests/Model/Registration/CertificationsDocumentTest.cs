@@ -108,7 +108,7 @@ namespace Udap.Common.Tests.Model.Registration
             //
             act = () => UdapCertificationsAndEndorsementBuilder
                 .Create("FhirLabs Administrator Certification", certificationCert)
-                .WithExpiration(DateTime.Now.AddYears(3).ToEpochTime());
+                .WithExpiration(new DateTimeOffset(DateTime.Now.AddYears(3)).ToUnixTimeSeconds());
 
             act.Should().Throw<ArgumentOutOfRangeException>()
                 .WithParameterName("expirationOffset")
@@ -116,7 +116,7 @@ namespace Udap.Common.Tests.Model.Registration
 
             act = () => UdapCertificationsAndEndorsementBuilder
                 .Create("FhirLabs Administrator Certification", certificationCert)
-                .WithExpiration(expiration.ToEpochTime());
+                .WithExpiration(new DateTimeOffset(expiration).ToUnixTimeSeconds());
 
             act.Should().NotThrow();
         }
@@ -202,7 +202,7 @@ namespace Udap.Common.Tests.Model.Registration
         [Fact]
         public void IssuedAtTests()
         {
-            var now = DateTime.Now.ToEpochTime();
+            var now = new DateTimeOffset(DateTime.Now).ToUnixTimeSeconds();
             var certificationsDoc = UdapCertificationsAndEndorsementBuilder
                 .Create("Client Name")
                 .WithIssuedAt(now)
@@ -382,7 +382,7 @@ namespace Udap.Common.Tests.Model.Registration
 
             certificationsDoc.Audience.Should().Be("https://securedcontrols.net/connect/register");
             certificationsDoc.CertificationName.Should().Be("FhirLabs Administrator Certification");
-            certificationsDoc.Expiration.Should().Be(expiration.ToEpochTime());
+            certificationsDoc.Expiration.Should().Be(new DateTimeOffset(expiration).ToUnixTimeSeconds());
             
         }
 

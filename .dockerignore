@@ -17,6 +17,7 @@
 **/docker-compose*
 **/Dockerfile*
 !examples/Udap.Pki.Cli/Dockerfile
+!**/Dockerfile.gcp
 **/node_modules
 **/npm-debug.log
 **/obj

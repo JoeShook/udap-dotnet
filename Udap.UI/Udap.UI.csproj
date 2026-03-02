@@ -1,7 +1,7 @@
 <Project Sdk="Microsoft.NET.Sdk.Razor">
 
   <PropertyGroup>
-    <TargetFrameworks>net8.0;net9.0</TargetFrameworks>
+    <TargetFrameworks>net8.0;net9.0;net10.0</TargetFrameworks>
     <Nullable>enable</Nullable>
     <ImplicitUsings>enable</ImplicitUsings>
 
@@ -35,11 +35,12 @@
   </ItemGroup>
 
   <ItemGroup>
-    <PackageReference Include="Duende.IdentityServer" Version="7.3.2" />
+    <PackageReference Include="Duende.IdentityServer" Version="7.4.6" />
     <PackageReference Include="Microsoft.AspNetCore.Authentication.OpenIdConnect" Version="9.0.8" Condition="'$(TargetFramework)' == 'net9.0'" />
     <PackageReference Include="Microsoft.AspNetCore.Authentication.OpenIdConnect" Version="8.0.19" Condition="'$(TargetFramework)' == 'net8.0'" />
-    <PackageReference Include="Microsoft.AspNetCore.DataProtection.Abstractions" Version="9.0.8" />
-    <PackageReference Include="Microsoft.SourceLink.GitHub" Version="8.0.0">
+    <PackageReference Include="Microsoft.AspNetCore.Authentication.OpenIdConnect" Version="10.0.3" Condition="'$(TargetFramework)' == 'net10.0'" />
+    <PackageReference Include="Microsoft.AspNetCore.DataProtection.Abstractions" Version="10.0.3" />
+    <PackageReference Include="Microsoft.SourceLink.GitHub" Version="10.0.103">
       <PrivateAssets>all</PrivateAssets>
       <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
     </PackageReference>

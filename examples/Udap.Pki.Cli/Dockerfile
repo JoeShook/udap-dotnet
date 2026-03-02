@@ -10,7 +10,7 @@
 # Interactive use:
 #   docker run -it --name udap-pki-cli -v udap-pki-gcloud:/root/.config/gcloud --entrypoint /bin/bash udap-pki-cli
 #   docker start -ai udap-pki-cli
-FROM mcr.microsoft.com/dotnet/sdk:8.0 AS build
+FROM mcr.microsoft.com/dotnet/sdk:10.0 AS build
 ARG BUILD_CONFIGURATION=Release
 WORKDIR /src
 
@@ -25,7 +25,7 @@ FROM build AS publish
 ARG BUILD_CONFIGURATION=Release
 RUN dotnet publish "Udap.Pki.Cli.csproj" -c $BUILD_CONFIGURATION -o /app/publish
 
-FROM mcr.microsoft.com/dotnet/runtime:8.0 AS final
+FROM mcr.microsoft.com/dotnet/runtime:10.0 AS final
 
 # Install gcloud CLI (needed for CDN cache invalidation)
 RUN apt-get update && \
