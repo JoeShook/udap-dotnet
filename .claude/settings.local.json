@@ -25,7 +25,8 @@
       "WebFetch(domain:www.nuget.org)",
       "Bash(head:*)",
       "Bash(tail:*)",
-      "Bash(dotnet tool list -g)"
+      "Bash(dotnet tool list -g)",
+      "Bash(find c:\\\\\\\\Source\\\\\\\\GitHub\\\\\\\\JoeShook\\\\\\\\udap-tools\\\\\\\\udap-dotnet:*)"
     ]
   }
 }

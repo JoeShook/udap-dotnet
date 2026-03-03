@@ -139,6 +139,96 @@ public class Stu2ComplianceTests
     }
 
     /// <summary>
+    /// Creates a pipeline configured for SSRAA STU 2.0 with explicit overrides for
+    /// RequirePkce and/or ForceStateParamOnAuthorizationCode. Passing false for either
+    /// tests the opt-out capability (nullable bool semantics).
+    /// </summary>
+    private UdapAuthServerPipeline CreateStu2PipelineWithOverrides(bool? requirePkce = null, bool? forceState = null)
+    {
+        var mockPipeline = new UdapAuthServerPipeline();
+        var sureFhirLabsAnchor = new X509Certificate2("CertStore/anchors/SureFhirLabs_CA.cer");
+        var intermediateCert = new X509Certificate2("CertStore/intermediates/SureFhirLabs_Intermediate.cer");
+
+        mockPipeline.OnPostConfigureServices += s =>
+        {
+            s.AddSingleton(new ServerSettings
+            {
+                DefaultUserScopes = "user/*.read",
+                DefaultSystemScopes = "system/*.read",
+                SsraaVersion = SsraaVersion.V2_0,
+                RequireConsent = false,
+                RequirePkce = requirePkce,
+                ForceStateParamOnAuthorizationCode = forceState
+            });
+
+            s.AddSingleton<IOptionsMonitor<UdapClientOptions>>(new OptionsMonitorForTests<UdapClientOptions>(
+                new UdapClientOptions
+                {
+                    ClientName = "Mock Client",
+                    Contacts = new HashSet<string> { "mailto:Joseph.Shook@Surescripts.com" }
+                }));
+        };
+
+        mockPipeline.OnPreConfigureServices += (_, s) =>
+        {
+            s.AddSingleton(mockPipeline.Clients);
+            s.AddScoped<IUdapClient>(sp => new UdapClient(
+                mockPipeline.BackChannelClient,
+                sp.GetRequiredService<UdapClientDiscoveryValidator>(),
+                sp.GetRequiredService<IOptionsMonitor<UdapClientOptions>>(),
+                sp.GetRequiredService<ILogger<UdapClient>>()));
+        };
+
+        mockPipeline.Initialize(enableLogging: true);
+        mockPipeline.BrowserClient.AllowAutoRedirect = false;
+
+        mockPipeline.Communities.Add(new Community
+        {
+            Name = "udap://fhirlabs.net",
+            Enabled = true,
+            Default = true,
+            Anchors =
+            [
+                new Anchor(sureFhirLabsAnchor, "udap://fhirlabs.net")
+                {
+                    BeginDate = sureFhirLabsAnchor.NotBefore.ToUniversalTime(),
+                    EndDate = sureFhirLabsAnchor.NotAfter.ToUniversalTime(),
+                    Name = sureFhirLabsAnchor.Subject,
+                    Enabled = true,
+                    Intermediates =
+                    [
+                        new Intermediate(intermediateCert)
+                        {
+                            BeginDate = intermediateCert.NotBefore.ToUniversalTime(),
+                            EndDate = intermediateCert.NotAfter.ToUniversalTime(),
+                            Name = intermediateCert.Subject,
+                            Enabled = true
+                        }
+                    ]
+                }
+            ]
+        });
+
+        mockPipeline.IdentityScopes.Add(new IdentityResources.OpenId());
+        mockPipeline.IdentityScopes.Add(new IdentityResources.Profile());
+        mockPipeline.ApiScopes.Add(new ApiScope("user/*.read"));
+        mockPipeline.ApiScopes.Add(new ApiScope("system/*.read"));
+
+        mockPipeline.Users.Add(new TestUser
+        {
+            SubjectId = "bob",
+            Username = "bob",
+            Claims =
+            [
+                new Claim("name", "Bob Loblaw"),
+                new Claim("email", "bob@loblaw.com")
+            ]
+        });
+
+        return mockPipeline;
+    }
+
+    /// <summary>
     /// Creates a pipeline configured for SSRAA STU 1.1 (PKCE and state optional).
     /// </summary>
     private UdapAuthServerPipeline CreateStu1Pipeline()
@@ -572,6 +662,197 @@ public class Stu2ComplianceTests
         response = await mockPipeline.BrowserClient.GetAsync(url);
 
         // Should redirect to callback with code, not an error
+        response.StatusCode.Should().Be(HttpStatusCode.Redirect);
+        response.Headers.Location.Should().NotBeNull();
+        response.Headers.Location!.AbsoluteUri.Should().Contain("https://code_client/callback");
+        var queryParams = QueryHelpers.ParseQuery(response.Headers.Location.Query);
+        queryParams.Should().Contain(p => p.Key == "code");
+        queryParams.Should().NotContain(p => p.Key == "error");
+    }
+
+    /// <summary>
+    /// On an STU 2.0 server, an authorize request with NO PKCE parameters at all
+    /// (neither code_challenge nor code_challenge_method) is rejected.
+    /// This covers the scenario where a client simply omits PKCE entirely.
+    /// </summary>
+    [Fact]
+    public async Task Stu2Server_RequiresPkce_NoPkceParamsAtAll()
+    {
+        var mockPipeline = CreateStu2Pipeline();
+        var clientCert = new X509Certificate2("CertStore/issued/fhirlabs.net.client.pfx", "udap-test");
+
+        var signedSoftwareStatement = UdapDcrBuilderForAuthorizationCode
+            .Create(clientCert)
+            .WithAudience(UdapAuthServerPipeline.RegistrationEndpoint)
+            .WithExpiration(TimeSpan.FromMinutes(5))
+            .WithJwtId()
+            .WithClientName("Test Client")
+            .WithLogoUri("https://avatars.githubusercontent.com/u/77421324?s=48&v=4")
+            .WithContacts(new HashSet<string> { "mailto:test@example.com" })
+            .WithTokenEndpointAuthMethod(UdapConstants.RegistrationDocumentValues.TokenEndpointAuthMethodValue)
+            .WithScope("openid user/*.read")
+            .WithResponseTypes(new List<string> { "code" })
+            .WithRedirectUrls(new List<string> { "https://code_client/callback" })
+            .BuildSoftwareStatement();
+
+        var requestBody = new UdapRegisterRequest(
+            signedSoftwareStatement,
+            UdapConstants.UdapVersionsSupportedValue
+        );
+
+        mockPipeline.BrowserClient.AllowAutoRedirect = true;
+        var response = await mockPipeline.BrowserClient.PostAsync(
+            UdapAuthServerPipeline.RegistrationEndpoint,
+            new StringContent(JsonSerializer.Serialize(requestBody), new MediaTypeHeaderValue("application/json")));
+
+        response.StatusCode.Should().Be(HttpStatusCode.Created);
+        var resultDocument = await response.Content.ReadFromJsonAsync<UdapDynamicClientRegistrationDocument>();
+
+        await mockPipeline.LoginAsync("bob");
+
+        // Authorize with NO PKCE parameters at all — no code_challenge, no code_challenge_method
+        var url = mockPipeline.CreateAuthorizeUrl(
+            clientId: resultDocument!.ClientId!,
+            responseType: "code",
+            scope: "openid",
+            redirectUri: "https://code_client/callback",
+            state: Guid.NewGuid().ToString(),
+            nonce: Guid.NewGuid().ToString()
+            // code_challenge and code_challenge_method both omitted
+        );
+
+        mockPipeline.BrowserClient.AllowAutoRedirect = false;
+        response = await mockPipeline.BrowserClient.GetAsync(url);
+
+        response.StatusCode.Should().Be(HttpStatusCode.BadRequest,
+            "V2_0 server must reject authorize requests missing PKCE code_challenge");
+        var errorMessage = await response.Content.ReadFromJsonAsync<ErrorMessage>();
+        errorMessage.Should().NotBeNull();
+        errorMessage!.Error.Should().Be("invalid_request");
+        errorMessage.ErrorDescription.Should().BeEquivalentTo("code challenge required");
+    }
+
+    /// <summary>
+    /// On an STU 2.0 server with RequirePkce explicitly set to false, PKCE is not required.
+    /// This tests the opt-out capability.
+    /// </summary>
+    [Fact]
+    public async Task Stu2Server_RequirePkceOptOut_AllowsNoPkce()
+    {
+        var mockPipeline = CreateStu2PipelineWithOverrides(requirePkce: false);
+        var clientCert = new X509Certificate2("CertStore/issued/fhirlabs.net.client.pfx", "udap-test");
+
+        var signedSoftwareStatement = UdapDcrBuilderForAuthorizationCode
+            .Create(clientCert)
+            .WithAudience(UdapAuthServerPipeline.RegistrationEndpoint)
+            .WithExpiration(TimeSpan.FromMinutes(5))
+            .WithJwtId()
+            .WithClientName("Test Client")
+            .WithLogoUri("https://avatars.githubusercontent.com/u/77421324?s=48&v=4")
+            .WithContacts(new HashSet<string> { "mailto:test@example.com" })
+            .WithTokenEndpointAuthMethod(UdapConstants.RegistrationDocumentValues.TokenEndpointAuthMethodValue)
+            .WithScope("openid user/*.read")
+            .WithResponseTypes(new List<string> { "code" })
+            .WithRedirectUrls(new List<string> { "https://code_client/callback" })
+            .BuildSoftwareStatement();
+
+        var requestBody = new UdapRegisterRequest(
+            signedSoftwareStatement,
+            UdapConstants.UdapVersionsSupportedValue
+        );
+
+        mockPipeline.BrowserClient.AllowAutoRedirect = true;
+        var response = await mockPipeline.BrowserClient.PostAsync(
+            UdapAuthServerPipeline.RegistrationEndpoint,
+            new StringContent(JsonSerializer.Serialize(requestBody), new MediaTypeHeaderValue("application/json")));
+
+        response.StatusCode.Should().Be(HttpStatusCode.Created);
+        var resultDocument = await response.Content.ReadFromJsonAsync<UdapDynamicClientRegistrationDocument>();
+
+        var client = mockPipeline.Clients.Single(c => c.ClientId == resultDocument!.ClientId);
+        client.RequirePkce.Should().BeFalse("RequirePkce=false should override V2_0 default");
+
+        await mockPipeline.LoginAsync("bob");
+
+        // Authorize without PKCE — should succeed because RequirePkce is explicitly false
+        var url = mockPipeline.CreateAuthorizeUrl(
+            clientId: resultDocument!.ClientId!,
+            responseType: "code",
+            scope: "openid",
+            redirectUri: "https://code_client/callback",
+            state: Guid.NewGuid().ToString(),
+            nonce: Guid.NewGuid().ToString()
+        );
+
+        mockPipeline.BrowserClient.AllowAutoRedirect = false;
+        response = await mockPipeline.BrowserClient.GetAsync(url);
+
+        response.StatusCode.Should().Be(HttpStatusCode.Redirect);
+        response.Headers.Location.Should().NotBeNull();
+        response.Headers.Location!.AbsoluteUri.Should().Contain("https://code_client/callback");
+        var queryParams = QueryHelpers.ParseQuery(response.Headers.Location.Query);
+        queryParams.Should().Contain(p => p.Key == "code");
+        queryParams.Should().NotContain(p => p.Key == "error");
+    }
+
+    /// <summary>
+    /// On an STU 2.0 server with ForceStateParamOnAuthorizationCode explicitly set to false,
+    /// the state parameter is not required. This tests the opt-out capability.
+    /// </summary>
+    [Fact]
+    public async Task Stu2Server_ForceStateOptOut_AllowsNoState()
+    {
+        var mockPipeline = CreateStu2PipelineWithOverrides(forceState: false);
+        var clientCert = new X509Certificate2("CertStore/issued/fhirlabs.net.client.pfx", "udap-test");
+
+        var signedSoftwareStatement = UdapDcrBuilderForAuthorizationCode
+            .Create(clientCert)
+            .WithAudience(UdapAuthServerPipeline.RegistrationEndpoint)
+            .WithExpiration(TimeSpan.FromMinutes(5))
+            .WithJwtId()
+            .WithClientName("Test Client")
+            .WithLogoUri("https://avatars.githubusercontent.com/u/77421324?s=48&v=4")
+            .WithContacts(new HashSet<string> { "mailto:test@example.com" })
+            .WithTokenEndpointAuthMethod(UdapConstants.RegistrationDocumentValues.TokenEndpointAuthMethodValue)
+            .WithScope("openid user/*.read")
+            .WithResponseTypes(new List<string> { "code" })
+            .WithRedirectUrls(new List<string> { "https://code_client/callback" })
+            .BuildSoftwareStatement();
+
+        var requestBody = new UdapRegisterRequest(
+            signedSoftwareStatement,
+            UdapConstants.UdapVersionsSupportedValue
+        );
+
+        mockPipeline.BrowserClient.AllowAutoRedirect = true;
+        var response = await mockPipeline.BrowserClient.PostAsync(
+            UdapAuthServerPipeline.RegistrationEndpoint,
+            new StringContent(JsonSerializer.Serialize(requestBody), new MediaTypeHeaderValue("application/json")));
+
+        response.StatusCode.Should().Be(HttpStatusCode.Created);
+        var resultDocument = await response.Content.ReadFromJsonAsync<UdapDynamicClientRegistrationDocument>();
+
+        await mockPipeline.LoginAsync("bob");
+
+        var udapClient = mockPipeline.Resolve<IUdapClient>();
+        var pkce = udapClient.GeneratePkce();
+
+        // Authorize without state but with PKCE (PKCE is still required by V2_0 default)
+        // State is opted out via ForceStateParamOnAuthorizationCode=false
+        var url = mockPipeline.CreateAuthorizeUrl(
+            clientId: resultDocument!.ClientId!,
+            responseType: "code",
+            scope: "openid",
+            redirectUri: "https://code_client/callback",
+            nonce: Guid.NewGuid().ToString(),
+            codeChallenge: pkce.CodeChallenge,
+            codeChallengeMethod: OidcConstants.CodeChallengeMethods.Sha256
+            // state intentionally omitted
+        );
+
+        mockPipeline.BrowserClient.AllowAutoRedirect = false;
+        response = await mockPipeline.BrowserClient.GetAsync(url);
+
         response.StatusCode.Should().Be(HttpStatusCode.Redirect);
         response.Headers.Location.Should().NotBeNull();
         response.Headers.Location!.AbsoluteUri.Should().Contain("https://code_client/callback");

@@ -24,19 +24,20 @@ public class ServerSettings
     public SsraaVersion SsraaVersion { get; set; } = SsraaVersion.V2_0;
 
     /// <summary>
-    /// Effective PKCE requirement. True when <see cref="SsraaVersion"/> is
-    /// <see cref="SsraaVersion.V2_0"/>, or when <see cref="RequirePkce"/> is explicitly set.
+    /// Effective PKCE requirement. When <see cref="RequirePkce"/> is explicitly set (true or false),
+    /// that value is used. Otherwise falls back to <see cref="SsraaVersion"/> policy:
+    /// V2_0 requires PKCE, V1_1 does not.
     /// </summary>
     [JsonIgnore]
-    public bool EffectiveRequirePkce => RequirePkce || SsraaVersion == SsraaVersion.V2_0;
+    public bool EffectiveRequirePkce => RequirePkce ?? (SsraaVersion == SsraaVersion.V2_0);
 
     /// <summary>
-    /// Effective state parameter requirement. True when <see cref="SsraaVersion"/> is
-    /// <see cref="SsraaVersion.V2_0"/>, or when <see cref="ForceStateParamOnAuthorizationCode"/>
-    /// is explicitly set.
+    /// Effective state parameter requirement. When <see cref="ForceStateParamOnAuthorizationCode"/>
+    /// is explicitly set (true or false), that value is used. Otherwise falls back to
+    /// <see cref="SsraaVersion"/> policy: V2_0 requires state, V1_1 does not.
     /// </summary>
     [JsonIgnore]
-    public bool EffectiveForceState => ForceStateParamOnAuthorizationCode || SsraaVersion == SsraaVersion.V2_0;
+    public bool EffectiveForceState => ForceStateParamOnAuthorizationCode ?? (SsraaVersion == SsraaVersion.V2_0);
 
     [JsonPropertyName("DefaultSystemScopes")]
     public string? DefaultSystemScopes { get; set; }
@@ -54,7 +55,7 @@ public class ServerSettings
     /// .
     /// </summary>
     [JsonPropertyName("ForceStateParamOnAuthorizationCode")]
-    public bool ForceStateParamOnAuthorizationCode { get; set; } = false;
+    public bool? ForceStateParamOnAuthorizationCode { get; set; }
 
     /// <summary>
     /// Indicate if the IdentityServer can act as a UDAP enabled IdP.
@@ -77,9 +78,11 @@ public class ServerSettings
     public bool AllowRememberConsent { get; set; } = false;
 
     /// <summary>
-    /// Force UDAP clients to register with PKCE regardless of SSRAA version.
+    /// Explicitly control PKCE requirement. When set to true, PKCE is required regardless of
+    /// SSRAA version. When set to false, PKCE is not required even with V2_0. When null (default),
+    /// falls back to <see cref="SsraaVersion"/> policy.
     /// </summary>
-    public bool RequirePkce { get; set; }
+    public bool? RequirePkce { get; set; }
 }
 
 
