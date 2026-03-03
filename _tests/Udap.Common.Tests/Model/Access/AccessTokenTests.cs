@@ -83,7 +83,7 @@ public class AccessTokenTests
         var parser = new FhirJsonParser();
         var personResource = parser.Parse<Person>(userPersonJson);
         personResource.Should().NotBeNull();
-        var serializer = new FhirJsonSerializer(new SerializerSettings() {Pretty = false});
+        var serializer = new FhirJsonSerializer();
         var userPerson = serializer.SerializeToString(personResource);
         userPerson.Should().NotBeNullOrEmpty();
         // _testOutputHelper.WriteLine(userPerson);
@@ -141,7 +141,8 @@ public class AccessTokenTests
         var b2BUserResult =
             extensions[UdapConstants.UdapAuthorizationExtensions.Hl7B2BUSER] as HL7B2BUserAuthorizationExtension;
         b2BUserResult!.UserPerson.Should().NotBeNull();
-        b2BUserResult.UserPerson!.Value.GetRawText().Should().BeEquivalentTo(userPerson);
+        var roundtrippedPerson = new FhirJsonParser().Parse<Person>(b2BUserResult.UserPerson!.Value.GetRawText());
+        new FhirJsonSerializer().SerializeToString(roundtrippedPerson).Should().Be(userPerson);
         
 
         b2BHl7.PurposeOfUse!.Remove("urn:oid:2.16.840.1.113883.5.8#TREAT").Should().BeTrue();

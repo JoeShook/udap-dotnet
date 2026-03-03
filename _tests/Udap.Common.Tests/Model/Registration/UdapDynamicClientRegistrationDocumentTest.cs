@@ -380,7 +380,7 @@ public class UdapDynamicClientRegistrationDocumentTest
         var relatedPersonJson = File.ReadAllText("Model/RelatedPersonExample.json");
         var relatedPersonResource = new FhirJsonParser().Parse<RelatedPerson>(relatedPersonJson);
         relatedPersonResource.Should().NotBeNull();
-        var relatedPerson = new FhirJsonSerializer(new SerializerSettings(){Pretty = false}).SerializeToString(relatedPersonResource);
+        var relatedPerson = new FhirJsonSerializer().SerializeToString(relatedPersonResource);
         relatedPerson.Should().NotBeNullOrEmpty();
 
         JsonElement relatedPersonElement;
@@ -392,7 +392,7 @@ public class UdapDynamicClientRegistrationDocumentTest
         var patientJson = File.ReadAllText("Model/PatientExample.json");
         var patientResource = new FhirJsonParser().Parse<Patient>(patientJson);
         relatedPersonResource.Should().NotBeNull();
-        var patient = new FhirJsonSerializer(new SerializerSettings(){Pretty = false}).SerializeToString(patientResource);
+        var patient = new FhirJsonSerializer().SerializeToString(patientResource);
         patient.Should().NotBeNullOrEmpty();
 
         JsonElement patientElement;
@@ -449,7 +449,7 @@ public class UdapDynamicClientRegistrationDocumentTest
             .Replace("\n", "").Replace("\r", "").Replace(": ", ":").Replace(",  ", ","));
 
         var relatedPersonResourceResult = new FhirJsonParser().Parse<RelatedPerson>(tefcaIas.UserInformation?.GetRawText());
-        var patientResourceResult = new FhirJsonParser().Parse<RelatedPerson>(tefcaIas.PatientInformation?.GetRawText());
+        var patientResourceResult = new FhirJsonParser().Parse<Patient>(tefcaIas.PatientInformation?.GetRawText());
 
 
         relatedPersonResourceResult.Should().BeEquivalentTo(relatedPersonResource);

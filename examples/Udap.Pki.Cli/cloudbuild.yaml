@@ -1,0 +1,24 @@
+steps:
+# Build the container image
+- name: 'gcr.io/cloud-builders/docker'
+  args: [ 'build', '-t', 'us-west1-docker.pkg.dev/$PROJECT_ID/cloud-run-source-deploy/udap.pki.cli:$TAG_NAME', '.' ]
+
+# Push the container image to Artifact Registry
+- name: 'gcr.io/cloud-builders/docker'
+  args: ['push', 'us-west1-docker.pkg.dev/$PROJECT_ID/cloud-run-source-deploy/udap.pki.cli:$TAG_NAME']
+
+# Deploy as a Cloud Run Job (not a service — runs on demand, not continuously)
+- name: 'gcr.io/google.com/cloudsdktool/cloud-sdk'
+  entrypoint: gcloud
+  args: [
+  'run', 'jobs', 'deploy', 'udap-crl-update',
+  '--region', 'us-west1',
+  '--image', 'us-west1-docker.pkg.dev/$PROJECT_ID/cloud-run-source-deploy/udap.pki.cli:$TAG_NAME',
+  '--service-account=udap-crl-updater@$PROJECT_ID.iam.gserviceaccount.com',
+  '--max-retries', '1',
+  '--task-timeout', '300s',
+  '--set-secrets', 'CA_P12_PASSWORD=ca-p12-password:latest'
+  ]
+
+images:
+- 'us-west1-docker.pkg.dev/$PROJECT_ID/cloud-run-source-deploy/udap.pki.cli:$TAG_NAME'

@@ -13,6 +13,10 @@ class Program
             config.AddCommand<UpdateCrlCommand>("crl-update")
                 .WithDescription("Update the CRL for CA or SubCA")
                 .WithExample(new[] { "crl-update", "--type", "CA", "--prod" });
+
+            config.AddCommand<UpdateCrlAllCommand>("crl-update-all")
+                .WithDescription("Update both CA and SubCA CRLs in one run")
+                .WithExample(new[] { "crl-update-all", "--prod" });
         });
 
         return await app.RunAsync(args);

@@ -8,7 +8,6 @@
 #endregion
 
 using Duende.IdentityServer.ResponseHandling;
-using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection.Extensions;
 using Microsoft.Extensions.Options;
 using Udap.Client.Client;
@@ -18,14 +17,12 @@ using Udap.Common.Models;
 using Udap.Model;
 using Udap.Server.Configuration;
 using Udap.Server.Configuration.DependencyInjection;
-using Udap.Server.Mappers;
 using Udap.Server.ResponseHandling;
 using Udap.Server.Security.Authentication.TieredOAuth;
 using Udap.Server.Storage.DbContexts;
 using Udap.Server.Storage.Mappers;
 using Udap.Server.Storage.Options;
 using Udap.Server.Storage.Stores;
-using Udap.Server.Stores;
 
 //
 // See reason for Microsoft.Extensions.DependencyInjection namespace
@@ -173,76 +170,6 @@ public static class UdapServerServiceCollectionExtensions
         builder.AddUdapJwtBearerClientAuthentication();
 
         return builder;
-    }
-
-    //
-    // This just adds the registration endpoint to /.well-known/openid-configuration
-    //
-
-    public static IServiceCollection AddUdapDbContext(
-        this IServiceCollection service,
-        Action<UdapConfigurationStoreOptions>? storeOptionAction = null)
-    {
-        return service.AddUdapDbContext<UdapDbContext>(storeOptionAction);
-    }
-
-    public static IServiceCollection AddUdapDbContext<TContext>(
-        this IServiceCollection service,
-        Action<UdapConfigurationStoreOptions>? storeOptionAction = null)
-        where TContext : DbContext, IUdapDbAdminContext, IUdapDbContext
-    {
-        var storeOptions = new UdapConfigurationStoreOptions();
-        service.AddSingleton(storeOptions);
-        storeOptionAction?.Invoke(storeOptions);
-
-        if (storeOptions.ResolveDbContextOptions != null)
-        {
-            if (storeOptions.EnablePooling)
-            {
-                if (storeOptions.PoolSize.HasValue)
-                {
-                    service.AddDbContextPool<TContext>(storeOptions.ResolveDbContextOptions,
-                        storeOptions.PoolSize.Value);
-                }
-                else
-                {
-                    service.AddDbContextPool<TContext>(storeOptions.ResolveDbContextOptions);
-                }
-            }
-            else
-            {
-                service.AddDbContext<TContext>(storeOptions.ResolveDbContextOptions);
-            }
-        }
-        else
-        {
-            if (storeOptions.EnablePooling)
-            {
-                if (storeOptions.PoolSize.HasValue)
-                {
-                    service.AddDbContextPool<TContext>(
-                        dbCtxBuilder => { storeOptions.UdapDbContext.Invoke(dbCtxBuilder); },
-                        storeOptions.PoolSize.Value);
-                }
-                else
-                {
-                    service.AddDbContextPool<TContext>(
-                        dbCtxBuilder => { storeOptions.UdapDbContext.Invoke(dbCtxBuilder); });
-                }
-            }
-            else
-            {
-                service.AddDbContext<TContext>(dbCtxBuilder =>
-                {
-                    storeOptions.UdapDbContext.Invoke(dbCtxBuilder);
-                });
-            }
-        }
-
-        service.AddScoped<IUdapDbAdminContext>(sp => sp.GetRequiredService<TContext>());
-        service.AddScoped<IUdapDbContext>(sp => sp.GetRequiredService<TContext>());
-
-        return service;
     }
 }
 

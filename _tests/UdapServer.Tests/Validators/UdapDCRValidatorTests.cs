@@ -119,7 +119,7 @@ public class UdapDcrValidatorTests
                 { new Uri($"https://client.fhirlabs.net/redirect/{Guid.NewGuid()}").AbsoluteUri },
         };
 
-        var serverSettings = new ServerSettings { LogoRequired = false };
+        var serverSettings = new ServerSettings { LogoRequired = false, SsraaVersion = SsraaVersion.V1_1 };
 
         var mockHttpContextAccessor = Substitute.For<IHttpContextAccessor>();
         var context = new DefaultHttpContext();
@@ -221,7 +221,7 @@ public class UdapDcrValidatorTests
                 { new Uri($"https://client.fhirlabs.net/redirect/{Guid.NewGuid()}").AbsoluteUri },
         };
 
-        var serverSettings = new ServerSettings { LogoRequired = true };
+        var serverSettings = new ServerSettings { LogoRequired = true, SsraaVersion = SsraaVersion.V1_1 };
 
         var mockHttpContextAccessor = Substitute.For<IHttpContextAccessor>();
         var context = new DefaultHttpContext();

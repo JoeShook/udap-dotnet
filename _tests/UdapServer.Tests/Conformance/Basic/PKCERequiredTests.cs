@@ -58,9 +58,8 @@ public class PKCERequiredTests
             {
                 DefaultUserScopes = "user/*.read",
                 DefaultSystemScopes = "system/*.read",
-                ForceStateParamOnAuthorizationCode = true,
-                RequireConsent = false,
-                RequirePkce = true
+                SsraaVersion = SsraaVersion.V2_0,
+                RequireConsent = false
             });
 
             s.AddSingleton<UdapClientOptions>(new UdapClientOptions

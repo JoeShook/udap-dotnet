@@ -143,7 +143,8 @@ public class UdapDbContext<TContext> : DbContext, IUdapDbAdminContext, IUdapDbCo
 
         if (Database.ProviderName == "Npgsql.EntityFrameworkCore.PostgreSQL")
         {
-            modelBuilder.HasDefaultSchema("udap");
+            var schema = UdapStoreOptions?.DefaultSchema?.Trim() ?? "udap";
+            modelBuilder.HasDefaultSchema(schema);
 
             foreach (var entity in modelBuilder.Model.GetEntityTypes())
             {
@@ -181,22 +182,27 @@ public class UdapDbContext<TContext> : DbContext, IUdapDbAdminContext, IUdapDbCo
 /// </summary>
 public class NpgsqlConfigurationDbContext : ConfigurationDbContext<NpgsqlConfigurationDbContext>
 {
-    public NpgsqlConfigurationDbContext(DbContextOptions<NpgsqlConfigurationDbContext> options) : base(options)
+    private readonly UdapConfigurationStoreOptions? _storeOptions;
+
+    public NpgsqlConfigurationDbContext(
+        DbContextOptions<NpgsqlConfigurationDbContext> options,
+        UdapConfigurationStoreOptions? storeOptions = null)
+        : base(options)
     {
+        _storeOptions = storeOptions;
     }
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
         base.OnModelCreating(modelBuilder);
 
-        modelBuilder.HasDefaultSchema("udap");
+        // Use schema from storeOptions, or fallback
+        var schema = _storeOptions?.DefaultSchema ?? "udap";
+        modelBuilder.HasDefaultSchema(schema);
 
         foreach (var entity in modelBuilder.Model.GetEntityTypes())
         {
-            // Replace table names
             entity.SetTableName(entity.GetTableName()?.ToSnakeCase());
-
-            // Replace column names            
             foreach (var property in entity.GetProperties())
             {
                 property.SetColumnName(property.GetColumnName().ToSnakeCase());
@@ -220,28 +226,32 @@ public class NpgsqlConfigurationDbContext : ConfigurationDbContext<NpgsqlConfigu
     }
 }
 
-
 /// <summary>
 /// Override naming conventions of the base PersistedGrantDbContext during OnModelCreating
 /// </summary>
 public class NpgsqlPersistedGrantDbContext : PersistedGrantDbContext<NpgsqlPersistedGrantDbContext>
 {
-    public NpgsqlPersistedGrantDbContext(DbContextOptions<NpgsqlPersistedGrantDbContext> options) : base(options)
+    private readonly UdapConfigurationStoreOptions? _storeOptions;
+
+    public NpgsqlPersistedGrantDbContext(
+        DbContextOptions<NpgsqlPersistedGrantDbContext> options,
+        UdapConfigurationStoreOptions? storeOptions = null)
+        : base(options)
     {
+        _storeOptions = storeOptions;
     }
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
         base.OnModelCreating(modelBuilder);
 
-        modelBuilder.HasDefaultSchema("udap");
+        // Use schema from storeOptions, or fallback
+        var schema = _storeOptions?.DefaultSchema ?? "udap";
+        modelBuilder.HasDefaultSchema(schema);
 
         foreach (var entity in modelBuilder.Model.GetEntityTypes())
         {
-            // Replace table names
             entity.SetTableName(entity.GetTableName()?.ToSnakeCase());
-
-            // Replace column names            
             foreach (var property in entity.GetProperties())
             {
                 property.SetColumnName(property.GetColumnName().ToSnakeCase());

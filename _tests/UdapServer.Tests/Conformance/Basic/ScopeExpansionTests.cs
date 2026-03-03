@@ -61,6 +61,7 @@ public class ScopeExpansionTests
                 var serverSettings = sp.GetRequiredService<IOptions<ServerSettings>>().Value;
                 serverSettings.RequireConsent = false;
                 serverSettings.RequirePkce = false;
+                serverSettings.SsraaVersion = SsraaVersion.V1_1; // Support V1 and V2 for backward compat
                 return serverSettings;
             });
 

@@ -17,6 +17,7 @@ using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.WebUtilities;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Primitives;
+using Udap.Model;
 using Udap.Server.Configuration;
 using Udap.Server.Storage;
 using Udap.Util.Extensions;
@@ -86,17 +87,23 @@ internal class UdapAuthorizationResponseMiddleware
 
             if (requestParams.Count != 0)
             {
-                if (udapServerOptions.ForceStateParamOnAuthorizationCode)
+                // Check if state is required:
+                // 1. Explicit config (ForceStateParamOnAuthorizationCode)
+                // 2. Server only supports V2 (EffectiveForceState)
+                // 3. Client is a V2 client (based on stored property)
+                if (!requestParams.TryGetValue(AuthorizeRequest.State, out _))
                 {
-                    if (!requestParams.TryGetValue(AuthorizeRequest.State, out _))
-                    {
-                        var client =
-                            await clients.FindClientByIdAsync(
-                                requestParams.AsNameValueCollection().Get(AuthorizeRequest.ClientId) ?? string.Empty);
+                    var client =
+                        await clients.FindClientByIdAsync(
+                            requestParams.AsNameValueCollection().Get(AuthorizeRequest.ClientId) ?? string.Empty);
 
-                        if (client != null &&
-                            client.ClientSecrets.Any(cs =>
-                                cs.Type == UdapServerConstants.SecretTypes.UDAP_SAN_URI_ISS_NAME))
+                    if (client != null &&
+                        client.ClientSecrets.Any(cs =>
+                            cs.Type == UdapServerConstants.SecretTypes.UDAP_SAN_URI_ISS_NAME))
+                    {
+                        var requireState = udapServerOptions.EffectiveForceState;
+
+                        if (requireState)
                         {
                             await RenderMissingStateErrorResponse(context);
                             _logger.LogInformation($"{nameof(UdapAuthorizationResponseMiddleware)} executed");
@@ -320,4 +327,5 @@ internal class UdapAuthorizationResponseMiddleware
 
         return sb.ToString();
     }
+
 }

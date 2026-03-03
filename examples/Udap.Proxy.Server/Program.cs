@@ -35,15 +35,15 @@ using Constants = Udap.Common.Constants;
 
 var builder = WebApplication.CreateBuilder(args);
 
+// Mount Cloud Secrets FIRST - before Serilog reads configuration
+builder.Configuration.AddJsonFile("/secret/udapproxyserverappsettings", true, false);
+builder.Configuration.AddJsonFile("/secret/metadata/udap.proxy.server.metadata.options.json", true, false);
+
 Log.Logger = new LoggerConfiguration()
     .ReadFrom.Configuration(builder.Configuration)
     .CreateLogger();
 
 builder.Host.UseSerilog();
-
-// Mount Cloud Secrets
-builder.Configuration.AddJsonFile("/secret/udapproxyserverappsettings", true, false);
-builder.Configuration.AddJsonFile("/secret/metadata/udap.proxy.server.metadata.options.json", true, false);
 
 // Add services to the container.
 builder.Services.AddControllersWithViews();

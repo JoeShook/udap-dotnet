@@ -68,7 +68,8 @@ public class UdapResponseTypeResponseModeTests
                 DefaultSystemScopes = "system/*.read",
                 ForceStateParamOnAuthorizationCode = true,
                 RequireConsent = false,
-                RequirePkce = false
+                RequirePkce = false,
+                SsraaVersion = SsraaVersion.V1_1
             });
 
             s.AddSingleton(new UdapClientOptions

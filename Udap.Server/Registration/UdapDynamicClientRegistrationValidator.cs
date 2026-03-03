@@ -87,7 +87,39 @@ public class UdapDynamicClientRegistrationValidator : IUdapDynamicClientRegistra
         )
     {
         using var activity = Tracing.ValidationActivitySource.StartActivity();
-        
+
+        //////////////////////////////
+        // validate udap version
+        //////////////////////////////
+        // The UDAP base protocol (udap.org) is at version 1. Both SSRAA STU 1.1 and STU 2.0
+        // profile UDAP v1, so this field is always "1". Which SSRAA IG version the server
+        // enforces is a server-side policy (SsraaVersion in ServerSettings).
+        if (string.IsNullOrEmpty(request.Udap))
+        {
+            _logger.LogWarning("{Error}::{Description}",
+                UdapDynamicClientRegistrationErrors.InvalidClientMetadata,
+                UdapDynamicClientRegistrationErrorDescriptions.MissingUdapVersion);
+
+            return new UdapDynamicClientRegistrationValidationResult(
+                UdapDynamicClientRegistrationErrors.InvalidClientMetadata,
+                UdapDynamicClientRegistrationErrorDescriptions.MissingUdapVersion);
+        }
+
+        if (request.Udap != UdapConstants.UdapVersionsSupportedValue)
+        {
+            var errorDescription = string.Format(
+                UdapDynamicClientRegistrationErrorDescriptions.UnsupportedUdapVersion,
+                UdapConstants.UdapVersionsSupportedValue);
+
+            _logger.LogWarning("{Error}::{Description}",
+                UdapDynamicClientRegistrationErrors.InvalidClientMetadata,
+                errorDescription);
+
+            return new UdapDynamicClientRegistrationValidationResult(
+                UdapDynamicClientRegistrationErrors.InvalidClientMetadata,
+                errorDescription);
+        }
+
         var tokenHandler = new JsonWebTokenHandler();
         var jsonWebToken = tokenHandler.ReadJsonWebToken(request.SoftwareStatement);
         var jwtHeader = JwtHeader.Base64UrlDeserialize(jsonWebToken.EncodedHeader);
@@ -329,6 +361,10 @@ public class UdapDynamicClientRegistrationValidator : IUdapDynamicClientRegistra
             client.Properties[UdapServerConstants.ClientPropertyConstants.DataHolder] = UdapServerConstants.ClientPropertyConstants.DefaultOrgMap;
         }
 
+        // PKCE requirement is determined by server SSRAA version policy, not the client's udap field
+        // (which is always "1" per the UDAP base specification).
+        client.RequirePkce = _serverSettings.EffectiveRequirePkce;
+
         //////////////////////////////
         // validate grant_types
         //////////////////////////////
@@ -420,7 +456,7 @@ public class UdapDynamicClientRegistrationValidator : IUdapDynamicClientRegistra
                     if (uri.IsAbsoluteUri)
                     {
                         client.RedirectUris.Add(uri.OriginalString);
-                        client.RequirePkce = _serverSettings.RequirePkce;
+                        client.RequirePkce = _serverSettings.EffectiveRequirePkce;
                     }
                     else
                     {
@@ -764,7 +800,8 @@ public class UdapDynamicClientRegistrationValidator : IUdapDynamicClientRegistra
         }
 
         _x5cArray = certificates.Select(c => c.ToString()).ToArray()!;
-        
+
         return _x5cArray;
     }
+
 }

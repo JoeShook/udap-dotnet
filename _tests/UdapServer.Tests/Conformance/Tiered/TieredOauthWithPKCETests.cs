@@ -75,8 +75,7 @@ public class TieredOauthWithPKCETests
         {
             services.AddSingleton(new ServerSettings
             {
-                ForceStateParamOnAuthorizationCode = true, //false (default)
-                RequirePkce = true,
+                SsraaVersion = SsraaVersion.V2_0,
                 RequireConsent = false
             });
 
@@ -242,9 +241,10 @@ public class TieredOauthWithPKCETests
                     serverSettings.AlwaysIncludeUserClaimsInIdToken = true;
                     serverSettings.RequireConsent = false;
                     serverSettings.RequirePkce = false;
+                    serverSettings.SsraaVersion = SsraaVersion.V1_1;
                     return serverSettings;
                 });
-           
+
 
             // This registers Clients as List<Client> so downstream I can pick it up in InMemoryUdapClientRegistrationStore
             // Duende's AddInMemoryClients extension registers as IEnumerable<Client> and is used in InMemoryClientStore as readonly.
@@ -326,6 +326,7 @@ public class TieredOauthWithPKCETests
                     serverSettings.AlwaysIncludeUserClaimsInIdToken = true;
                     serverSettings.RequireConsent = false;
                     serverSettings.RequirePkce = false;
+                    serverSettings.SsraaVersion = SsraaVersion.V1_1;
                     return serverSettings;
                 });
             

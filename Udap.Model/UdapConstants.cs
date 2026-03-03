@@ -14,7 +14,14 @@ namespace Udap.Model;
 /// </summary>
 public static class UdapConstants
 {
+    /// <summary>
+    /// The UDAP protocol version. Per the udap.org specification this is a fixed value of "1"
+    /// and is used in both the <c>udap_versions_supported</c> discovery metadata field and
+    /// the <c>udap</c> field of every registration request body, regardless of which SSRAA
+    /// IG version (<see cref="SsraaVersion"/>) the server enforces.
+    /// </summary>
     public const string UdapVersionsSupportedValue = "1";
+
     public const string Community = "community";
 
 

@@ -52,9 +52,8 @@ public class RegistrationAndChangeRegistrationTests
         {
             services.AddSingleton(new ServerSettings
             {
-                ForceStateParamOnAuthorizationCode = true,
-                RequireConsent = false,
-                RequirePkce = true
+                SsraaVersion = SsraaVersion.V2_0,
+                RequireConsent = false
             });
 
             services.AddSingleton<UdapClientOptions>(new UdapClientOptions

@@ -1,0 +1,31 @@
+{
+  "permissions": {
+    "allow": [
+      "WebFetch(domain:hl7.org)",
+      "Bash(dotnet build:*)",
+      "Bash(dotnet test:*)",
+      "Bash(Get-ChildItem -Path \"$env:USERPROFILE\\\\.claude\\\\projects\" -Recurse -Filter \"*.jsonl\")",
+      "Bash(Where-Object { $_LastWriteTime -ge \"2025-01-26\" -and $_LastWriteTime -lt \"2025-01-27\" })",
+      "Bash(Select-Object FullName, LastWriteTime, Length)",
+      "Bash(ls:*)",
+      "Bash(claude /stats:*)",
+      "Bash(python3:*)",
+      "Bash(powershell:*)",
+      "Bash(dotnet sln:*)",
+      "Bash(find:*)",
+      "Bash(cd:*)",
+      "WebFetch(domain:build.fhir.org)",
+      "Bash(dotnet package:*)",
+      "WebFetch(domain:api.nuget.org)",
+      "WebFetch(domain:github.com)",
+      "WebSearch",
+      "WebFetch(domain:docs.automapper.org)",
+      "WebFetch(domain:automapper.io)",
+      "WebFetch(domain:docs.automapper.io)",
+      "WebFetch(domain:www.nuget.org)",
+      "Bash(head:*)",
+      "Bash(tail:*)",
+      "Bash(dotnet tool list -g)"
+    ]
+  }
+}

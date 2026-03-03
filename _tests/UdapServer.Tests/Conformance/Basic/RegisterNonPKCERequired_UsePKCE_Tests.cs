@@ -63,7 +63,8 @@ public class RegisterNonPKCERequired_UsePKCE_Tests
                 DefaultSystemScopes = "system/*.read",
                 ForceStateParamOnAuthorizationCode = true,
                 RequireConsent = false,
-                RequirePkce = false
+                RequirePkce = false,
+                SsraaVersion = SsraaVersion.V1_1
             });
 
             s.AddSingleton<UdapClientOptions>(new UdapClientOptions

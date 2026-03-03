@@ -1,4 +1,5 @@
-﻿using System.Runtime.InteropServices;
+using System.Diagnostics;
+using System.Runtime.InteropServices;
 using System.Security.Cryptography;
 using System.Security.Cryptography.X509Certificates;
 using Google.Cloud.Storage.V1;
@@ -19,10 +20,34 @@ namespace Udap.Pki.Cli;
 
 public class UpdateCrlCommand : AsyncCommand<UpdateCrlSettings>
 {
-    public override async Task<int> ExecuteAsync(CommandContext context, UpdateCrlSettings settings)
+    public override async Task<int> ExecuteAsync(CommandContext context, UpdateCrlSettings settings, CancellationToken cancellationToken)
     {
-        var isProduction = settings.IsProduction;
+        var password = ResolvePassword(settings);
+        return await UpdateCrl(settings.Type, password, settings.IsProduction, settings.Days);
+    }
 
+    internal static string ResolvePassword(UpdateCrlSettings settings)
+    {
+        if (!string.IsNullOrEmpty(settings.Password))
+            return settings.Password;
+
+        var envValue = Environment.GetEnvironmentVariable("CA_P12_PASSWORD");
+        if (!string.IsNullOrEmpty(envValue))
+            return envValue;
+
+        if (!Console.IsInputRedirected)
+        {
+            return AnsiConsole.Prompt(
+                new TextPrompt<string>("Enter the [yellow]CA P12 password[/]:")
+                    .PromptStyle("red").Secret());
+        }
+
+        throw new InvalidOperationException(
+            "No password provided. Use --password, set CA_P12_PASSWORD env var, or run interactively.");
+    }
+
+    internal static async Task<int> UpdateCrl(CrlType type, string password, bool isProduction, int days)
+    {
         if (isProduction)
         {
             AnsiConsole.MarkupLine("[bold green]Running in PRODUCTION mode[/]");
@@ -32,7 +57,7 @@ public class UpdateCrlCommand : AsyncCommand<UpdateCrlSettings>
             AnsiConsole.MarkupLine("[bold yellow]Running in TEST mode (default)[/]");
         }
 
-        AnsiConsole.MarkupLine("[green]GCP CA/CRL Manager CLI[/]");
+        AnsiConsole.MarkupLine($"[green]Updating {type} CRL[/]");
 
         // Load configuration
         var config = new ConfigurationBuilder()
@@ -44,7 +69,7 @@ public class UpdateCrlCommand : AsyncCommand<UpdateCrlSettings>
 
         // Select paths based on type
         string p12Path, crlPath;
-        if (settings.Type == CrlType.CA)
+        if (type == CrlType.CA)
         {
             p12Path = gcpPkiConfig.CaP12Path;
             crlPath = gcpPkiConfig.CaCrlPath;
@@ -62,9 +87,7 @@ public class UpdateCrlCommand : AsyncCommand<UpdateCrlSettings>
         caP12Stream.Position = 0;
 
         // Load CA certificate
-        var caPassword = AnsiConsole.Prompt(
-            new TextPrompt<string>("Enter the [yellow]CA P12 password[/]:").PromptStyle("red").Secret());
-        var caCert = new X509Certificate2(caP12Stream.ToArray(), caPassword, X509KeyStorageFlags.Exportable);
+        var caCert = new X509Certificate2(caP12Stream.ToArray(), password, X509KeyStorageFlags.Exportable);
 
         // Download CRL
         using var crlStream = new MemoryStream();
@@ -78,7 +101,7 @@ public class UpdateCrlCommand : AsyncCommand<UpdateCrlSettings>
         AnsiConsole.MarkupLine($"[blue]Current CRL number:[/] {GetCurrentCrlNumber(crl)}");
 
         // Generate new CRL
-        var newCrlBytes = GenerateNewCrl(caCert, caPassword, crlBytes, settings.Days);
+        var newCrlBytes = GenerateNewCrl(caCert, password, crlBytes, days);
 
         if (isProduction)
         {
@@ -97,11 +120,17 @@ public class UpdateCrlCommand : AsyncCommand<UpdateCrlSettings>
                 publicUploadStream);
 
             AnsiConsole.MarkupLine($"[green]New CRL also uploaded to public bucket: {publicCertStoreConfig.CrlBucket}/{publicCrlObjectName}[/]");
+
+            // Invalidate CDN cache
+            if (!string.IsNullOrEmpty(publicCertStoreConfig.CdnUrlMapName))
+            {
+                await InvalidateCdnCacheAsync(publicCertStoreConfig.CdnUrlMapName, $"/{publicCrlObjectName}");
+            }
         }
         else
         {
             // Write CRL to disk for inspection
-            var crlFilePath = settings.Type == CrlType.CA ? "c://temp/CA.crl" : "c://temp/SubCA.crl";
+            var crlFilePath = type == CrlType.CA ? "c://temp/CA.crl" : "c://temp/SubCA.crl";
             await File.WriteAllBytesAsync(crlFilePath, newCrlBytes);
             AnsiConsole.MarkupLine($"[yellow]New CRL written to disk at:[/] {crlFilePath}");
         }
@@ -224,5 +253,42 @@ public class UpdateCrlCommand : AsyncCommand<UpdateCrlSettings>
         AnsiConsole.MarkupLine($"[blue]New CRL number:[/] {nextCrlNum}");
 
         return new CrlNumber(nextCrlNum);
+    }
+
+    private static async Task InvalidateCdnCacheAsync(string urlMapName, string path)
+    {
+        AnsiConsole.MarkupLine($"[blue]Invalidating CDN cache for path:[/] {path}");
+
+        var process = new Process
+        {
+            StartInfo = new ProcessStartInfo
+            {
+                FileName = "gcloud",
+                ArgumentList = { "compute", "url-maps", "invalidate-cdn-cache", urlMapName, "--path", path },
+                RedirectStandardOutput = true,
+                RedirectStandardError = true,
+                UseShellExecute = false
+            }
+        };
+
+        process.Start();
+        var stdout = await process.StandardOutput.ReadToEndAsync();
+        var stderr = await process.StandardError.ReadToEndAsync();
+        await process.WaitForExitAsync();
+
+        if (process.ExitCode == 0)
+        {
+            AnsiConsole.MarkupLine("[green]CDN cache invalidation requested successfully.[/]");
+        }
+        else
+        {
+            AnsiConsole.MarkupLine($"[red]CDN cache invalidation failed (exit code {process.ExitCode}):[/]");
+            AnsiConsole.MarkupLine($"[red]{stderr}[/]");
+        }
+
+        if (!string.IsNullOrWhiteSpace(stdout))
+        {
+            AnsiConsole.MarkupLine(stdout.TrimEnd());
+        }
     }
 }

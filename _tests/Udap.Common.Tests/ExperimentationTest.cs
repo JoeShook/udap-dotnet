@@ -183,7 +183,7 @@ public class ExperimentationTest
         patient = await new FhirJsonParser().ParseAsync<Patient>(patientJson);
         Assert.Equal("1970-05-01", patient.BirthDate);
 
-        _testOutputHelper.WriteLine(await new FhirJsonSerializer(new SerializerSettings { Pretty = true }).SerializeToStringAsync(parametersResource));
+        _testOutputHelper.WriteLine(await new FhirJsonSerializer().SerializeToStringAsync(parametersResource, pretty: true));
     }
 
 

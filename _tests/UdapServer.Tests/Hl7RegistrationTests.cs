@@ -84,7 +84,13 @@ public class Hl7ApiTestFixture : WebApplicationFactory<Udap.Auth.Server.Program>
                     RevocationMode = X509RevocationMode.NoCheck // This is the change unit testing with no revocation endpoint to host the revocation list.
                 },
                 Output.ToLogger<TrustChainValidator>()));
-            
+
+            // Override ServerSettings to support both V1 and V2 for backward compatibility
+            services.AddSingleton(new Udap.Server.Configuration.ServerSettings
+            {
+                SsraaVersion = SsraaVersion.V1_1
+            });
+
             _serviceProvider = services.BuildServiceProvider();
             _serviceScope = _serviceProvider.GetRequiredService<IServiceScopeFactory>().CreateScope();
             UdapDbAdminContext = _serviceScope.ServiceProvider.GetRequiredService<IUdapDbAdminContext>();
@@ -358,7 +364,7 @@ public class Hl7RegistrationTests : IClassFixture<Hl7ApiTestFixture>
 
         var clientEntity = udapContext.Clients
             .Single(c => c.ClientId == responseUdapDocument.ClientId);
-        clientEntity.RequirePkce.Should().BeTrue();
+        clientEntity.RequirePkce.Should().BeFalse();
         clientEntity.AllowOfflineAccess.Should().BeFalse();
     }
 
