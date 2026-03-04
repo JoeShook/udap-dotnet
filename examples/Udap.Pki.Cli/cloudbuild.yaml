@@ -17,7 +17,8 @@ steps:
   '--service-account=udap-crl-updater@$PROJECT_ID.iam.gserviceaccount.com',
   '--max-retries', '1',
   '--task-timeout', '300s',
-  '--set-secrets', 'CA_P12_PASSWORD=ca-p12-password:latest'
+  '--set-secrets', 'CA_P12_PASSWORD=ca-p12-password:latest',
+  '--to-latest'
   ]
 
 images:

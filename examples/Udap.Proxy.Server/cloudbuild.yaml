@@ -20,7 +20,8 @@ steps:
   '--concurrency', '8', 
   '--set-env-vars', 'GCLOUD_PROJECT=true,GCPDeploy=true',
   '--set-secrets', '/secret/udapproxyserverappsettings=udapproxyserverappsettings:latest,/secret/metadata/udap.proxy.server.metadata.options.json=udap_proxy_server_metadata_options:latest',
-  '--allow-unauthenticated'
+  '--allow-unauthenticated',
+  '--to-latest'
   ]
 
 images:
