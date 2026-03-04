@@ -2,7 +2,7 @@
 // /*
 //  Authors:
 //     Joseph Shook   Joseph.Shook@Surescripts.com
-// 
+//
 //  See LICENSE in the project root for license information.
 // */
 #endregion
@@ -13,7 +13,6 @@ using System.Text.Json.Serialization;
 using Microsoft.AspNetCore.Http;
 using Microsoft.Extensions.Logging;
 using Udap.Model.Registration;
-using Udap.Server.Configuration;
 using Udap.Server.Storage.Stores;
 
 namespace Udap.Server.Registration;
@@ -26,36 +25,36 @@ namespace Udap.Server.Registration;
 public class UdapDynamicClientRegistrationEndpoint
 {
     private readonly IUdapDynamicClientRegistrationValidator _validator;
+    private readonly IUdapDynamicClientRegistrationProcessor _processor;
     private readonly IUdapClientRegistrationStore _store;
-    private readonly ServerSettings _serverSettings;
     private readonly ILogger<UdapDynamicClientRegistrationEndpoint> _logger;
 
     public UdapDynamicClientRegistrationEndpoint(
         IUdapDynamicClientRegistrationValidator validator,
+        IUdapDynamicClientRegistrationProcessor processor,
         IUdapClientRegistrationStore store,
-        ServerSettings serverSettings,
         ILogger<UdapDynamicClientRegistrationEndpoint> logger)
     {
         _validator = validator;
+        _processor = processor;
         _store = store;
-        _serverSettings = serverSettings;
         _logger = logger;
     }
-    
+
     /// <summary>
     /// Initiate UDAP Dynamic Client Registration for <see cref="UdapDynamicClientRegistrationEndpoint"/>
     /// </summary>
-    /// <param name="context"></param>
+    /// <param name="httpContext"></param>
     /// <param name="token"></param>
     /// <returns></returns>
-    public async Task Process(HttpContext context, CancellationToken token)
+    public async Task Process(HttpContext httpContext, CancellationToken token)
     {
 
         if (_logger.IsEnabled(LogLevel.Debug))
         {
-            var bodyStr = await GetBody(context);
+            var bodyStr = await GetBody(httpContext);
             _logger.LogDebug("Registration Request: {Request}", bodyStr);
-            _logger.LogDebug("Registration Request Content-Type: {contentType}", context.Request.ContentType);
+            _logger.LogDebug("Registration Request Content-Type: {contentType}", httpContext.Request.ContentType);
         }
 
         //
@@ -64,38 +63,42 @@ public class UdapDynamicClientRegistrationEndpoint
         // National Directory client seems to be missing this header.
         // Maybe discuss this at the next UDAP meeting.
         //
-        if (!context.Request.HasJsonContentType())
+        if (!httpContext.Request.HasJsonContentType())
         {
-            context.Response.StatusCode = StatusCodes.Status415UnsupportedMediaType;
+            httpContext.Response.StatusCode = StatusCodes.Status415UnsupportedMediaType;
             return;
         }
 
         UdapRegisterRequest request;
         try
         {
-            request = await context.Request.ReadFromJsonAsync<UdapRegisterRequest>(cancellationToken: token)
-                      ?? throw new ArgumentNullException(nameof(context.Request));
+            request = await httpContext.Request.ReadFromJsonAsync<UdapRegisterRequest>(cancellationToken: token)
+                      ?? throw new ArgumentNullException(nameof(httpContext.Request));
         }
         catch (Exception ex)
         {
             _logger.LogWarning(ex, UdapDynamicClientRegistrationErrorDescriptions.MalformedMetaDataDocument);
-            _logger.LogDebug("Request: {Request}", await GetBody(context));
+            _logger.LogDebug("Request: {Request}", await GetBody(httpContext));
 
-            context.Response.StatusCode = StatusCodes.Status400BadRequest;
-            await context.Response.WriteAsJsonAsync(new UdapDynamicClientRegistrationErrorResponse
+            httpContext.Response.StatusCode = StatusCodes.Status400BadRequest;
+            await httpContext.Response.WriteAsJsonAsync(new UdapDynamicClientRegistrationErrorResponse
             (
                 UdapDynamicClientRegistrationErrors.InvalidClientMetadata,
                 UdapDynamicClientRegistrationErrorDescriptions.MalformedMetaDataDocument
             ), cancellationToken: token);
-            
+
             return;
         }
 
         var intermediateCertificates = await _store.GetIntermediateCertificates(token);
         var communityTrustAnchors = await _store.GetAnchorsCertificates(null, token);
         var anchors = await _store.GetAnchors(null, token);
+
+        // Create context
+        var context = new UdapDynamicClientRegistrationContext { Request = request };
+
         //TODO: null work
-        UdapDynamicClientRegistrationValidationResult? result = null;
+        UdapDynamicClientRegistrationValidationResult? validationResult = null;
 
         try
         {
@@ -105,102 +108,101 @@ public class UdapDynamicClientRegistrationEndpoint
                 throw new NullReferenceException("Missing Community Trust Anchors");
             }
 
-            result = await _validator.ValidateAsync(request, intermediateCertificates, communityTrustAnchors, anchors);
+            validationResult = await _validator.ValidateAsync(context, intermediateCertificates, communityTrustAnchors, anchors);
 
-            if (result == null)
+            if (validationResult == null)
             {
                 throw new NullReferenceException("Registration validator has not results.");
             }
-            
+
         }
         catch (Exception ex)
         {
             _logger.LogError(ex, "Unhandled UdapDynamicClientRegistrationEndpoint Error");
         }
 
-        result ??= new UdapDynamicClientRegistrationValidationResult(
+        validationResult ??= new UdapDynamicClientRegistrationValidationResult(
                 UdapDynamicClientRegistrationErrors.InvalidClientMetadata,
                 UdapDynamicClientRegistrationErrorDescriptions.MissingValidationResult);
 
-        if (result.IsError)
+        if (validationResult.IsError)
         {
-            context.Response.StatusCode = StatusCodes.Status400BadRequest;
-            
+            httpContext.Response.StatusCode = StatusCodes.Status400BadRequest;
+
             var error = new UdapDynamicClientRegistrationErrorResponse
             (
-                result.Error ?? string.Empty,
-                result.ErrorDescription ?? string.Empty
+                validationResult.Error ?? string.Empty,
+                validationResult.ErrorDescription ?? string.Empty
             );
 
             _logger.LogWarning("Error: {@Error}", error);
 
-            await context.Response.WriteAsJsonAsync(error, cancellationToken: token);
+            await httpContext.Response.WriteAsJsonAsync(error, cancellationToken: token);
 
             return;
         }
 
-
-        if (result.Client != null)
+        // Process (create client + persist)
+        try
         {
-            try
-            {
-                if (result.Client.AllowedGrantTypes.Count == 0)
-                {
-                    var numberOfClientsRemoved = await _store.CancelRegistration(result.Client, token);
-                    result.Client.ClientId = "removed";
+            var processorResult = await _processor.ProcessAsync(context, token);
 
-                    if (numberOfClientsRemoved == 0)
-                    {
-                        context.Response.StatusCode = StatusCodes.Status400BadRequest;
-                        return;
-                    }
-                    // From section 6 of https://www.udap.org/udap-dynamic-client-registration.html
-                    // The Authorization Server SHOULD return an HTTP 200 response code (instead of a 201 response code)
-                    // for successful registration modification and cancellation requests.
-                    context.Response.StatusCode = StatusCodes.Status200OK;
-                }
-                else
-                {
-                    if (_serverSettings.EffectiveRequirePkce)
-                    {
-                        result.Client.RequirePkce = true;
-                    }
-                    var upsertFlag = await _store.UpsertClient(result.Client, token);
-
-                    if (upsertFlag)
-                    {
-                        // From section 6 of https://www.udap.org/udap-dynamic-client-registration.html
-                        // The Authorization Server SHOULD return an HTTP 200 response code (instead of a 201 response code)
-                        // for successful registration modification and cancellation requests.
-                        context.Response.StatusCode = StatusCodes.Status200OK;
-                    }
-                    else
-                    {
-                        context.Response.StatusCode = StatusCodes.Status201Created;
-                    }
-                }
-            }
-            catch (Exception ex)
+            if (processorResult.IsError)
             {
-                await context.Response.WriteAsJsonAsync(new UdapDynamicClientRegistrationErrorResponse
+                httpContext.Response.StatusCode = StatusCodes.Status400BadRequest;
+
+                var error = new UdapDynamicClientRegistrationErrorResponse
                 (
-                    UdapDynamicClientRegistrationErrors.InvalidClientMetadata,
-                    "Udap registration failed to save a client."
-                ), cancellationToken: token);
+                    processorResult.Error ?? string.Empty,
+                    processorResult.ErrorDescription ?? string.Empty
+                );
 
-                _logger.LogError(ex, "Udap registration failed to save a client.");
+                _logger.LogWarning("Error: {@Error}", error);
+
+                await httpContext.Response.WriteAsJsonAsync(error, cancellationToken: token);
+
                 return;
             }
+
+            if (processorResult.IsCancellation)
+            {
+                // From section 6 of https://www.udap.org/udap-dynamic-client-registration.html
+                // The Authorization Server SHOULD return an HTTP 200 response code (instead of a 201 response code)
+                // for successful registration modification and cancellation requests.
+                httpContext.Response.StatusCode = StatusCodes.Status200OK;
+            }
+            else if (processorResult.IsUpsert)
+            {
+                // From section 6 of https://www.udap.org/udap-dynamic-client-registration.html
+                // The Authorization Server SHOULD return an HTTP 200 response code (instead of a 201 response code)
+                // for successful registration modification and cancellation requests.
+                httpContext.Response.StatusCode = StatusCodes.Status200OK;
+            }
+            else
+            {
+                httpContext.Response.StatusCode = StatusCodes.Status201Created;
+            }
+        }
+        catch (Exception ex)
+        {
+            await httpContext.Response.WriteAsJsonAsync(new UdapDynamicClientRegistrationErrorResponse
+            (
+                UdapDynamicClientRegistrationErrors.InvalidClientMetadata,
+                "Udap registration failed to save a client."
+            ), cancellationToken: token);
+
+            _logger.LogError(ex, "Udap registration failed to save a client.");
+            return;
         }
 
-        var registrationResponse = BuildResponseDocument(request, result);
+        var registrationResponse = BuildResponseDocument(request, validationResult, context);
 
         var options = new JsonSerializerOptions
         {
             DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull,
         };
-        
-        await context.Response.WriteAsJsonAsync(registrationResponse, options, "application/json", cancellationToken: token);
+
+        await httpContext.Response.WriteAsJsonAsync(registrationResponse, options, "application/json", cancellationToken: token);
     }
 
     private static async Task<string> GetBody(HttpContext context)
@@ -214,7 +216,7 @@ public class UdapDynamicClientRegistrationEndpoint
 
 
     //
-    // RFC7591 DCR, states, 
+    // RFC7591 DCR, states,
     // If a software statement was used as part of the registration, its
     // value MUST be returned unmodified in the response along with other
     // metadata using the "software_statement" member name.  Client metadata
@@ -223,17 +225,19 @@ public class UdapDynamicClientRegistrationEndpoint
     // response(possibly with different values, since the values requested
     // and the values used may differ).
     //
-    private static UdapDynamicClientRegistrationDocument BuildResponseDocument(UdapRegisterRequest request,
-        UdapDynamicClientRegistrationValidationResult result)
+    private static UdapDynamicClientRegistrationDocument BuildResponseDocument(
+        UdapRegisterRequest request,
+        UdapDynamicClientRegistrationValidationResult result,
+        UdapDynamicClientRegistrationContext context)
     {
         var registrationResponse = new UdapDynamicClientRegistrationDocument()
         {
-            ClientId = result.Client?.ClientId,
+            ClientId = context.Client?.ClientId,
             SoftwareStatement = request.SoftwareStatement
         };
 
         //
-        // result.Document is the UdapDynamicClientRegistrationDocument originally sent as the 
+        // result.Document is the UdapDynamicClientRegistrationDocument originally sent as the
         // software_statement and thus all members must be returned as top-level elements.
         //
         if (result.Document != null)

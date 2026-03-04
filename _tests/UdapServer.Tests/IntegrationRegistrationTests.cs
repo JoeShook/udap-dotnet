@@ -382,10 +382,11 @@ namespace UdapServer.Tests
             var intermediateCerts = new X509Certificate2Collection(anchors.First().Intermediates!
                 .Select(s => X509Certificate2.CreateFromPem(s.Certificate)).ToArray());
 
+            var registrationContext = new UdapDynamicClientRegistrationContext { Request = requestBody };
             var result = await validator.ValidateAsync(
-                requestBody, 
-                intermediateCerts, 
-                communityAnchors!, 
+                registrationContext,
+                intermediateCerts,
+                communityAnchors!,
                 anchors);
 
             result.IsError.Should().BeFalse($"{result.Error} : {result.ErrorDescription}");
@@ -503,8 +504,9 @@ namespace UdapServer.Tests
             var intermediateCerts = new X509Certificate2Collection(anchors.First().Intermediates!
                 .Select(s => X509Certificate2.CreateFromPem(s.Certificate)).ToArray());
 
+            var registrationContext = new UdapDynamicClientRegistrationContext { Request = requestBody };
             var result = await validator.ValidateAsync(
-                requestBody,
+                registrationContext,
                 intermediateCerts,
                 communityAnchors!,
                 anchors);

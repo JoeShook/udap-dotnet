@@ -47,8 +47,9 @@ public static class UdapConfigurationServiceCollectionExtensions
         builder.Services.TryAddSingleton<IScopeExpander, DefaultScopeExpander>();
         builder.Services.AddScoped<UdapDynamicClientRegistrationEndpoint>();
         builder.Services.TryAddTransient<IUdapDynamicClientRegistrationValidator, UdapDynamicClientRegistrationValidator>();
+        builder.Services.TryAddTransient<IUdapDynamicClientRegistrationProcessor, UdapDynamicClientRegistrationProcessor>();
         builder.Services.TryAddSingleton<TrustChainValidator>();
-        
+
         return builder;
     }
 
