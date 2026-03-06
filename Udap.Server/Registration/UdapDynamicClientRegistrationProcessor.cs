@@ -49,7 +49,8 @@ public class UdapDynamicClientRegistrationProcessor : IUdapDynamicClientRegistra
             AlwaysIncludeUserClaimsInIdToken = _serverSettings.AlwaysIncludeUserClaimsInIdToken,
             RequireConsent = _serverSettings.RequireConsent,
             AllowRememberConsent = _serverSettings.AllowRememberConsent,
-            RequirePkce = _serverSettings.EffectiveRequirePkce
+            RequirePkce = _serverSettings.EffectiveRequirePkce,
+            RequireDPoP = _serverSettings.ForceDPoP || (document.DPoPEnabled == true)
         };
 
         // Organization / DataHolder properties
@@ -163,8 +164,8 @@ public class UdapDynamicClientRegistrationProcessor : IUdapDynamicClientRegistra
         context.Client = client;
 
         _logger.LogDebug(
-            "Processing registration: ClientId={ClientId}, RequirePkce={RequirePkce}",
-            client.ClientId, client.RequirePkce);
+            "Processing registration: ClientId={ClientId}, RequirePkce={RequirePkce}, RequireDPoP={RequireDPoP}",
+            client.ClientId, client.RequirePkce, client.RequireDPoP);
 
         // Persist
         var upsertFlag = await _store.UpsertClient(client, cancellationToken);

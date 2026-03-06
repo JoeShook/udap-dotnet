@@ -83,6 +83,13 @@ public class ServerSettings
     /// falls back to <see cref="SsraaVersion"/> policy.
     /// </summary>
     public bool? RequirePkce { get; set; }
+
+    /// <summary>
+    /// When true, all UDAP-registered clients will have RequireDPoP set to true,
+    /// regardless of the dpop_enabled value in the client's software statement.
+    /// Default is false.
+    /// </summary>
+    public bool ForceDPoP { get; set; }
 }
 
 

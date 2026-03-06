@@ -16,16 +16,17 @@ using Hl7.Fhir.Specification.Terminology;
 using Microsoft.AspNetCore.ResponseCompression;
 using Microsoft.IdentityModel.Tokens;
 using Serilog;
-using System.IdentityModel.Tokens.Jwt;
 using System.Net.Http.Headers;
 using System.Text;
 using System.Text.Json.Serialization;
+using Duende.AspNetCore.Authentication.JwtBearer.DPoP;
 using Firely.Fhir.Validation;
 using Microsoft.AspNetCore.Http.Json;
 using Udap.CdsHooks.Model;
 using Udap.Common;
 using Udap.Proxy.Server;
 using Udap.Proxy.Server.IDIPatientMatch;
+using Udap.Metadata.Server.Security;
 using Udap.Proxy.Server.Services;
 using Udap.Smart.Model;
 using Udap.Util.Extensions;
@@ -71,9 +72,11 @@ builder.Services.AddFusionCache()
         FailSafeMaxDuration = TimeSpan.FromHours(12)
     });
 
-builder.Services.AddAuthentication(OidcConstants.AuthenticationSchemes.AuthorizationHeaderBearer)
+// builder.Services.AddAuthentication(OidcConstants.AuthenticationSchemes.AuthorizationHeaderBearer)
+builder.Services.AddAuthentication("token")
 
-    .AddJwtBearer(OidcConstants.AuthenticationSchemes.AuthorizationHeaderBearer, options =>
+    // .AddJwtBearer(OidcConstants.AuthenticationSchemes.AuthorizationHeaderBearer, options =>
+    .AddJwtBearer("token", OidcConstants.AuthenticationSchemes.AuthorizationHeaderBearer, options =>
     {
         options.Authority = builder.Configuration["Jwt:Authority"];
         options.RequireHttpsMetadata = bool.Parse(builder.Configuration["Jwt:RequireHttpsMetadata"] ?? "true");
@@ -83,6 +86,25 @@ builder.Services.AddAuthentication(OidcConstants.AuthenticationSchemes.Authoriza
             ValidateAudience = false
         };
     });
+
+// layer on dpop validation if a DPoP token is presented
+// the authz header will be {dpop accessToken} rather than {bearer accessToken}.
+// in addition, a DPoP header must be presented as the proof-of-possession.
+builder.Services.ConfigureDPoPTokensForScheme("token", configure =>
+{
+    // Chose a validation mode: either Nonce or IssuedAt. With nonce validation,
+    // the api supplies a nonce that must be used to prove that the token was
+    // not pre-generated. With IssuedAt validation, the client includes the
+    // current time in the proof token, which is compared to the clock. Nonce
+    // validation provides protection against some attacks that are possible
+    // with IssuedAt validation, at the cost of an additional HTTP request being
+    // required each time the API is invoked.
+    //
+    // See RFC 9449 for more details.
+    configure.ValidationMode = ExpirationValidationMode.IssuedAt;
+    configure.TokenMode = DPoPMode.DPoPAndBearer; // Some clients are issued without DPoP capability
+});
+
 
 builder.Services.AddCors(options =>
 {
@@ -145,11 +167,12 @@ builder.Services.AddReverseProxy()
             //
             // Rewrite resource URLs
             //
-            else if (responseContext.HttpContext.Request.Path.HasValue && 
+            else if (responseContext.ProxyResponse != null &&
+                     responseContext.HttpContext.Request.Path.HasValue &&
                      responseContext.HttpContext.Request.Path.Value.StartsWith("/fhir/r4/", StringComparison.OrdinalIgnoreCase))
             {
                 responseContext.SuppressResponseBody = true;
-                var stream = await responseContext.ProxyResponse!.Content.ReadAsStreamAsync();
+                var stream = await responseContext.ProxyResponse.Content.ReadAsStreamAsync();
 
                 Console.WriteLine($"RESPONSE CODE: {responseContext.ProxyResponse.StatusCode}");
                 
@@ -252,6 +275,7 @@ app.UseStaticFiles();
 app.UseSerilogRequestLogging();
     
 app.UseAuthentication();
+app.UseSecurityEventLogging();
 app.UseAuthorization();
 
 //
@@ -313,42 +337,27 @@ async Task<byte[]?> GetFhirMetadata(ResponseTransformContext responseTransformCo
 
 void SetProxyHeaders(RequestTransformContext requestTransformContext)
 {
-    if (requestTransformContext.HttpContext.Request.Headers.Authorization.Count == 0)
+    var principal = requestTransformContext.HttpContext.User;
+
+    if (principal.Identity is not { IsAuthenticated: true })
     {
         return;
     }
 
-    var bearerToken = requestTransformContext.HttpContext.Request.Headers.Authorization.First();
-    
-    if (bearerToken == null)
-    {
-        return;
-    }
-
-    foreach (var requestHeader in requestTransformContext.HttpContext.Request.Headers)
-    {
-        Console.WriteLine(requestHeader.Value);
-    }
-
-    var tokenHandler = new JwtSecurityTokenHandler();
-    var jsonToken = tokenHandler.ReadJwtToken(requestTransformContext.HttpContext.Request.Headers.Authorization.First()?.Replace("Bearer", "").Trim());
-    var scopes = jsonToken.Claims.Where(c => c.Type == "scope");
-    var iss = jsonToken.Claims.Where(c => c.Type == "iss");
-    // var sub = jsonToken.Claims.Where(c => c.Type == "sub"); // figure out what subject should be for GCP
-
-    //TODO:  This should be capable of introspection calls, because the token may not be a jwt.
     // Never let the requester set this header.
     requestTransformContext.ProxyRequest.Headers.Remove("X-Authorization-Scope");
     requestTransformContext.ProxyRequest.Headers.Remove("X-Authorization-Issuer");
- 
+
+    var scopes = principal.FindAll("scope");
+    var iss = principal.FindFirst("iss");
+
     // Google Cloud way of passing scopes to the Fhir Server
     var spaceSeparatedString = scopes.Select(s => s.Value)
         .Where(s => s != "udap") //gcp doesn't know udap  Need better filter to block unknown scopes
         .ToSpaceSeparatedString();
-    
+
     requestTransformContext.ProxyRequest.Headers.Add("X-Authorization-Scope", spaceSeparatedString);
-    requestTransformContext.ProxyRequest.Headers.Add("X-Authorization-Issuer", iss.SingleOrDefault()?.Value);
-    // context.ProxyRequest.Headers.Add("X-Authorization-Subject", sub.SingleOrDefault().Value);
+    requestTransformContext.ProxyRequest.Headers.Add("X-Authorization-Issuer", iss?.Value);
 }
 
 void ForwardEncodingHeaders(HttpContext httpContext, HttpRequestMessage proxyRequest)

@@ -22,6 +22,7 @@ using Newtonsoft.Json.Serialization;
 using Serilog;
 using Udap.Common;
 using Udap.Common.Certificates;
+using Udap.Metadata.Server.Security;
 using Udap.Smart.Model;
 using Constants = Udap.Common.Constants;
 
@@ -164,6 +165,7 @@ app.UsePathBase(new PathString("/fhir/r4"));
 app.UseRouting();
 
 app.UseAuthentication();
+app.UseSecurityEventLogging();
 app.UseAuthorization();
 
 app.Use(async (context, next) =>

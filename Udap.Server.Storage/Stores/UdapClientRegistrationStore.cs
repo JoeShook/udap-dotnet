@@ -88,6 +88,7 @@ namespace Udap.Server.Storage.Stores
                 existingClient.AllowedGrantTypes = client.ToEntity().AllowedGrantTypes;
                 existingClient.AllowOfflineAccess = client.AllowOfflineAccess;
                 existingClient.RequirePkce = client.RequirePkce;
+                existingClient.RequireDPoP = client.RequireDPoP;
                 existingClient.LogoUri = client.LogoUri;
 
                 await _dbContext.SaveChangesAsync(token);
