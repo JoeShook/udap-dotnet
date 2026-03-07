@@ -20,8 +20,7 @@ steps:
   '--concurrency', '8', 
   '--set-env-vars', 'GCLOUD_PROJECT=true,GCPDeploy=true',
   '--set-secrets', '/secret/tefcaproxyserverappsettings=tefcaproxyserverappsettings:latest',
-  '--allow-unauthenticated',
-  '--to-latest'
+  '--allow-unauthenticated'
   ]
 
 images:
