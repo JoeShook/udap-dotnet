@@ -76,15 +76,7 @@ public class UdapMetadataMiddleware<TUdapMetadataOptions, TUdapMetadata>
                 var community = context.Request.Query["community"].FirstOrDefault();
                 var endpoint = context.RequestServices.GetRequiredService<UdapMetaDataEndpoint<TUdapMetadataOptions, TUdapMetadata>>();
                 var result = await endpoint.Process(context, community, context.RequestAborted);
-
-                if (result != null)
-                {
-                    await result.ExecuteAsync(context);
-                }
-                else
-                {
-                    context.Response.StatusCode = StatusCodes.Status404NotFound;
-                }
+                await result.ExecuteAsync(context);
 
                 return;
             }

@@ -61,8 +61,6 @@
     {
       "Community": "udap://IssMismatchToSubjAltName/",
       "SignedMetadataConfig": {
-        "Issuer": "http://localhost/fhir/r4",
-        "Subject": "http://localhost/fhir/r4",
         "AuthorizationEndpoint": "https://host.docker.internal:5002/connect/authorize",
         "TokenEndpoint": "https://host.docker.internal:5002/connect/token",
         "RegistrationEndpoint": "https://host.docker.internal:5002/connect/register"
@@ -72,8 +70,6 @@
     {
       "Community": "udap://IssMismatchToBaseUrl/",
       "SignedMetadataConfig": {
-        "Issuer": "http://localhost/IssMismatchToBaseUrl/r4",
-        "Subject": "http://localhost/IssMismatchToBaseUrl/r4",
         "AuthorizationEndpoint": "https://host.docker.internal:5002/connect/authorize",
         "TokenEndpoint": "https://host.docker.internal:5002/connect/token",
         "RegistrationEndpoint": "https://host.docker.internal:5002/connect/register"

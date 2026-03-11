@@ -282,7 +282,9 @@ app.UseStaticFiles();
 // To use the default framework request logging instead, remove this line and set the "Microsoft"
 // level in appsettings.json to "Information".
 app.UseSerilogRequestLogging();
-    
+
+app.UseUdapMetadataServer();
+
 app.UseAuthentication();
 app.UseSecurityEventLogging();
 app.UseAuthorization();
@@ -298,7 +300,6 @@ app.MapReverseProxy();
 
 app.UseCdsServices("fhir/r4");
 app.UseSmartMetadata("fhir/r4");
-app.UseUdapMetadataServer("fhir/r4"); // Ensure metadata can only be called from this base URL.
 
 app.Run();
 

@@ -108,7 +108,7 @@ public class UdapMetaDataBuilder<TUdapMetadataOptions, TUdapMetadata>
 
         var now = DateTime.UtcNow;
 
-        var (iss, sub) = ResolveIssuer(baseUrl, udapMetadataConfig, certificate);
+        var (iss, sub) = ResolveIssuer(baseUrl, certificate);
 
         var jwtPayload = new JwtPayLoadExtension(
             new List<Claim>
@@ -142,23 +142,11 @@ public class UdapMetaDataBuilder<TUdapMetadataOptions, TUdapMetadata>
         return udapMetaData;
     }
 
-    private static (string issuer, string subject) ResolveIssuer(string baseUrl, UdapMetadataConfig udapMetadataConfig, X509Certificate2 certificate)
+    private static (string issuer, string subject) ResolveIssuer(string baseUrl, X509Certificate2 certificate)
     {
-        var issuer = udapMetadataConfig.SignedMetadataConfig.Issuer;
-        var subject = udapMetadataConfig.SignedMetadataConfig.Subject;
-        var autoIss = certificate.ResolveUriSubjAltName(baseUrl);
+        var resolved = certificate.ResolveUriSubjAltName(baseUrl);
 
-        if (string.IsNullOrEmpty(issuer))
-        {
-            issuer = autoIss;
-        }
-
-        if (string.IsNullOrEmpty(subject))
-        {
-            subject = autoIss;
-        }
-
-        return (issuer, subject);
+        return (resolved, resolved);
     }
 
     private async Task<X509Certificate2?> Load(UdapMetadataConfig udapMetadataConfig, string baseUrl, CancellationToken token)

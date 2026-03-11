@@ -12,8 +12,6 @@
     {
       "Community": "udap://fhirlabs1/",
       "SignedMetadataConfig": {
-        "Issuer": "https://localhost:7075/fhir/r4",
-        "Subject": "https://localhost:7075/fhir/r4",
         "AuthorizationEndpoint": "https://host.docker.internal:5002/connect/authorize",
         "TokenEndpoint": "https://host.docker.internal:5002/connect/token",
         "RegistrationEndpoint": "https://host.docker.internal:5002/connect/register"

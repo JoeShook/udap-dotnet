@@ -204,16 +204,8 @@ public class SecurityEventMiddleware
                 return clientId;
             }
 
-            // Duende IdentityServer may map client_id to different claim types
-            clientId = jwt.Claims.FirstOrDefault(c => c.Type == "azp")?.Value;
-
-            if (clientId != null)
-            {
-                return clientId;
-            }
-
             logger?.LogDebug(
-                "Cannot resolve login: JWT has no client_id or azp claim. Available claims: {ClaimTypes}",
+                "Cannot resolve login: JWT has no client_id claim. Available claims: {ClaimTypes}",
                 string.Join(", ", jwt.Claims.Select(c => c.Type).Distinct()));
 
             return null;

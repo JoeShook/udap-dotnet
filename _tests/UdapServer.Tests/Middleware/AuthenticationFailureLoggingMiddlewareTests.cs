@@ -10,6 +10,7 @@
 using System.IdentityModel.Tokens.Jwt;
 using System.Security.Claims;
 using FluentAssertions;
+using Microsoft.AspNetCore.Authentication;
 using Microsoft.AspNetCore.Http;
 using Microsoft.Extensions.Logging;
 using Microsoft.IdentityModel.Tokens;
@@ -312,6 +313,53 @@ public class SecurityEventMiddlewareTests
     }
 
     [Fact]
+    public void ExtractClientId_JwtWithNoClientId_ReturnsNull()
+    {
+        var token = CreateTestJwtWithClaims(new Claim("sub", "some-subject"));
+        var result = SecurityEventMiddleware.ExtractClientId(token, _logger);
+        result.Should().BeNull();
+        _logMessages.Should().Contain(m => m.Contains("no client_id claim"));
+    }
+
+    [Fact]
+    public void ExtractClientId_JwtWithNoClientId_NullLogger_ReturnsNull()
+    {
+        var token = CreateTestJwtWithClaims(new Claim("sub", "some-subject"));
+        var result = SecurityEventMiddleware.ExtractClientId(token);
+        result.Should().BeNull();
+    }
+
+    [Fact]
+    public async Task FailedAuth_SchemeOnly_WithAuthFailureFeature_LogsReason()
+    {
+        var middleware = new SecurityEventMiddleware(
+            _ => Task.CompletedTask,
+            _logger);
+
+        var context = new DefaultHttpContext();
+        context.Request.Path = "/fhir/r4/Patient";
+        context.Request.Method = "GET";
+        context.Request.Headers.Authorization = "Bearer";
+
+        var authFeature = Substitute.For<IAuthenticateResultFeature>();
+        authFeature.AuthenticateResult.Returns(
+            AuthenticateResult.Fail("Token expired"));
+        context.Features.Set(authFeature);
+
+        await middleware.InvokeAsync(context);
+
+        _logMessages.Should().Contain(m => m.Contains("Token expired"));
+    }
+
+    [Fact]
+    public void ExtractClientId_UnreadableToken_ReturnsNull()
+    {
+        // Three base64 segments that look like JWT structure but aren't valid
+        var result = SecurityEventMiddleware.ExtractClientId("eyx.eyy.ezz", _logger);
+        result.Should().BeNull();
+    }
+
+    [Fact]
     public async Task SuccessfulAccess_LogsAllFields()
     {
         var middleware = new SecurityEventMiddleware(
@@ -346,15 +394,14 @@ public class SecurityEventMiddlewareTests
 
     private static string CreateTestJwt(string clientId)
     {
+        return CreateTestJwtWithClaims(new Claim("sub", "test-subject"), new Claim("client_id", clientId));
+    }
+
+    private static string CreateTestJwtWithClaims(params Claim[] claims)
+    {
         var key = new SymmetricSecurityKey(
             System.Text.Encoding.UTF8.GetBytes("this-is-a-test-key-that-is-long-enough-for-hmac"));
         var credentials = new SigningCredentials(key, SecurityAlgorithms.HmacSha256);
-
-        var claims = new List<Claim>
-        {
-            new("sub", "test-subject"),
-            new("client_id", clientId)
-        };
 
         var token = new JwtSecurityToken(
             claims: claims,

@@ -8,6 +8,7 @@
 #endregion
 
 using System.IdentityModel.Tokens.Jwt;
+using System.Net.Http.Json;
 using System.Security.Cryptography.X509Certificates;
 using FluentAssertions;
 using Duende.IdentityModel;
@@ -154,5 +155,133 @@ public class UdapControllerMultiHostTest : IClassFixture<ApiForCommunityTestFixt
             "https://localhost:7016/eleven/fhir/r4/.well-known/udap?community=udap://multihost/");
 
         response.StatusCode.Should().Be(System.Net.HttpStatusCode.NotFound);
+    }
+
+    [Fact]
+    public async Task DynamicRoute_CommunitiesEndpointTest()
+    {
+        var client = _fixture.CreateClient();
+
+        var response = await client.GetAsync(
+            "https://localhost:7016/one/fhir/r4/.well-known/udap/communities");
+
+        response.StatusCode.Should().Be(System.Net.HttpStatusCode.OK);
+        var communities = await response.Content.ReadFromJsonAsync<List<string>>();
+        communities.Should().NotBeNull();
+        communities.Should().Contain("udap://multihost/");
+    }
+
+    [Fact]
+    public async Task DynamicRoute_CommunitiesAsHtmlEndpointTest()
+    {
+        var client = _fixture.CreateClient();
+
+        var response = await client.GetAsync(
+            "https://localhost:7016/five/fhir/r4/.well-known/udap/communities/ashtml");
+
+        response.StatusCode.Should().Be(System.Net.HttpStatusCode.OK);
+        response.Content.Headers.ContentType?.MediaType.Should().Be("text/html");
+        var html = await response.Content.ReadAsStringAsync();
+        html.Should().Contain("udap://multihost/");
+    }
+
+    [Fact]
+    public async Task DynamicRoute_OptionsRetursCorsHeadersTest()
+    {
+        var client = _fixture.CreateClient();
+
+        var request = new HttpRequestMessage(HttpMethod.Options,
+            "https://localhost:7016/two/fhir/r4/.well-known/udap");
+        var response = await client.SendAsync(request);
+
+        response.StatusCode.Should().Be(System.Net.HttpStatusCode.NoContent);
+        response.Headers.TryGetValues("Access-Control-Allow-Origin", out var origin);
+        origin.Should().Contain("*");
+        response.Headers.TryGetValues("Access-Control-Allow-Methods", out var methods);
+        methods.Should().Contain("GET, OPTIONS");
+    }
+
+    [Fact]
+    public async Task DynamicRoute_OptionsCommunitiesTest()
+    {
+        var client = _fixture.CreateClient();
+
+        var request = new HttpRequestMessage(HttpMethod.Options,
+            "https://localhost:7016/three/fhir/r4/.well-known/udap/communities");
+        var response = await client.SendAsync(request);
+
+        response.StatusCode.Should().Be(System.Net.HttpStatusCode.NoContent);
+        response.Headers.TryGetValues("Access-Control-Allow-Origin", out var origin);
+        origin.Should().Contain("*");
+    }
+
+    [Fact]
+    public async Task DynamicRoute_OptionsCommunitiesAsHtmlTest()
+    {
+        var client = _fixture.CreateClient();
+
+        var request = new HttpRequestMessage(HttpMethod.Options,
+            "https://localhost:7016/four/fhir/r4/.well-known/udap/communities/ashtml");
+        var response = await client.SendAsync(request);
+
+        response.StatusCode.Should().Be(System.Net.HttpStatusCode.NoContent);
+        response.Headers.TryGetValues("Access-Control-Allow-Origin", out var origin);
+        origin.Should().Contain("*");
+    }
+
+    [Fact]
+    public async Task UnknownCommunityReturns404Test()
+    {
+        var client = _fixture.CreateClient();
+
+        var response = await client.GetAsync(
+            "https://localhost:7016/one/fhir/r4/.well-known/udap?community=udap://nonexistent/");
+
+        response.StatusCode.Should().Be(System.Net.HttpStatusCode.NotFound);
+    }
+
+    [Fact]
+    public async Task DynamicRoute_UnsupportedMethodPassesThroughTest()
+    {
+        var client = _fixture.CreateClient();
+
+        var response = await client.PostAsync(
+            "https://localhost:7016/one/fhir/r4/.well-known/udap", null);
+
+        // POST is not handled by the middleware — passes through to next middleware
+        response.StatusCode.Should().NotBe(System.Net.HttpStatusCode.OK);
+    }
+
+    [Fact]
+    public async Task DynamicRoute_UnsupportedMethodOnCommunitiesPassesThroughTest()
+    {
+        var client = _fixture.CreateClient();
+
+        var response = await client.PostAsync(
+            "https://localhost:7016/one/fhir/r4/.well-known/udap/communities", null);
+
+        response.StatusCode.Should().NotBe(System.Net.HttpStatusCode.OK);
+    }
+
+    [Fact]
+    public async Task DynamicRoute_UnsupportedMethodOnCommunitiesAsHtmlPassesThroughTest()
+    {
+        var client = _fixture.CreateClient();
+
+        var response = await client.PostAsync(
+            "https://localhost:7016/one/fhir/r4/.well-known/udap/communities/ashtml", null);
+
+        response.StatusCode.Should().NotBe(System.Net.HttpStatusCode.OK);
+    }
+
+    [Fact]
+    public async Task DynamicRoute_NonUdapPathPassesThroughTest()
+    {
+        var client = _fixture.CreateClient();
+
+        var response = await client.GetAsync("https://localhost:7016/some/other/path");
+
+        // Should not be handled by the UDAP middleware - passes through to next middleware
+        response.StatusCode.Should().NotBe(System.Net.HttpStatusCode.OK);
     }
 }

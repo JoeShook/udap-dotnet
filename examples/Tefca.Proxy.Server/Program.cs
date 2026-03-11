@@ -170,13 +170,14 @@ app.UseStaticFiles();
 // level in appsettings.json to "Information".
 app.UseSerilogRequestLogging();
 
+app.UseUdapMetadataServer();
+
 app.UseAuthentication();
 app.UseAuthorization();
 
 app.MapReverseProxy();
 
 app.UseSmartMetadata("fhir/r4");
-app.UseUdapMetadataServer("fhir/r4"); // Ensure metadata can only be called from this base URL.
 
 app.Run();
 
