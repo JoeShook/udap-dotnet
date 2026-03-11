@@ -1486,6 +1486,14 @@ public partial class BuildTestCerts : CertificateBase
                 $"{BaseDir}/../../examples/FhirLabsApi/CertStore/issued/fhirlabs.net.{segment}.client.pfx",
                 true);
         }
+
+        // Distribute anchor and intermediate to UdapMetadata.Tests for client-side trust validation
+        File.Copy($"{SureFhirLabsCertStore}/SureFhirLabs_CA.cer",
+            $"{BaseDir}/../UdapMetadata.Tests/CertStore/anchors/SureFhirLabs_CA.cer",
+            true);
+        File.Copy($"{SureFhirlabsUdapIntermediates}/SureFhirLabs_Intermediate.cer",
+            $"{BaseDir}/../UdapMetadata.Tests/CertStore/intermediates/SureFhirLabs_Intermediate.cer",
+            true);
     }
 
     [Fact(Skip = "Enabled on desktop when needed.")]
