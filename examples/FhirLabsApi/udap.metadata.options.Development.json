@@ -89,6 +89,15 @@
         "TokenEndpoint": "https://host.docker.internal:5002/connect/token",
         "RegistrationEndpoint": "https://host.docker.internal:5002/connect/register"
       }
+    },
+
+    {
+      "Community": "udap://multihost/",
+      "SignedMetadataConfig": {
+        "AuthorizationEndpoint": "https://host.docker.internal:5002/connect/authorize",
+        "TokenEndpoint": "https://host.docker.internal:5002/connect/token",
+        "RegistrationEndpoint": "https://host.docker.internal:5002/connect/register"
+      }
     }
   ]
 }

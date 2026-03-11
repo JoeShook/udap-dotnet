@@ -155,4 +155,28 @@ public static class ServiceCollectionExtensions
 
         return app;
     }
+
+    /// <summary>
+    /// Registers middleware that dynamically handles UDAP metadata requests at any
+    /// path ending with .well-known/udap. Use this when the server hosts multiple
+    /// domains and each domain has its own base URL path.
+    /// </summary>
+    public static IApplicationBuilder UseUdapDynamicMetadataServer(this IApplicationBuilder app)
+    {
+        return UseUdapDynamicMetadataServer<UdapMetadataOptions, UdapMetadata>(app);
+    }
+
+    /// <summary>
+    /// Registers middleware that dynamically handles UDAP metadata requests at any
+    /// path ending with .well-known/udap. Use this when the server hosts multiple
+    /// domains and each domain has its own base URL path.
+    /// </summary>
+    public static IApplicationBuilder UseUdapDynamicMetadataServer<TUdapMetadataOptions, TUdapMetadata>(this IApplicationBuilder app)
+        where TUdapMetadataOptions : UdapMetadataOptions
+        where TUdapMetadata : UdapMetadata
+    {
+        app.UseMiddleware<UdapMetadataMiddleware<TUdapMetadataOptions, TUdapMetadata>>();
+
+        return app;
+    }
 }

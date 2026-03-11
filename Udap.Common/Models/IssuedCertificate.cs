@@ -8,6 +8,7 @@
 #endregion
 
 using System.Security.Cryptography.X509Certificates;
+using Udap.Util.Extensions;
 
 namespace Udap.Common.Models;
 
@@ -21,13 +22,19 @@ public class IssuedCertificate : IEquatable<IssuedCertificate>
         Certificate = certificate;
         Community = community;
         Thumbprint = certificate.Thumbprint;
+        SubjectAltNames = certificate
+            .GetSubjectAltNames(n => n.TagNo == (int)X509Extensions.GeneralNameType.URI)
+            .Select(s => s.Item2)
+            .ToList();
     }
 
     public string Community { get; }
 
     public X509Certificate2 Certificate { get; }
-    
+
     public string Thumbprint { get; }
+
+    public IReadOnlyList<string> SubjectAltNames { get; } = [];
 
     /// <summary>Serves as the default hash function.</summary>
     /// <returns>A hash code for the current object.</returns>

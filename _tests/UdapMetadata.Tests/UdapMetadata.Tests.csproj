@@ -98,6 +98,12 @@
     <None Update="CertStore\intermediates\intermediateWeatherApiLocalhostCert2.cer">
       <CopyToOutputDirectory>Always</CopyToOutputDirectory>
     </None>
+    <None Update="CertStore\anchors\SureFhirLabs_CA.cer">
+      <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+    </None>
+    <None Update="CertStore\intermediates\SureFhirLabs_Intermediate.cer">
+      <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+    </None>
   </ItemGroup>
 
   <ItemGroup>

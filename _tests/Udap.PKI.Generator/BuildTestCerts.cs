@@ -1450,6 +1450,44 @@ public partial class BuildTestCerts : CertificateBase
     }
 
 
+    /// <summary>
+    /// Generate 10 end-entity certificates from SureFhirLabs_Intermediate, each with a single
+    /// unique Subject Alternative Name URI representing a different domain path.
+    /// These are used to test multi-domain metadata signing within a single community.
+    /// </summary>
+    [Fact] //(Skip = "Enabled on desktop when needed.")]
+    public void MakeMultiDomainCertsForSureFhirLabs()
+    {
+        using var rootCA = new X509Certificate2($"{SureFhirLabsCertStore}/SureFhirLabs_CA.pfx", "udap-test");
+        using var subCA = new X509Certificate2($"{SureFhirlabsUdapIntermediates}/SureFhirLabs_Intermediate.pfx", "udap-test");
+
+        var domainSegments = new[] { "one", "two", "three", "four", "five", "six", "seven", "eight", "nine", "ten" };
+
+        foreach (var segment in domainSegments)
+        {
+            BuildUdapClientCertificate(
+                subCA,
+                rootCA,
+                subCA.GetRSAPrivateKey()!,
+                $"CN=fhirlabs.net {segment}, OU=UDAP, O=Fhir Coding, L=Portland, S=Oregon, C=US",
+                new List<string> { $"https://localhost:7016/{segment}/fhir/r4", $"https://fhirlabs.net/{segment}/fhir/r4" },
+                $"{SureFhirlabsUdapIssued}/fhirlabs.net.{segment}.client",
+                SureFhirLabsIntermediateCrl,
+                SureFhirLabsIntermediatePublicCertHosted
+            );
+
+            _testOutputHelper.WriteLine($"Generated cert for https://fhirlabs.net/{segment}/fhir/r4");
+        }
+
+        // Distribute to FhirLabsApi for integration tests via UdapMetadata.Tests
+        foreach (var segment in domainSegments)
+        {
+            File.Copy($"{SureFhirlabsUdapIssued}/fhirlabs.net.{segment}.client.pfx",
+                $"{BaseDir}/../../examples/FhirLabsApi/CertStore/issued/fhirlabs.net.{segment}.client.pfx",
+                true);
+        }
+    }
+
     [Fact(Skip = "Enabled on desktop when needed.")]
     public void BuildOptumClientCertificateForBrett()
     {

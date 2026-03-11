@@ -97,7 +97,7 @@ public class UdapMetaDataBuilder<TUdapMetadataOptions, TUdapMetadata>
             udapMetaData.TokenEndpointAuthSigningAlgValuesSupported = udapMetadataConfig.SignedMetadataConfig.TokenSigningAlgorithms;
         }
 
-        var certificate = await Load(udapMetadataConfig, token);
+        var certificate = await Load(udapMetadataConfig, baseUrl, token);
 
         if (certificate == null)
         {
@@ -161,13 +161,27 @@ public class UdapMetaDataBuilder<TUdapMetadataOptions, TUdapMetadata>
         return (issuer, subject);
     }
 
-    private async Task<X509Certificate2?> Load(UdapMetadataConfig udapMetadataConfig, CancellationToken token)
+    private async Task<X509Certificate2?> Load(UdapMetadataConfig udapMetadataConfig, string baseUrl, CancellationToken token)
     {
         var store = await _certificateStore.Resolve(token);
+        var normalizedBaseUrl = new Uri(baseUrl.TrimEnd('/')).AbsoluteUri;
 
-        var entity = store.IssuedCertificates
+        var communityCerts = store.IssuedCertificates
             .Where(c => c.Community == udapMetadataConfig.Community)
+            .ToList();
+
+        var entity = communityCerts
+            .Where(c => c.SubjectAltNames.Any(san =>
+                san == baseUrl ||
+                san == normalizedBaseUrl ||
+                new Uri(san.TrimEnd('/')).AbsoluteUri == normalizedBaseUrl))
             .MaxBy(c => c.Certificate.NotBefore);
+
+        // Fallback only when community has a single cert (backward compatibility)
+        if (entity == null && communityCerts.Count == 1)
+        {
+            entity = communityCerts[0];
+        }
 
         if (entity == null)
         {

@@ -161,6 +161,7 @@ var app = builder.Build();
 app.UseSerilogRequestLogging();
 
 app.UsePathBase(new PathString("/fhir/r4"));
+app.UseUdapDynamicMetadataServer();
 
 app.UseRouting();
 
