@@ -47,6 +47,7 @@
 
 
   <ItemGroup>
+    <PackageReference Include="Microsoft.Bcl.Memory" />
     <ProjectReference Include="..\Udap.Util\Udap.Util.csproj" />
   </ItemGroup>
 

@@ -15,6 +15,7 @@
     <PackageVersion Include="HtmlAgilityPack" Version="1.12.4" />
     <PackageVersion Include="MartinCostello.Logging.XUnit" Version="0.7.1" />
     <PackageVersion Include="Meziantou.Extensions.Logging.Xunit" Version="1.0.24" />
+    <PackageVersion Include="Microsoft.Bcl.Memory" Version="10.0.4" />
     <PackageVersion Include="Microsoft.Data.SqlClient" Version="6.1.4" />
     <PackageVersion Include="Microsoft.EntityFrameworkCore" Version="10.0.3" />
     <PackageVersion Include="Microsoft.EntityFrameworkCore.Design" Version="10.0.3" />
