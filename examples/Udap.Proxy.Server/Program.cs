@@ -146,7 +146,6 @@ builder.Services.AddReverseProxy()
             return ValueTask.CompletedTask;
         });
 
-
         builderContext.AddRequestTransform(async context =>
         {
             var accessTokenService = context.HttpContext.RequestServices.GetRequiredService<IAccessTokenService>();
@@ -162,12 +161,23 @@ builder.Services.AddReverseProxy()
             if (responseContext.HttpContext.Request.Path == "/fhir/r4/metadata")
             {
                 responseContext.SuppressResponseBody = true;
+
+                // If the backend returned an error, pass through the status and body
+                if (responseContext.ProxyResponse != null && !responseContext.ProxyResponse.IsSuccessStatusCode)
+                {
+                    var errorBytes = await responseContext.ProxyResponse.Content.ReadAsByteArrayAsync();
+                    responseContext.HttpContext.Response.StatusCode = (int)responseContext.ProxyResponse.StatusCode;
+                    responseContext.HttpContext.Response.ContentLength = errorBytes.Length;
+                    await responseContext.HttpContext.Response.Body.WriteAsync(errorBytes);
+                    return;
+                }
+
                 var cache = responseContext.HttpContext.RequestServices.GetRequiredService<IFusionCache>();
                 var bytes = await cache.GetOrSetAsync("metadata", _ => GetFhirMetadata(responseContext, builder));
-                
+
                 // Change Content-Length to match the modified body, or remove it.
                 responseContext.HttpContext.Response.ContentLength = bytes?.Length;
-                
+
                 // Response headers are copied before transforms are invoked, update any needed headers on the HttpContext.Response.
                 await responseContext.HttpContext.Response.Body.WriteAsync(bytes);
             }
@@ -268,6 +278,31 @@ using (var scope = app.Services.CreateScope())
 
 // Configure the HTTP request pipeline.
 app.UseForwardedHeaders();
+
+// Rewrite community-prefixed paths (e.g., /community-a/fhir/r4/Patient/123)
+// to /fhir/r4/Patient/123 so existing YARP routes match.
+// Must run before UseRouting() so the correct YARP route is selected.
+app.Use(async (context, next) =>
+{
+    var path = context.Request.Path.Value;
+    if (path != null)
+    {
+        var fhirIndex = path.IndexOf("/fhir/r4", StringComparison.OrdinalIgnoreCase);
+        if (fhirIndex > 0)
+        {
+            var communityPrefix = path[..fhirIndex];
+            context.Items["OriginalPath"] = path;
+            context.Items["CommunityPrefix"] = communityPrefix;
+            context.Request.PathBase = context.Request.PathBase.Add(communityPrefix);
+            context.Request.Path = path[fhirIndex..];
+        }
+    }
+
+    await next();
+});
+
+// Explicit UseRouting() so the path rewrite above runs before route matching.
+app.UseRouting();
 app.UseCors("DefaultPolicy");
 
 if (!string.Equals(disableCompression, "true", StringComparison.OrdinalIgnoreCase))

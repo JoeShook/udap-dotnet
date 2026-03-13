@@ -1,8 +1,8 @@
-﻿#region (c) 2022-2025 Joseph Shook. All rights reserved.
+#region (c) 2022-2025 Joseph Shook. All rights reserved.
 // /*
 //  Authors:
 //     Joseph Shook   Joseph.Shook@Surescripts.com
-// 
+//
 //  See LICENSE in the project root for license information.
 // */
 #endregion
@@ -22,23 +22,29 @@ Redistributions of source code must retain the above copyright notice, this list
 Redistributions in binary form must reproduce the above copyright notice, this list of conditions and the following disclaimer in the documentation and/or other materials provided with the distribution.
 Neither the name of The Direct Project (directproject.org) nor the names of its contributors may be used to endorse or promote products derived from this software without specific prior written permission.
 THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS" AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT HOLDER OR CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
- 
+
 */
 
 using System.Security.Cryptography.X509Certificates;
 using Microsoft.Extensions.Logging;
+using Org.BouncyCastle.Asn1;
+using Org.BouncyCastle.Asn1.X509;
+using Org.BouncyCastle.Security;
+using Org.BouncyCastle.X509;
 using Udap.Common.Models;
 using Udap.Util.Extensions;
+using BcX509Certificate = Org.BouncyCastle.X509.X509Certificate;
+using BcX509Extensions = Org.BouncyCastle.Asn1.X509.X509Extensions;
 
 namespace Udap.Common.Certificates
 {
     public class TrustChainValidator
     {
-        private readonly X509ChainPolicy _validationPolicy;
-        private readonly X509ChainStatusFlags _problemFlags;
-        private const X509RevocationMode DefaultX509RevocationMode = X509RevocationMode.Online;
-        private const X509RevocationFlag DefaultX509RevocationFlag = X509RevocationFlag.ExcludeRoot;
+        private readonly ChainProblemStatus _problemFlags;
+        private readonly bool _checkRevocation;
+        private readonly CertificateDownloadCache? _downloadCache;
         private readonly ILogger<TrustChainValidator> _logger;
+        private const int MaxChainDepth = 10;
 
         /// <summary>
         /// Event fired when a certificate is untrusted
@@ -48,7 +54,7 @@ namespace Udap.Common.Certificates
         /// <summary>
         /// Event fired if a certificate has a problem.
         /// </summary>
-        public event Action<X509ChainElement>? Problem;
+        public event Action<ChainElementInfo>? Problem;
 
         /// <summary>
         /// Event fired if there was an error during certificate validation
@@ -56,85 +62,64 @@ namespace Udap.Common.Certificates
         public event Action<X509Certificate2, Exception>? Error;
 
         /// <summary>
-        /// Default <see cref="X509ChainStatusFlags"/> that we will be validating by default if not supplied by the caller
+        /// Default <see cref="ChainProblemStatus"/> flags for validation
         /// </summary>
-        public static readonly X509ChainStatusFlags DefaultProblemFlags =
-            BuildDefaultProblemFlags();
-
-        private static X509ChainStatusFlags BuildDefaultProblemFlags()
-        {
-            return X509ChainStatusFlags.NotTimeValid |
-                   X509ChainStatusFlags.Revoked |
-                   X509ChainStatusFlags.NotSignatureValid |
-                   X509ChainStatusFlags.InvalidBasicConstraints |
-                   X509ChainStatusFlags.CtlNotTimeValid |
-                   X509ChainStatusFlags.OfflineRevocation |
-                   X509ChainStatusFlags.CtlNotSignatureValid;
-        }
+        public static readonly ChainProblemStatus DefaultProblemFlags =
+            ChainProblemStatus.NotTimeValid |
+            ChainProblemStatus.Revoked |
+            ChainProblemStatus.NotSignatureValid |
+            ChainProblemStatus.InvalidBasicConstraints |
+            ChainProblemStatus.OfflineRevocation;
 
         /// <summary>
-        /// Creates an instance with default chain policy, problem flags.
+        /// Creates an instance with default problem flags and online revocation checking.
         /// </summary>
-        public TrustChainValidator(ILogger<TrustChainValidator> logger)
-            : this(new X509ChainPolicy(), BuildDefaultProblemFlags(), logger)
-        {
-            _validationPolicy.VerificationFlags = X509VerificationFlags.IgnoreCertificateAuthorityRevocationUnknown |
-                                                  X509VerificationFlags.IgnoreEndRevocationUnknown |
-                                                  X509VerificationFlags.AllowUnknownCertificateAuthority |
-                                                  X509VerificationFlags.IgnoreWrongUsage;
-
-            _validationPolicy.RevocationFlag = DefaultX509RevocationFlag;
-            _validationPolicy.RevocationMode = DefaultX509RevocationMode;
-        }
-
-        /// <summary>
-        /// Creates an instance with default chain policy, problem flags.
-        /// </summary>
-        public TrustChainValidator(X509ChainPolicy policy, ILogger<TrustChainValidator> logger)
-            : this(policy, BuildDefaultProblemFlags(), logger)
+        public TrustChainValidator(
+            ILogger<TrustChainValidator> logger,
+            CertificateDownloadCache? downloadCache = null)
+            : this(DefaultProblemFlags, true, logger, downloadCache)
         {
         }
 
         /// <summary>
-        /// Creates an instance, specifying chain policy and problem flags
+        /// Creates an instance with custom problem flags and revocation settings.
         /// </summary>
-        /// <param name="policy">The <see cref="X509ChainPolicy"/> to use for validating trust chains</param>
-        /// <param name="problemFlags">The status flags that will be treated as invalid in trust verification</param>
-        /// <param name="logger"></param>
-        public TrustChainValidator(X509ChainPolicy policy, X509ChainStatusFlags problemFlags, ILogger<TrustChainValidator> logger)
+        public TrustChainValidator(
+            ChainProblemStatus problemFlags,
+            bool checkRevocation,
+            ILogger<TrustChainValidator> logger,
+            CertificateDownloadCache? downloadCache = null)
         {
-            _validationPolicy = policy;
             _problemFlags = problemFlags;
+            _checkRevocation = checkRevocation;
             _logger = logger;
+            _downloadCache = downloadCache;
         }
 
-        public bool IsTrustedCertificate(
+        public async Task<bool> IsTrustedCertificateAsync(
             string clientName,
             X509Certificate2 certificate,
             X509Certificate2Collection? intermediateCertificates,
             X509Certificate2Collection anchorCertificates)
         {
-            return IsTrustedCertificate(
+            var result = await IsTrustedCertificateAsync(
                 clientName,
                 certificate,
                 intermediateCertificates,
                 anchorCertificates,
-                out X509ChainElementCollection? _,
-                out _);
+                null);
+
+            return result.IsValid;
         }
 
-        public bool IsTrustedCertificate(string clientName,
+        public async Task<ChainValidationResult> IsTrustedCertificateAsync(
+            string clientName,
             X509Certificate2 certificate,
             X509Certificate2Collection? intermediateCertificates,
             X509Certificate2Collection anchorCertificates,
-            out X509ChainElementCollection? chainElements,
-            out long? communityId,
-            IEnumerable<Anchor>? anchors = null)
+            IEnumerable<Anchor>? anchors = null,
+            CancellationToken cancellationToken = default)
         {
-            communityId = null;
-            chainElements = null;
-
-            // Let's avoid complex state and/or race conditions by making copies of these collections.
             var roots = new X509Certificate2Collection(anchorCertificates);
             X509Certificate2Collection? intermediatesCloned = null;
 
@@ -143,159 +128,538 @@ namespace Udap.Common.Certificates
                 intermediatesCloned = new X509Certificate2Collection(intermediateCertificates);
             }
 
-            // ReSharper disable once RedundantAssignment
-            intermediateCertificates = null;
-
-
-            // if there are no anchors we should always fail
             if (roots.IsNullOrEmpty())
             {
-                this.NotifyUntrusted(certificate);
-                return false;
+                NotifyUntrusted(certificate);
+                return new ChainValidationResult(false, Array.Empty<ChainElementInfo>());
             }
 
             try
             {
-                var chainPolicy = _validationPolicy.Clone();
+                var parser = new X509CertificateParser();
+                var bcLeaf = parser.ReadCertificate(certificate.RawData);
 
-                //
-                // TODO:
-                // The x5c in jwt header can contain a list of intermediates and possibly the anchor or more.
-                // Come back to this and set up a use case test and code this up then.
-                // In direct world this was just a way to resolve the intermediate in our own store
-                // I don't think on Windows we ever did this in practice.
-                // The chain builder in Windows and I believe in OpenSSL on Linux does the intermediate resolution.
-                // Note: I found if this is hosted on an Android device the intermediate certificate is not automatically
-                // resolved by the x509Chain.Build().
-                // Again more to test here.
-                //
-
-                using var chainBuilder = new X509Chain();
-
-                if (!roots.IsNullOrEmpty())
+                // Convert anchors to BouncyCastle
+                var bcAnchors = new List<BcX509Certificate>();
+                foreach (X509Certificate2 anchor in roots)
                 {
-                    chainPolicy.CustomTrustStore.Clear();
-                    chainPolicy.TrustMode = X509ChainTrustMode.CustomRootTrust;
-                    chainPolicy.CustomTrustStore.AddRange(roots);
+                    bcAnchors.Add(parser.ReadCertificate(anchor.RawData));
                 }
 
-                chainBuilder.ChainPolicy = chainPolicy;
+                // Convert intermediates to BouncyCastle
+                var bcIntermediates = new List<BcX509Certificate>();
                 if (intermediatesCloned != null)
                 {
-                    chainBuilder.ChainPolicy.ExtraStore.AddRange(intermediatesCloned);
-                }
-                var passedChainBuild = chainBuilder.Build(certificate);
-
-                _logger.LogDebug(string.Join(",", chainBuilder.ChainElements
-                    .ToList().Select(cs =>
-                        $"{Environment.NewLine}{cs.Certificate.Thumbprint} :: " +
-                        $"CN = {cs.Certificate.GetNameInfo(X509NameType.SimpleName, false)}")));
-
-                // We're using the system class as a helper to build the chain
-                // However, we will review each item in the chain ourselves, because we have our own rules...
-                chainElements = chainBuilder.ChainElements;
-
-                // If we don't have a trust chain, then we obviously have a problem...
-                if (chainElements.IsNullOrEmpty())
-                {
-                    this.NotifyUntrusted(certificate);
-                    return false;
+                    foreach (X509Certificate2 intermediate in intermediatesCloned)
+                    {
+                        bcIntermediates.Add(parser.ReadCertificate(intermediate.RawData));
+                    }
                 }
 
+                // Build the chain
+                var bcChain = await BuildChainAsync(bcLeaf, bcIntermediates, bcAnchors, cancellationToken);
+
+                // Map back to .NET certs and build chain element info
+                var chainElements = new List<ChainElementInfo>();
                 bool foundAnchor = false;
+                long? communityId = null;
+                bool chainValid = true;
 
-                // walk the chain starting at the leaf and see if we hit any issues before the anchor
-                foreach (var chainElement in chainElements)
+                for (int i = 0; i < bcChain.Count; i++)
                 {
-                    bool isAnchor = roots?.FindByThumbprint(chainElement.Certificate.Thumbprint) != null;
+                    var bcCert = bcChain[i];
+                    var dotNetCert = FindMatchingDotNetCert(bcCert, certificate, roots, intermediatesCloned);
+                    var problems = new List<ChainProblem>();
+
+                    // Check time validity
+                    if (!IsCertTimeValid(bcCert))
+                    {
+                        problems.Add(new ChainProblem(
+                            ChainProblemStatus.NotTimeValid,
+                            $"Certificate is not valid. NotBefore: {bcCert.NotBefore}, NotAfter: {bcCert.NotAfter}"));
+                    }
+
+                    // Check signature (except for root/self-signed)
+                    if (i > 0)
+                    {
+                        var issuer = bcChain[i - 1]; // The previous cert in our reversed view...
+                        // Actually, our chain is leaf -> intermediates -> anchor
+                        // So bcChain[i] is signed by bcChain[i+1] if i < count-1
+                    }
+
+                    // Signature verification is done during chain building, so we just check
+                    // for revocation and basic constraints here
+
+                    // Check basic constraints for intermediate certs (not leaf, not anchor)
+                    bool isAnchor = IsAnchor(bcCert, bcAnchors);
+                    bool isLeaf = i == 0;
+
+                    if (!isLeaf && !isAnchor)
+                    {
+                        if (!HasValidBasicConstraints(bcCert))
+                        {
+                            problems.Add(new ChainProblem(
+                                ChainProblemStatus.InvalidBasicConstraints,
+                                "Certificate does not have valid CA basic constraints"));
+                        }
+                    }
+
+                    // Check CRL revocation (skip for anchor/root)
+                    if (_checkRevocation && !isAnchor)
+                    {
+                        var revocationResult = await CheckRevocationAsync(bcCert, bcChain, i, cancellationToken);
+                        problems.AddRange(revocationResult);
+                    }
 
                     if (isAnchor)
                     {
-                        // Found a valid anchor!
-                        // Because we found an anchor we trust, we can skip trust
                         foundAnchor = true;
                         var anchorList = (anchors ?? Array.Empty<Anchor>()).ToList();
 
-                        if (anchorList.Count != 0)
+                        if (anchorList.Count != 0 && dotNetCert != null)
                         {
-                            communityId = anchorList.First(a => a.Thumbprint == chainElement.Certificate.Thumbprint).CommunityId;
+                            var matchingAnchor = anchorList.FirstOrDefault(a => a.Thumbprint == dotNetCert.Thumbprint);
+                            if (matchingAnchor != null)
+                            {
+                                communityId = matchingAnchor.CommunityId;
+                            }
                         }
                     }
 
-                    if (this.ChainElementHasProblems(chainElement))
+                    var element = new ChainElementInfo(dotNetCert ?? new X509Certificate2(bcCert.GetEncoded()), problems);
+                    chainElements.Add(element);
+
+                    // Check if this element has problems we care about
+                    if (HasRelevantProblems(problems))
                     {
-                        // chain statuses can still be subscribed too.  There may be data to share with the consumer
-                        // that do not mean the chain is invalid.  passedChainBuild is the final arbiter of trust
-                        // for a x509Chain.
-                        this.NotifyProblem(chainElement);
-
-                        if (!passedChainBuild)
-                        {
-                            this.NotifyUntrusted(chainElement.Certificate);
-                        }
-
-                        if (passedChainBuild && foundAnchor)
-                        {
-                            return true;
-                        }
+                        NotifyProblem(element);
+                        chainValid = false;
                     }
                 }
 
-                if (foundAnchor && !passedChainBuild)
-                {
-                    //
-                    // Can end up here if problem flags exist that we do not care about.
-                    //
-                    _logger.LogWarning("Client: {ClientName} Problem Flags set: {ProblemFlags} ChainStatus: {ChainStatus}",
-                        clientName,
-                        _problemFlags.ToString(),
-                        chainElements.Summarize());
-                }
+                _logger.LogDebug(string.Join(",", chainElements
+                    .Select(ce =>
+                        $"{Environment.NewLine}{ce.Certificate.Thumbprint} :: " +
+                        $"CN = {ce.Certificate.GetNameInfo(X509NameType.SimpleName, false)}")));
 
                 if (!foundAnchor)
                 {
-                    this.NotifyUntrusted(certificate);
+                    NotifyUntrusted(certificate);
+                    return new ChainValidationResult(false, chainElements);
                 }
 
-                return passedChainBuild && foundAnchor;
+                if (!chainValid)
+                {
+                    _logger.LogWarning(
+                        "Client: {ClientName} Problem Flags set: {ProblemFlags} ChainStatus: {ChainStatus}",
+                        clientName,
+                        _problemFlags.ToString(),
+                        string.Join(", ", chainElements
+                            .SelectMany(e => e.Problems)
+                            .Select(p => $"({p.Status}) {p.StatusInformation}")));
+                }
+
+                bool isValid = chainValid && foundAnchor;
+
+                if (!isValid)
+                {
+                    NotifyUntrusted(certificate);
+                }
+
+                return new ChainValidationResult(isValid, chainElements, communityId);
             }
             catch (Exception ex)
             {
-                this.NotifyError(certificate, ex);
-                // just eat it and drop out to return false
+                NotifyError(certificate, ex);
             }
 
-            this.NotifyUntrusted(certificate);
-
-            return false;
+            NotifyUntrusted(certificate);
+            return new ChainValidationResult(false, Array.Empty<ChainElementInfo>());
         }
 
-        private bool ChainElementHasProblems(X509ChainElement chainElement)
+        private async Task<List<BcX509Certificate>> BuildChainAsync(
+            BcX509Certificate leaf,
+            List<BcX509Certificate> intermediates,
+            List<BcX509Certificate> anchors,
+            CancellationToken cancellationToken)
         {
-            // If the builder finds problems with the cert, it will provide a list of "status" flags for the cert
-            var chainElementStatus = chainElement.ChainElementStatus;
+            var chain = new List<BcX509Certificate> { leaf };
+            var current = leaf;
+            var visited = new HashSet<string> { GetThumbprint(leaf) };
 
-            // If the list is empty or the list is null, then there were NO problems with the cert
-            if (chainElementStatus.IsNullOrEmpty())
+            for (int depth = 0; depth < MaxChainDepth; depth++)
             {
-                return false;
+                // Check if current cert is self-signed (root)
+                if (current.IssuerDN.Equivalent(current.SubjectDN))
+                {
+                    try
+                    {
+                        current.Verify(current.GetPublicKey());
+                        break; // Self-signed and valid signature = root
+                    }
+                    catch
+                    {
+                        // Not actually self-signed (subject/issuer match but sig fails)
+                    }
+                }
+
+                // Look for issuer in anchors first
+                var issuer = FindIssuer(current, anchors);
+
+                if (issuer != null)
+                {
+                    chain.Add(issuer);
+                    break; // Reached a trust anchor
+                }
+
+                // Look for issuer in provided intermediates
+                issuer = FindIssuer(current, intermediates);
+
+                // If not found, try AIA chasing
+                if (issuer == null && _downloadCache != null)
+                {
+                    issuer = await ChaseAiaAsync(current, cancellationToken);
+
+                    if (issuer != null)
+                    {
+                        // Add to intermediates so it's available for CRL issuer lookups
+                        intermediates.Add(issuer);
+                    }
+                }
+
+                if (issuer == null)
+                {
+                    _logger.LogWarning("Could not find issuer for certificate: {Subject}", current.SubjectDN);
+                    break; // Can't continue the chain
+                }
+
+                var issuerThumbprint = GetThumbprint(issuer);
+                if (visited.Contains(issuerThumbprint))
+                {
+                    _logger.LogWarning("Loop detected in certificate chain at: {Subject}", issuer.SubjectDN);
+                    break;
+                }
+
+                visited.Add(issuerThumbprint);
+                chain.Add(issuer);
+                current = issuer;
             }
 
-            // Return true if there are any status flags we care about
-            return chainElementStatus.Any(s => (s.Status & _problemFlags) != 0);
+            return chain;
         }
 
+        private BcX509Certificate? FindIssuer(BcX509Certificate cert, List<BcX509Certificate> candidates)
+        {
+            foreach (var candidate in candidates)
+            {
+                if (!cert.IssuerDN.Equivalent(candidate.SubjectDN))
+                {
+                    continue;
+                }
+
+                // Verify Authority Key Identifier matches Subject Key Identifier if both present
+                if (!MatchesKeyIdentifiers(cert, candidate))
+                {
+                    continue;
+                }
+
+                try
+                {
+                    cert.Verify(candidate.GetPublicKey());
+                    return candidate;
+                }
+                catch (SignatureException)
+                {
+                    _logger.LogDebug(
+                        "DN match but signature verification failed: {Issuer} -> {Subject}",
+                        candidate.SubjectDN, cert.SubjectDN);
+                }
+                catch (Exception ex)
+                {
+                    _logger.LogDebug(ex,
+                        "Error verifying signature for {Subject} against {Issuer}",
+                        cert.SubjectDN, candidate.SubjectDN);
+                }
+            }
+
+            return null;
+        }
+
+        private static bool MatchesKeyIdentifiers(BcX509Certificate cert, BcX509Certificate issuer)
+        {
+            try
+            {
+                var akiValue = cert.GetExtensionValue(BcX509Extensions.AuthorityKeyIdentifier);
+                var skiValue = issuer.GetExtensionValue(BcX509Extensions.SubjectKeyIdentifier);
+
+                if (akiValue == null || skiValue == null)
+                {
+                    return true; // Can't compare, allow DN match to be sufficient
+                }
+
+                var aki = AuthorityKeyIdentifier.GetInstance(
+                    Asn1OctetString.GetInstance(akiValue).GetOctets());
+                var ski = SubjectKeyIdentifier.GetInstance(
+                    Asn1OctetString.GetInstance(skiValue).GetOctets());
+
+                return aki.GetKeyIdentifier().SequenceEqual(ski.GetKeyIdentifier());
+            }
+            catch
+            {
+                return true; // If we can't parse extensions, allow DN match
+            }
+        }
+
+        private async Task<BcX509Certificate?> ChaseAiaAsync(
+            BcX509Certificate cert,
+            CancellationToken cancellationToken)
+        {
+            var aiaValue = cert.GetExtensionValue(BcX509Extensions.AuthorityInfoAccess);
+            if (aiaValue == null)
+            {
+                return null;
+            }
+
+            try
+            {
+                var aia = AuthorityInformationAccess.GetInstance(
+                    Asn1OctetString.GetInstance(aiaValue).GetOctets());
+
+                foreach (var accessDescription in aia.GetAccessDescriptions())
+                {
+                    if (!accessDescription.AccessMethod.Equals(AccessDescription.IdADCAIssuers))
+                    {
+                        continue;
+                    }
+
+                    var location = accessDescription.AccessLocation;
+                    if (location.TagNo != GeneralName.UniformResourceIdentifier)
+                    {
+                        continue;
+                    }
+
+                    var url = location.Name.ToString();
+                    if (string.IsNullOrEmpty(url))
+                    {
+                        continue;
+                    }
+
+                    _logger.LogDebug("AIA chasing intermediate from {Url}", url);
+
+                    var intermediateCert = await _downloadCache!.GetIntermediateCertificateAsync(url, cancellationToken);
+                    if (intermediateCert != null)
+                    {
+                        var parser = new X509CertificateParser();
+                        var bcIntermediate = parser.ReadCertificate(intermediateCert.RawData);
+
+                        // Verify this is actually the issuer
+                        try
+                        {
+                            cert.Verify(bcIntermediate.GetPublicKey());
+                            return bcIntermediate;
+                        }
+                        catch
+                        {
+                            _logger.LogWarning("AIA-fetched certificate from {Url} did not verify as issuer", url);
+                        }
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                _logger.LogWarning(ex, "Error parsing AIA extension");
+            }
+
+            return null;
+        }
+
+        private async Task<List<ChainProblem>> CheckRevocationAsync(
+            BcX509Certificate cert,
+            List<BcX509Certificate> chain,
+            int certIndex,
+            CancellationToken cancellationToken)
+        {
+            var problems = new List<ChainProblem>();
+
+            var crlDpValue = cert.GetExtensionValue(BcX509Extensions.CrlDistributionPoints);
+            if (crlDpValue == null)
+            {
+                if ((_problemFlags & ChainProblemStatus.OfflineRevocation) != 0)
+                {
+                    problems.Add(new ChainProblem(
+                        ChainProblemStatus.CrlNotFound,
+                        "Certificate does not contain CRL Distribution Point extension"));
+                }
+                return problems;
+            }
+
+            try
+            {
+                var crlDistPoint = CrlDistPoint.GetInstance(
+                    Asn1OctetString.GetInstance(crlDpValue).GetOctets());
+
+                bool crlChecked = false;
+
+                foreach (var dp in crlDistPoint.GetDistributionPoints())
+                {
+                    var dpName = dp.DistributionPointName;
+                    if (dpName?.Type != DistributionPointName.FullName)
+                    {
+                        continue;
+                    }
+
+                    var generalNames = GeneralNames.GetInstance(dpName.Name);
+                    foreach (var name in generalNames.GetNames())
+                    {
+                        if (name.TagNo != GeneralName.UniformResourceIdentifier)
+                        {
+                            continue;
+                        }
+
+                        var url = name.Name.ToString();
+                        if (string.IsNullOrEmpty(url))
+                        {
+                            continue;
+                        }
+
+                        if (_downloadCache == null)
+                        {
+                            if ((_problemFlags & ChainProblemStatus.OfflineRevocation) != 0)
+                            {
+                                problems.Add(new ChainProblem(
+                                    ChainProblemStatus.OfflineRevocation,
+                                    $"No download cache available to check CRL at {url}"));
+                            }
+                            return problems;
+                        }
+
+                        var crl = await _downloadCache.GetCrlAsync(url, cancellationToken);
+
+                        if (crl == null)
+                        {
+                            problems.Add(new ChainProblem(
+                                ChainProblemStatus.CrlFetchFailed,
+                                $"Failed to download CRL from {url}"));
+                            continue;
+                        }
+
+                        // Verify CRL is signed by the issuer
+                        if (certIndex + 1 < chain.Count)
+                        {
+                            var issuer = chain[certIndex + 1];
+                            try
+                            {
+                                crl.Verify(issuer.GetPublicKey());
+                            }
+                            catch
+                            {
+                                _logger.LogWarning("CRL from {Url} not signed by expected issuer", url);
+                                continue;
+                            }
+                        }
+
+                        if (crl.IsRevoked(cert))
+                        {
+                            problems.Add(new ChainProblem(
+                                ChainProblemStatus.Revoked,
+                                $"Certificate is revoked per CRL at {url}"));
+                        }
+
+                        crlChecked = true;
+                        break; // Successfully checked one CRL, that's sufficient
+                    }
+
+                    if (crlChecked)
+                    {
+                        break;
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                _logger.LogWarning(ex, "Error checking CRL revocation");
+                problems.Add(new ChainProblem(
+                    ChainProblemStatus.CrlFetchFailed,
+                    $"Error checking CRL: {ex.Message}"));
+            }
+
+            return problems;
+        }
+
+        private static bool IsCertTimeValid(BcX509Certificate cert)
+        {
+            var now = DateTime.UtcNow;
+            return now >= cert.NotBefore && now <= cert.NotAfter;
+        }
+
+        private static bool HasValidBasicConstraints(BcX509Certificate cert)
+        {
+            var basicConstraints = cert.GetBasicConstraints();
+            // GetBasicConstraints returns -1 if not a CA, or pathLen (>= 0) if CA
+            return basicConstraints >= 0;
+        }
+
+        private static bool IsAnchor(BcX509Certificate cert, List<BcX509Certificate> anchors)
+        {
+            var certThumbprint = GetThumbprint(cert);
+            return anchors.Any(a => GetThumbprint(a) == certThumbprint);
+        }
+
+        private static string GetThumbprint(BcX509Certificate cert)
+        {
+            return Convert.ToHexString(
+                System.Security.Cryptography.SHA1.HashData(cert.GetEncoded()));
+        }
+
+        private static X509Certificate2? FindMatchingDotNetCert(
+            BcX509Certificate bcCert,
+            X509Certificate2 leafCert,
+            X509Certificate2Collection anchors,
+            X509Certificate2Collection? intermediates)
+        {
+            var bcThumbprint = GetThumbprint(bcCert);
+
+            if (leafCert.Thumbprint.Equals(bcThumbprint, StringComparison.OrdinalIgnoreCase))
+            {
+                return leafCert;
+            }
+
+            foreach (X509Certificate2 anchor in anchors)
+            {
+                if (anchor.Thumbprint.Equals(bcThumbprint, StringComparison.OrdinalIgnoreCase))
+                {
+                    return anchor;
+                }
+            }
+
+            if (intermediates != null)
+            {
+                foreach (X509Certificate2 intermediate in intermediates)
+                {
+                    if (intermediate.Thumbprint.Equals(bcThumbprint, StringComparison.OrdinalIgnoreCase))
+                    {
+                        return intermediate;
+                    }
+                }
+            }
+
+            return null;
+        }
+
+        private bool HasRelevantProblems(List<ChainProblem> problems)
+        {
+            return problems.Any(p => (_problemFlags & p.Status) != 0);
+        }
 
         private void NotifyUntrusted(X509Certificate2 cert)
         {
             _logger.LogWarning("{Validator} Untrusted: {CertificateSubject}", nameof(TrustChainValidator), cert.Subject);
 
-            if (this.Untrusted != null)
+            if (Untrusted != null)
             {
                 try
                 {
-                    this.Untrusted(cert);
-
+                    Untrusted(cert);
                 }
                 catch
                 {
@@ -304,18 +668,18 @@ namespace Udap.Common.Certificates
             }
         }
 
-        private void NotifyProblem(X509ChainElement chainElement)
+        private void NotifyProblem(ChainElementInfo chainElement)
         {
-            _logger.LogWarning("{Validator} {chainElement} Chain Problem: {ChainStatus}", 
-                nameof(TrustChainValidator), 
+            _logger.LogWarning("{Validator} {Subject} Chain Problem: {Problems}",
+                nameof(TrustChainValidator),
                 chainElement.Certificate.Subject,
-                chainElement.ChainElementStatus.Summarize(_problemFlags));
+                string.Join(", ", chainElement.Problems.Select(p => $"({p.Status}) {p.StatusInformation}")));
 
-            if (this.Problem != null)
+            if (Problem != null)
             {
                 try
                 {
-                    this.Problem(chainElement);
+                    Problem(chainElement);
                 }
                 catch
                 {
@@ -328,11 +692,11 @@ namespace Udap.Common.Certificates
         {
             _logger.LogWarning("{Validator} Error: {ErrorMessage}", nameof(TrustChainValidator), exception.Message);
 
-            if (this.Error != null)
+            if (Error != null)
             {
                 try
                 {
-                    this.Error(cert, exception);
+                    Error(cert, exception);
                 }
                 catch
                 {

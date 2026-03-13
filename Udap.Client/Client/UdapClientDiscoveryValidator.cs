@@ -47,7 +47,7 @@ public class UdapClientDiscoveryValidator : IUdapClientEvents
     }
 
     /// <inheritdoc/>
-    public event Action<X509ChainElement>? Problem
+    public event Action<ChainElementInfo>? Problem
     {
         add => _trustChainValidator.Problem += value;
         remove => _trustChainValidator.Problem -= value;
@@ -234,7 +234,7 @@ public class UdapClientDiscoveryValidator : IUdapClientEvents
             return false;
         }
 
-        return _trustChainValidator.IsTrustedCertificate(
+        return await _trustChainValidator.IsTrustedCertificateAsync(
             nameof(UdapClient),
             _publicCertificate,
             anchors.SelectMany(a =>

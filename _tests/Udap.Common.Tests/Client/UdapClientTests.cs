@@ -36,13 +36,11 @@ public class UdapClientTests
     private readonly IConfigurationRoot _configuration;
     private readonly ServiceProvider _serviceProvider;
 
-    readonly X509ChainStatusFlags _problemFlags = X509ChainStatusFlags.NotTimeValid |
-                                        X509ChainStatusFlags.Revoked |
-                                        X509ChainStatusFlags.NotSignatureValid |
-                                        X509ChainStatusFlags.InvalidBasicConstraints |
-                                        X509ChainStatusFlags.CtlNotTimeValid |
-                                        // X509ChainStatusFlags.OfflineRevocation | Do not test revocation in unit tests
-                                        X509ChainStatusFlags.CtlNotSignatureValid;
+    readonly ChainProblemStatus _problemFlags = ChainProblemStatus.NotTimeValid |
+                                        ChainProblemStatus.Revoked |
+                                        ChainProblemStatus.NotSignatureValid |
+                                        ChainProblemStatus.InvalidBasicConstraints;
+                                        // ChainProblemStatus.OfflineRevocation; Do not test revocation in unit tests
 
     public UdapClientTests(ITestOutputHelper testOutputHelper)
     {
@@ -378,7 +376,7 @@ public class UdapClientTests
         //
         // TrustChainValidator handle the x509 chain building, policy and validation
         //
-        var validator = new TrustChainValidator(new X509ChainPolicy() { RevocationMode = X509RevocationMode.NoCheck }, _problemFlags, _serviceProvider.GetRequiredService<ILogger<TrustChainValidator>>())!;
+        var validator = new TrustChainValidator(_problemFlags, false, _serviceProvider.GetRequiredService<ILogger<TrustChainValidator>>())!;
 
         //
         // TrustAnchorStore is using an ITrustAnchorStore implemented as a file store.

@@ -49,6 +49,8 @@ public static class UdapConfigurationServiceCollectionExtensions
         builder.Services.TryAddTransient<IUdapDynamicClientRegistrationValidator, UdapDynamicClientRegistrationValidator>();
         builder.Services.TryAddTransient<IUdapDynamicClientRegistrationProcessor, UdapDynamicClientRegistrationProcessor>();
         builder.Services.TryAddSingleton<TrustChainValidator>();
+        builder.Services.AddHttpClient<CertificateDownloadCache>();
+        builder.Services.TryAddSingleton<CertificateDownloadCache>();
 
         return builder;
     }

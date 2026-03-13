@@ -148,7 +148,7 @@ public class UdapDcrValidatorTests
         var httpClient = new HttpClient(mockHandler);
 
         var validator = new UdapDynamicClientRegistrationValidator(
-            Substitute.For<TrustChainValidator>(Substitute.For<ILogger<TrustChainValidator>>()),
+            Substitute.For<TrustChainValidator>(Substitute.For<ILogger<TrustChainValidator>>(), null),
             httpClient,
             new TestReplayCache(_clock),
             serverSettings,
@@ -231,7 +231,7 @@ public class UdapDcrValidatorTests
         mockHttpContextAccessor.HttpContext.Returns(context);
         
         validator = new UdapDynamicClientRegistrationValidator(
-            Substitute.For<TrustChainValidator>(Substitute.For<ILogger<TrustChainValidator>>()),
+            Substitute.For<TrustChainValidator>(Substitute.For<ILogger<TrustChainValidator>>(), null),
             httpClient,
             new TestReplayCache(clock),
             serverSettings,

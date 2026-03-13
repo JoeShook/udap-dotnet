@@ -108,26 +108,18 @@ public class UdapControllerCommunityTest : IClassFixture<ApiForCommunityTestFixt
                 sp.GetRequiredService<IOptionsMonitor<UdapFileCertStoreManifest>>(),
                 Substitute.For<ILogger<TrustAnchorFileStore>>()));
 
-        var problemFlags = X509ChainStatusFlags.NotTimeValid |
-                           X509ChainStatusFlags.Revoked |
-                           X509ChainStatusFlags.NotSignatureValid |
-                           X509ChainStatusFlags.InvalidBasicConstraints |
-                           X509ChainStatusFlags.CtlNotTimeValid |
-                           X509ChainStatusFlags.UntrustedRoot |
-                           // X509ChainStatusFlags.OfflineRevocation |
-                           X509ChainStatusFlags.CtlNotSignatureValid;
-                           // X509ChainStatusFlags.RevocationStatusUnknown;
+        var problemFlags = ChainProblemStatus.NotTimeValid |
+                           ChainProblemStatus.Revoked |
+                           ChainProblemStatus.NotSignatureValid |
+                           ChainProblemStatus.InvalidBasicConstraints |
+                           ChainProblemStatus.UntrustedRoot;
+                           // ChainProblemStatus.OfflineRevocation;
 
 
         services.TryAddScoped(_ =>
             new TrustChainValidator(
-                new X509ChainPolicy()
-                {
-                    DisableCertificateDownloads = true,
-                    UrlRetrievalTimeout = TimeSpan.FromMilliseconds(1),
-                    RevocationMode = X509RevocationMode.NoCheck
-                }, 
                 problemFlags,
+                false,
                 _testOutputHelper.ToLogger<TrustChainValidator>()));
 
         services.AddSingleton<UdapClientDiscoveryValidator>();
@@ -342,26 +334,19 @@ public class UdapControllerCommunityTest : IClassFixture<ApiForCommunityTestFixt
                 sp.GetRequiredService<IOptionsMonitor<UdapFileCertStoreManifest>>(),
                 Substitute.For<ILogger<TrustAnchorFileStore>>()));
 
-        var problemFlags = X509ChainStatusFlags.NotTimeValid |
-                       X509ChainStatusFlags.Revoked |
-                       X509ChainStatusFlags.NotSignatureValid |
-                       X509ChainStatusFlags.InvalidBasicConstraints |
-                       X509ChainStatusFlags.CtlNotTimeValid |
-                       X509ChainStatusFlags.OfflineRevocation |
-                       X509ChainStatusFlags.CtlNotSignatureValid |
-                       X509ChainStatusFlags.RevocationStatusUnknown |
-                       X509ChainStatusFlags.PartialChain |
-                       X509ChainStatusFlags.UntrustedRoot;
+        var problemFlags = ChainProblemStatus.NotTimeValid |
+                       ChainProblemStatus.Revoked |
+                       ChainProblemStatus.NotSignatureValid |
+                       ChainProblemStatus.InvalidBasicConstraints |
+                       ChainProblemStatus.OfflineRevocation |
+                       ChainProblemStatus.PartialChain |
+                       ChainProblemStatus.UntrustedRoot;
 
 
         services.TryAddScoped(_ =>
             new TrustChainValidator(
-                new X509ChainPolicy()
-                {
-                    DisableCertificateDownloads = true,
-                    UrlRetrievalTimeout = TimeSpan.FromMilliseconds(1),
-                }, 
                 problemFlags,
+                true, // enable revocation checking - expect offline/CRL failure
                 _testOutputHelper.ToLogger<TrustChainValidator>()));
         services.AddSingleton<UdapClientDiscoveryValidator>();
 
@@ -383,8 +368,8 @@ public class UdapControllerCommunityTest : IClassFixture<ApiForCommunityTestFixt
         disco.IsError.Should().BeTrue($"\nError: {disco.Error} \nError Type: {disco.ErrorType}\n{disco.Raw}");
         udapClient.UdapServerMetaData.Should().NotBeNull();
 
-        _diagnosticsValidator.ActualErrorMessages            .Should().Contain(m =>
-                m.Contains("OfflineRevocation"));
+        _diagnosticsValidator.ActualErrorMessages.Should().Contain(m =>
+                m.Contains("OfflineRevocation") || m.Contains("CrlNotFound") || m.Contains("CrlFetchFailed"));
     }
 
 
@@ -552,25 +537,18 @@ public async Task ValidateChainWithMyAnchorAndIntermediateTest()
             }
         });
 
-    var problemFlags = X509ChainStatusFlags.NotTimeValid |
-                       X509ChainStatusFlags.Revoked |
-                       X509ChainStatusFlags.NotSignatureValid |
-                       X509ChainStatusFlags.InvalidBasicConstraints |
-                       X509ChainStatusFlags.CtlNotTimeValid |
-                       X509ChainStatusFlags.UntrustedRoot |
-                    // X509ChainStatusFlags.OfflineRevocation |
-                       X509ChainStatusFlags.CtlNotSignatureValid;
-                    // X509ChainStatusFlags.RevocationStatusUnknown;
+    var problemFlags = ChainProblemStatus.NotTimeValid |
+                       ChainProblemStatus.Revoked |
+                       ChainProblemStatus.NotSignatureValid |
+                       ChainProblemStatus.InvalidBasicConstraints |
+                       ChainProblemStatus.UntrustedRoot;
+                    // ChainProblemStatus.OfflineRevocation;
 
 
         services.TryAddScoped(_ =>
-        new TrustChainValidator(new X509ChainPolicy()
-            {
-                DisableCertificateDownloads = true,
-                UrlRetrievalTimeout = TimeSpan.FromMilliseconds(1),
-                RevocationMode = X509RevocationMode.NoCheck
-        }, 
+        new TrustChainValidator(
             problemFlags,
+            false,
             _testOutputHelper.ToLogger<TrustChainValidator>()));
 
     services.AddSingleton<UdapClientDiscoveryValidator>();
@@ -630,25 +608,19 @@ public async Task ValidateChainWithMyAnchorTest()
                 }
             });
 
-        var problemFlags = X509ChainStatusFlags.NotTimeValid |
-                           X509ChainStatusFlags.Revoked |
-                           X509ChainStatusFlags.NotSignatureValid |
-                           X509ChainStatusFlags.InvalidBasicConstraints |
-                           X509ChainStatusFlags.CtlNotTimeValid |
-                           X509ChainStatusFlags.OfflineRevocation |
-                           X509ChainStatusFlags.CtlNotSignatureValid |
-                           X509ChainStatusFlags.RevocationStatusUnknown |
-                           X509ChainStatusFlags.PartialChain |
-                           X509ChainStatusFlags.UntrustedRoot;
+        var problemFlags = ChainProblemStatus.NotTimeValid |
+                           ChainProblemStatus.Revoked |
+                           ChainProblemStatus.NotSignatureValid |
+                           ChainProblemStatus.InvalidBasicConstraints |
+                           ChainProblemStatus.OfflineRevocation |
+                           ChainProblemStatus.PartialChain |
+                           ChainProblemStatus.UntrustedRoot;
 
 
         services.TryAddScoped(_ =>
-            new TrustChainValidator(new X509ChainPolicy()
-                {
-                    DisableCertificateDownloads = true,
-                    UrlRetrievalTimeout = TimeSpan.FromMilliseconds(1),
-                }, 
+            new TrustChainValidator(
                 problemFlags,
+                false,
                 _testOutputHelper.ToLogger<TrustChainValidator>()));
 
         services.AddSingleton<UdapClientDiscoveryValidator>();
@@ -716,25 +688,18 @@ public async Task ValidateChainWithMyAnchorAndIntermediateFailTest()
                 }
             });
 
-        var problemFlags = X509ChainStatusFlags.NotTimeValid |
-                           X509ChainStatusFlags.Revoked |
-                           X509ChainStatusFlags.NotSignatureValid |
-                           X509ChainStatusFlags.InvalidBasicConstraints |
-                           X509ChainStatusFlags.CtlNotTimeValid |
-                           X509ChainStatusFlags.UntrustedRoot |
-                        // X509ChainStatusFlags.OfflineRevocation |
-                           X509ChainStatusFlags.CtlNotSignatureValid;
-                        // X509ChainStatusFlags.RevocationStatusUnknown;
+        var problemFlags = ChainProblemStatus.NotTimeValid |
+                           ChainProblemStatus.Revoked |
+                           ChainProblemStatus.NotSignatureValid |
+                           ChainProblemStatus.InvalidBasicConstraints |
+                           ChainProblemStatus.UntrustedRoot;
+                        // ChainProblemStatus.OfflineRevocation;
 
 
         services.TryAddScoped(_ =>
             new TrustChainValidator(
-                new X509ChainPolicy()
-                {
-                    DisableCertificateDownloads = true,
-                    UrlRetrievalTimeout = TimeSpan.FromMilliseconds(1),
-                }, 
                 problemFlags,
+                false,
                 _testOutputHelper.ToLogger<TrustChainValidator>()));
 
         services.AddSingleton<UdapClientDiscoveryValidator>();
@@ -799,24 +764,18 @@ public async Task ValidateChainWithMyAnchorFailTest()
                 }
             });
 
-        var problemFlags = X509ChainStatusFlags.NotTimeValid |
-                           X509ChainStatusFlags.Revoked |
-                           X509ChainStatusFlags.NotSignatureValid |
-                           X509ChainStatusFlags.InvalidBasicConstraints |
-                           X509ChainStatusFlags.CtlNotTimeValid |
-                           X509ChainStatusFlags.UntrustedRoot |
-                        // X509ChainStatusFlags.OfflineRevocation |
-                           X509ChainStatusFlags.CtlNotSignatureValid;
-                        // X509ChainStatusFlags.RevocationStatusUnknown;
+        var problemFlags = ChainProblemStatus.NotTimeValid |
+                           ChainProblemStatus.Revoked |
+                           ChainProblemStatus.NotSignatureValid |
+                           ChainProblemStatus.InvalidBasicConstraints |
+                           ChainProblemStatus.UntrustedRoot;
+                        // ChainProblemStatus.OfflineRevocation;
 
 
         services.TryAddScoped(_ =>
-            new TrustChainValidator(new X509ChainPolicy()
-                {
-                    DisableCertificateDownloads = true,
-                    UrlRetrievalTimeout = TimeSpan.FromMilliseconds(1),
-                }, 
+            new TrustChainValidator(
                 problemFlags,
+                false,
                 _testOutputHelper.ToLogger<TrustChainValidator>()));
 
         services.AddSingleton<UdapClientDiscoveryValidator>();

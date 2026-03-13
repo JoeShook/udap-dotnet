@@ -70,7 +70,7 @@ namespace Udap.Client.Client
         }
 
         /// <inheritdoc/>
-        public event Action<X509ChainElement>? Problem
+        public event Action<ChainElementInfo>? Problem
         {
             add => _clientDiscoveryValidator.Problem += value;
             remove => _clientDiscoveryValidator.Problem -= value;

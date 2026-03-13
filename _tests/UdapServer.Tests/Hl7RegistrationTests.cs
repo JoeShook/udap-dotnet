@@ -76,13 +76,8 @@ public class Hl7ApiTestFixture : WebApplicationFactory<Udap.Auth.Server.Program>
             }
 
             services.AddSingleton(new TrustChainValidator(
-                new X509ChainPolicy
-                {
-                    VerificationFlags = X509VerificationFlags.IgnoreWrongUsage,
-                    RevocationFlag = X509RevocationFlag.ExcludeRoot,
-                    DisableCertificateDownloads = true,
-                    RevocationMode = X509RevocationMode.NoCheck // This is the change unit testing with no revocation endpoint to host the revocation list.
-                },
+                TrustChainValidator.DefaultProblemFlags,
+                false, // no revocation checking in test environment
                 Output.ToLogger<TrustChainValidator>()));
 
             // Override ServerSettings to support both V1 and V2 for backward compatibility

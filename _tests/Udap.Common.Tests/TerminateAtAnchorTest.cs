@@ -27,33 +27,22 @@ public class TerminateAtAnchorTest
         anchor = new X509Certificate2(Path.Combine("CertStore/intermediates", "SureFhirLabs_Intermediate.cer"));
     }
     [Fact]
-    public void TestAnchorTermination()
+    public async Task TestAnchorTermination()
     {
         var logger = CreateLogger(_output);
-        var chainPolicy = new X509ChainPolicy
-        {
-            TrustMode = X509ChainTrustMode.CustomRootTrust,
-            RevocationMode = X509RevocationMode.Online,
-            VerificationFlags = X509VerificationFlags.IgnoreCertificateAuthorityRevocationUnknown |
-                                X509VerificationFlags.IgnoreEndRevocationUnknown |
-                                X509VerificationFlags.AllowUnknownCertificateAuthority
-        };
 
         // remove revocation check for this test.
-        var problemFlags = X509ChainStatusFlags.NotTimeValid |
-                           X509ChainStatusFlags.Revoked |
-                           X509ChainStatusFlags.NotSignatureValid |
-                           X509ChainStatusFlags.InvalidBasicConstraints |
-                           X509ChainStatusFlags.CtlNotTimeValid |
-                           // X509ChainStatusFlags.OfflineRevocation |
-                           X509ChainStatusFlags.CtlNotSignatureValid;
+        var problemFlags = ChainProblemStatus.NotTimeValid |
+                           ChainProblemStatus.Revoked |
+                           ChainProblemStatus.NotSignatureValid |
+                           ChainProblemStatus.InvalidBasicConstraints;
 
-        var validator = new TrustChainValidator(chainPolicy, problemFlags, logger);
+        var validator = new TrustChainValidator(problemFlags, false, logger);
         var diagnosticsChainValidator = SetupDiagnostics(validator);
 
         var anchors = new X509Certificate2Collection { anchor };
 
-        var result = validator.IsTrustedCertificate("client_name", cert, null, anchors);
+        var result = await validator.IsTrustedCertificateAsync("client_name", cert, null, anchors);
         result.Should().BeTrue(
             string.Join("\r\n", diagnosticsChainValidator.ActualProblemMessages)
             + "\r\n" + string.Join("\r\n", diagnosticsChainValidator.ActualErrorMessages)
@@ -64,42 +53,26 @@ public class TerminateAtAnchorTest
         diagnosticsChainValidator.ActualUntrustedMessages.Count.Should().Be(0);
     }
 
-    [Theory(Skip = "Anchor Termination works but I have some details to work out for this test to pass")]
-    [InlineData(X509VerificationFlags.IgnoreWrongUsage)]
-    [InlineData(X509VerificationFlags.IgnoreCertificateAuthorityRevocationUnknown)]
-    [InlineData(X509VerificationFlags.IgnoreEndRevocationUnknown)]
-    [InlineData(X509VerificationFlags.AllowUnknownCertificateAuthority)]
-    [InlineData(X509VerificationFlags.IgnoreCertificateAuthorityRevocationUnknown |
-                X509VerificationFlags.IgnoreEndRevocationUnknown)]
-    [InlineData(X509VerificationFlags.IgnoreEndRevocationUnknown |
-                X509VerificationFlags.AllowUnknownCertificateAuthority)]
-    [InlineData(X509VerificationFlags.IgnoreCertificateAuthorityRevocationUnknown |
-                X509VerificationFlags.AllowUnknownCertificateAuthority)]
-    public void TestAnchorTermination_Fail(X509VerificationFlags verificationFlags)
+    [Fact(Skip = "Anchor Termination works but I have some details to work out for this test to pass")]
+    public async Task TestAnchorTermination_Fail()
     {
         var logger = CreateLogger(_output);
-        var chainPolicy = new X509ChainPolicy
-        {
-            TrustMode = X509ChainTrustMode.CustomRootTrust,
-            RevocationMode = X509RevocationMode.Online
-        };
 
-        var validator = new TrustChainValidator(chainPolicy, logger);
+        var validator = new TrustChainValidator(logger);
         var diagnosticsChainValidator = SetupDiagnostics(validator);
 
         X509Certificate2Collection anchors = new X509Certificate2Collection { anchor };
 
-        var result = validator.IsTrustedCertificate("client_name", cert, null, anchors);
+        var result = await validator.IsTrustedCertificateAsync("client_name", cert, null, anchors);
         result.Should().BeFalse(
             string.Join("\r\n", diagnosticsChainValidator.ActualProblemMessages)
             + "\r\n" + string.Join("\r\n", diagnosticsChainValidator.ActualErrorMessages)
             + "\r\n" + string.Join("\r\n", diagnosticsChainValidator.ActualUntrustedMessages));
 
         diagnosticsChainValidator.ActualErrorMessages.Count.Should().Be(0);
-        
+
         diagnosticsChainValidator.ActualProblemMessages.Should().Contain(message =>
-            message.Contains("Trust ERROR The revocation function was unable to check revocation for the certificate") ||
-            message.Contains("Trust ERROR unable to get certificate CRL")); // Some Linux experiences
+            message.Contains("Trust ERROR"));
 
         diagnosticsChainValidator.ActualUntrustedMessages.Should().ContainMatch("Untrusted Certificate*");
     }
@@ -149,12 +122,12 @@ public class FakeChainValidatorDiagnostics
         get { return _actualUntrustedMessages; }
     }
 
-    public void OnChainProblem(X509ChainElement chainElement)
+    public void OnChainProblem(ChainElementInfo chainElement)
     {
-        foreach (var chainElementStatus in chainElement.ChainElementStatus)
+        foreach (var problem in chainElement.Problems)
         {
-            var problem = $"Trust ERROR {chainElementStatus.StatusInformation}, {chainElement.Certificate}";
-            _actualProblemMessages.Add(problem);
+            var msg = $"Trust ERROR {problem.StatusInformation}, {chainElement.Certificate}";
+            _actualProblemMessages.Add(msg);
         }
     }
 

@@ -205,13 +205,11 @@ public class UdapJwtSecretValidator : ISecretValidator
         //
         // PKI chain validation, including CRL checking
         //
-        if (_trustChainValidator.IsTrustedCertificate(
+        if (await _trustChainValidator.IsTrustedCertificateAsync(
                 parsedSecret.Id,
                 parsedSecret.ToModel().GetUdapEndCert()!,
                 new X509Certificate2Collection(certChainList.ToArray()),
-                new X509Certificate2Collection(certChainList.ToRootCertArray()),
-                out X509ChainElementCollection? _,
-                out _))
+                new X509Certificate2Collection(certChainList.ToRootCertArray())))
         {
             return success;
         }

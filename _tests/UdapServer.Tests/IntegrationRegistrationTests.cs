@@ -285,22 +285,14 @@ namespace UdapServer.Tests
             //
             // Certificate revocation is offline for unit tests.
             //
-            var problemFlags = X509ChainStatusFlags.NotTimeValid |
-                               X509ChainStatusFlags.Revoked |
-                               X509ChainStatusFlags.NotSignatureValid |
-                               X509ChainStatusFlags.InvalidBasicConstraints |
-                               X509ChainStatusFlags.CtlNotTimeValid |
-                               // X509ChainStatusFlags.OfflineRevocation |
-                               X509ChainStatusFlags.CtlNotSignatureValid;
+            var problemFlags = ChainProblemStatus.NotTimeValid |
+                               ChainProblemStatus.Revoked |
+                               ChainProblemStatus.NotSignatureValid |
+                               ChainProblemStatus.InvalidBasicConstraints;
 
             services.AddSingleton(new TrustChainValidator(
-                new X509ChainPolicy()
-                {
-                    DisableCertificateDownloads = true,
-                    UrlRetrievalTimeout = TimeSpan.FromMicroseconds(1),
-                    RevocationMode = X509RevocationMode.NoCheck
-                }, 
                 problemFlags,
+                false,
                 _testOutputHelper.ToLogger<TrustChainValidator>()));
 
 
@@ -403,22 +395,14 @@ namespace UdapServer.Tests
             //
             // Certificate revocation is offline for unit tests.
             //
-            var problemFlags = X509ChainStatusFlags.NotTimeValid |
-                               X509ChainStatusFlags.Revoked |
-                               X509ChainStatusFlags.NotSignatureValid |
-                               X509ChainStatusFlags.InvalidBasicConstraints |
-                               X509ChainStatusFlags.CtlNotTimeValid |
-                               // X509ChainStatusFlags.OfflineRevocation |
-                               X509ChainStatusFlags.CtlNotSignatureValid;
+            var problemFlags = ChainProblemStatus.NotTimeValid |
+                               ChainProblemStatus.Revoked |
+                               ChainProblemStatus.NotSignatureValid |
+                               ChainProblemStatus.InvalidBasicConstraints;
 
             services.AddSingleton(new TrustChainValidator(
-                new X509ChainPolicy()
-                {
-                    DisableCertificateDownloads = true,
-                    UrlRetrievalTimeout = TimeSpan.FromMicroseconds(1),
-                    RevocationMode = X509RevocationMode.NoCheck
-                },
                 problemFlags,
+                false,
                 _testOutputHelper.ToLogger<TrustChainValidator>()));
 
 

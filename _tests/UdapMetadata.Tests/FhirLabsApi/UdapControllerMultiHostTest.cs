@@ -62,23 +62,16 @@ public class UdapControllerMultiHostTest : IClassFixture<ApiForCommunityTestFixt
                 sp.GetRequiredService<IOptionsMonitor<UdapFileCertStoreManifest>>(),
                 Substitute.For<ILogger<TrustAnchorFileStore>>()));
 
-        var problemFlags = X509ChainStatusFlags.NotTimeValid |
-                           X509ChainStatusFlags.Revoked |
-                           X509ChainStatusFlags.NotSignatureValid |
-                           X509ChainStatusFlags.InvalidBasicConstraints |
-                           X509ChainStatusFlags.CtlNotTimeValid |
-                           X509ChainStatusFlags.UntrustedRoot |
-                           X509ChainStatusFlags.CtlNotSignatureValid;
+        var problemFlags = ChainProblemStatus.NotTimeValid |
+                           ChainProblemStatus.Revoked |
+                           ChainProblemStatus.NotSignatureValid |
+                           ChainProblemStatus.InvalidBasicConstraints |
+                           ChainProblemStatus.UntrustedRoot;
 
         services.TryAddScoped(_ =>
             new TrustChainValidator(
-                new X509ChainPolicy()
-                {
-                    DisableCertificateDownloads = true,
-                    UrlRetrievalTimeout = TimeSpan.FromMilliseconds(1),
-                    RevocationMode = X509RevocationMode.NoCheck
-                },
                 problemFlags,
+                false,
                 _testOutputHelper.ToLogger<TrustChainValidator>()));
 
         services.AddSingleton<UdapClientDiscoveryValidator>();

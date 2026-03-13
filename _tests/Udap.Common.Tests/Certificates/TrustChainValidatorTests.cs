@@ -87,14 +87,11 @@ public class TrustChainValidatorTests
         //
         // Certificate revocation is offline for unit tests.
         //
-        var problemFlags = X509ChainStatusFlags.NotTimeValid |
-                           X509ChainStatusFlags.Revoked |
-                           X509ChainStatusFlags.NotSignatureValid |
-                           X509ChainStatusFlags.InvalidBasicConstraints |
-                           X509ChainStatusFlags.CtlNotTimeValid |
-                           // X509ChainStatusFlags.OfflineRevocation |
-                           X509ChainStatusFlags.CtlNotSignatureValid;
-        
+        var problemFlags = ChainProblemStatus.NotTimeValid |
+                           ChainProblemStatus.Revoked |
+                           ChainProblemStatus.NotSignatureValid |
+                           ChainProblemStatus.InvalidBasicConstraints;
+
         (await ValidateCertificateChain(cert, problemFlags, "udap://fhirlabs.net")).Should().BeTrue();
         _diagnosticsChainValidator.Called.Should().BeFalse();
     }
@@ -186,13 +183,10 @@ public class TrustChainValidatorTests
     [Fact]
     public async Task ValidateUntrustedCertificate()
     {
-        var problemFlags = X509ChainStatusFlags.NotTimeValid |
-                           X509ChainStatusFlags.Revoked |
-                           X509ChainStatusFlags.NotSignatureValid |
-                           X509ChainStatusFlags.InvalidBasicConstraints |
-                           X509ChainStatusFlags.CtlNotTimeValid |
-                           // X509ChainStatusFlags.OfflineRevocation |
-                           X509ChainStatusFlags.CtlNotSignatureValid;
+        var problemFlags = ChainProblemStatus.NotTimeValid |
+                           ChainProblemStatus.Revoked |
+                           ChainProblemStatus.NotSignatureValid |
+                           ChainProblemStatus.InvalidBasicConstraints;
 
         var configuration = new ConfigurationBuilder()
             .AddJsonFile("appsettings.json", false, true)
@@ -206,7 +200,7 @@ public class TrustChainValidatorTests
             new TrustAnchorFileStore(
                 sp.GetRequiredService<IOptionsMonitor<UdapFileCertStoreManifest>>(),
                 Substitute.For<ILogger<TrustAnchorFileStore>>()));
-        
+
         var sp = services.BuildServiceProvider();
         var certStore = sp.GetRequiredService<ITrustAnchorStore>();
 
@@ -227,39 +221,32 @@ public class TrustChainValidatorTests
             .ToX509Collection();
 
 
-        var validator = new TrustChainValidator(new X509ChainPolicy()
-        {
-            RevocationMode = X509RevocationMode.Offline,
-            VerificationFlags = X509VerificationFlags.IgnoreCertificateAuthorityRevocationUnknown |
-                                X509VerificationFlags.IgnoreEndRevocationUnknown |
-                                X509VerificationFlags.AllowUnknownCertificateAuthority |
-                                X509VerificationFlags.IgnoreWrongUsage,
-            RevocationFlag = X509RevocationFlag.ExcludeRoot
-        }, problemFlags, _testOutputHelper.ToLogger<TrustChainValidator>());
+        var validator = new TrustChainValidator(
+            problemFlags,
+            false, // no revocation checking in tests
+            _testOutputHelper.ToLogger<TrustChainValidator>());
 
         validator.Problem += _diagnosticsChainValidator.OnChainProblem;
 
         // Help while writing tests to see problems summarized.
         validator.Error += (_, exception) => _testOutputHelper.WriteLine("Error: " + exception.Message);
-        validator.Problem += element => _testOutputHelper.WriteLine("Problem: " + element.ChainElementStatus.Summarize(problemFlags));
+        validator.Problem += element => _testOutputHelper.WriteLine("Problem: " + element.Problems.Summarize(problemFlags));
         validator.Untrusted += certificate2 => _testOutputHelper.WriteLine("Untrusted: " + certificate2.Subject);
 
         var cert = new X509Certificate2("CertStore/issued/fhirlabs.net.untrusted.client.pfx", "udap-test", X509KeyStorageFlags.Exportable);
-        
-        var trusted = validator.IsTrustedCertificate(
+
+        var trusted = await validator.IsTrustedCertificateAsync(
             "client_name",
             cert,
             intermediates,
-            anchorCertificates!,
-            out _,
-            out _);
+            anchorCertificates!);
 
         trusted.Should().BeFalse();
     }
 
     public async Task<bool> ValidateCertificateChain(
             X509Certificate2 issuedCertificate2,
-            X509ChainStatusFlags problemFlags,
+            ChainProblemStatus problemFlags,
             string communityName)
     {
         var configuration = new ConfigurationBuilder()
@@ -297,30 +284,23 @@ public class TrustChainValidatorTests
             .ToArray()
             .ToX509Collection();
 
-        var validator = new TrustChainValidator(new X509ChainPolicy()
-        {
-            RevocationMode = X509RevocationMode.Offline,
-            VerificationFlags = X509VerificationFlags.IgnoreCertificateAuthorityRevocationUnknown |
-                                                  X509VerificationFlags.IgnoreEndRevocationUnknown |
-                                                  X509VerificationFlags.AllowUnknownCertificateAuthority |
-                                                  X509VerificationFlags.IgnoreWrongUsage,
-            RevocationFlag = X509RevocationFlag.ExcludeRoot
-        }, problemFlags, _testOutputHelper.ToLogger<TrustChainValidator>());
+        var validator = new TrustChainValidator(
+            problemFlags,
+            false, // no revocation checking in tests
+            _testOutputHelper.ToLogger<TrustChainValidator>());
 
         validator.Problem += _diagnosticsChainValidator.OnChainProblem;
 
         // Help while writing tests to see problems summarized.
         validator.Error += (_, exception) => _testOutputHelper.WriteLine("Error: " + exception.Message);
-        validator.Problem += element => _testOutputHelper.WriteLine("Problem: " + element.ChainElementStatus.Summarize(problemFlags));
+        validator.Problem += element => _testOutputHelper.WriteLine("Problem: " + element.Problems.Summarize(problemFlags));
         validator.Untrusted += certificate2 => _testOutputHelper.WriteLine("Untrusted: " + certificate2.Subject);
 
-        return validator.IsTrustedCertificate(
+        return await validator.IsTrustedCertificateAsync(
             "client_name",
             issuedCertificate2,
             intermediates,
-            anchorCertificates!,
-            out _,
-            out _);
+            anchorCertificates!);
     }
 
     public class FakeChainValidatorDiagnostics
@@ -333,13 +313,13 @@ public class TrustChainValidatorTests
             get { return _actualErrorMessages; }
         }
 
-        public void OnChainProblem(X509ChainElement chainElement)
+        public void OnChainProblem(ChainElementInfo chainElement)
         {
-            foreach (var chainElementStatus in chainElement.ChainElementStatus
-                         .Where(s => (s.Status & TrustChainValidator.DefaultProblemFlags) != 0))
+            foreach (var problem in chainElement.Problems
+                         .Where(p => (p.Status & TrustChainValidator.DefaultProblemFlags) != 0))
             {
-                var problem = $"Trust ERROR ({chainElementStatus.Status}){chainElementStatus.StatusInformation}, {chainElement.Certificate}";
-                _actualErrorMessages.Add(problem);
+                var msg = $"Trust ERROR ({problem.Status}){problem.StatusInformation}, {chainElement.Certificate}";
+                _actualErrorMessages.Add(msg);
                 Called = true;
             }
         }

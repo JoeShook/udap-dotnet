@@ -319,7 +319,7 @@ public class UdapDynamicClientRegistrationValidator : IUdapDynamicClientRegistra
 
         _logger.LogDebug("Validating chain. x5c {X5c}", jwtHeader.X5c);
 
-        if (!ValidateChain(context, jsonWebToken, jwtHeader, intermediateCertificates, anchorCertificates, anchors))
+        if (!await ValidateChainAsync(context, jsonWebToken, jwtHeader, intermediateCertificates, anchorCertificates, anchors))
         {
             _logger.LogWarning("{Error}::{Description}",
                 UdapDynamicClientRegistrationErrors.UnapprovedSoftwareStatement,
@@ -677,7 +677,7 @@ public class UdapDynamicClientRegistrationValidator : IUdapDynamicClientRegistra
         return new UdapDynamicClientRegistrationValidationResult(string.Empty);
     }
 
-    private bool ValidateChain(
+    private async Task<bool> ValidateChainAsync(
         UdapDynamicClientRegistrationContext context,
         JsonWebToken jwtSecurityToken,
         JwtHeader jwtHeader,
@@ -692,16 +692,16 @@ public class UdapDynamicClientRegistrationValidator : IUdapDynamicClientRegistra
         {
             var cert = new X509Certificate2(Convert.FromBase64String(x5cArray.First()));
 
-            if (_trustChainValidator.IsTrustedCertificate(
-                    context.Document?.ClientName ?? string.Empty,
-                    cert,
-                    intermediateCertificates,
-                    anchorCertificates,
-                    out X509ChainElementCollection? chainElements,
-                    out long? communityId,
-                    anchors))
+            var result = await _trustChainValidator.IsTrustedCertificateAsync(
+                context.Document?.ClientName ?? string.Empty,
+                cert,
+                intermediateCertificates,
+                anchorCertificates,
+                anchors);
+
+            if (result.IsValid)
             {
-                if (chainElements == null)
+                if (result.ChainElements.Count == 0)
                 {
                     _logger.LogError("Missing chain elements");
 
@@ -709,8 +709,8 @@ public class UdapDynamicClientRegistrationValidator : IUdapDynamicClientRegistra
                 }
 
                 context.Issuer = jwtSecurityToken.Issuer;
-                context.CommunityId = communityId;
-                context.CertificateExpiration = chainElements.First().Certificate.NotAfter.ToUniversalTime();
+                context.CommunityId = result.CommunityId;
+                context.CertificateExpiration = result.ChainElements.First().Certificate.NotAfter.ToUniversalTime();
 
                 return true;
             }

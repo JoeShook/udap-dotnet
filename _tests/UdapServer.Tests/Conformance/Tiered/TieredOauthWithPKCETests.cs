@@ -1323,6 +1323,282 @@ public class TieredOauthWithPKCETests
     }
 
 
+    /// <summary>
+    /// Verifies that PKCE is used on the backchannel between the Auth Server
+    /// and the Identity Provider.  The IdP requires PKCE; the
+    /// TieredOAuthAuthenticationHandler must send code_challenge on /authorize
+    /// and code_verifier on the token exchange.
+    /// </summary>
+    [Fact]
+    public async Task Tiered_OAuth_IdP_Requires_PKCE()
+    {
+        BuildUdapAuthorizationServer();
+        BuildUdapIdentityProvider1WithPkceRequired();
+
+        // Register client with auth server
+        var resultDocument = await RegisterClientWithAuthServer();
+        _mockAuthorServerPipeline.RemoveSessionCookie();
+        _mockAuthorServerPipeline.RemoveLoginCookie();
+        resultDocument.Should().NotBeNull();
+        resultDocument!.ClientId.Should().NotBeNull();
+
+        var clientId = resultDocument.ClientId!;
+
+        var dynamicIdp = _mockAuthorServerPipeline.ApplicationServices.GetRequiredService<DynamicIdp>();
+        dynamicIdp.Name = _mockIdPPipeline.BaseUrl;
+
+        //////////////////////
+        // ClientAuthorize
+        //////////////////////
+
+        var clientState = Guid.NewGuid().ToString();
+
+        var udapClient = _mockAuthorServerPipeline.Resolve<IUdapClient>();
+        var pkce = udapClient.GeneratePkce();
+
+        var clientAuthorizeUrl = _mockAuthorServerPipeline.CreateAuthorizeUrl(
+            clientId: clientId,
+            responseType: "code",
+            scope: "udap openid user/*.read",
+            redirectUri: "https://code_client/callback",
+            state: clientState,
+            extra: new
+            {
+                idp = "https://idpserver"
+            },
+            codeChallenge: pkce.CodeChallenge,
+            codeChallengeMethod: OidcConstants.CodeChallengeMethods.Sha256);
+
+        _mockAuthorServerPipeline.BrowserClient.AllowAutoRedirect = false;
+        _mockAuthorServerPipeline.BrowserClient.AllowCookies = false;
+        var response = await _mockAuthorServerPipeline.BrowserClient.GetAsync(clientAuthorizeUrl);
+        response.StatusCode.Should().Be(HttpStatusCode.Redirect, await response.Content.ReadAsStringAsync());
+        response.Headers.Location.Should().NotBeNull();
+        response.Headers.Location!.AbsoluteUri.Should().Contain("https://server/Account/Login");
+        var queryParams = QueryHelpers.ParseQuery(response.Headers.Location.Query);
+        queryParams.Should().Contain(p => p.Key == "ReturnUrl");
+
+        var returnUrl = queryParams.Single(p => p.Key == "ReturnUrl").Value.ToString();
+        returnUrl.Should().StartWith("/connect/authorize/callback?");
+
+        var schemes = await _mockAuthorServerPipeline.Resolve<IAuthenticationSchemeProvider>().GetAllSchemesAsync();
+
+        var sb = new StringBuilder();
+        sb.Append("https://server/externallogin/challenge?");
+        sb.Append("scheme=").Append(schemes.First().Name);
+        sb.Append("&returnUrl=").Append(Uri.EscapeDataString(returnUrl));
+        clientAuthorizeUrl = sb.ToString();
+
+        //////////////////////////////////
+        //
+        // IdPDiscovery, IdPRegistration, IdPAuthAccess
+        // The backchannel challenge to the IdP should include PKCE
+        //
+        //////////////////////////////////
+
+        _mockAuthorServerPipeline.BrowserClient.AllowCookies = true;
+
+        _mockAuthorServerPipeline.BrowserClient.GetXsrfCookie("https://server/federation/udap-tiered/signin", new TieredOAuthAuthenticationOptions().CorrelationCookie.Name!).Should().BeNull();
+        var backChannelChallengeResponse = await _mockAuthorServerPipeline.BrowserClient.GetAsync(clientAuthorizeUrl);
+        _mockAuthorServerPipeline.BrowserClient.GetXsrfCookie("https://server/federation/udap-tiered/signin", new TieredOAuthAuthenticationOptions().CorrelationCookie.Name!).Should().NotBeNull();
+
+        backChannelChallengeResponse.StatusCode.Should().Be(HttpStatusCode.Redirect, await backChannelChallengeResponse.Content.ReadAsStringAsync());
+        backChannelChallengeResponse.Headers.Location.Should().NotBeNull();
+        backChannelChallengeResponse.Headers.Location!.AbsoluteUri.Should().StartWith("https://idpserver/connect/authorize");
+
+        // Assert PKCE parameters are present in the backchannel authorize URL to the IdP
+        var idpAuthorizeParams = QueryHelpers.ParseQuery(backChannelChallengeResponse.Headers.Location.Query);
+        idpAuthorizeParams.Should().Contain(p => p.Key == OidcConstants.AuthorizeRequest.CodeChallenge, "IdP requires PKCE so code_challenge must be sent");
+        idpAuthorizeParams.Should().Contain(p => p.Key == OidcConstants.AuthorizeRequest.CodeChallengeMethod, "code_challenge_method must be sent with code_challenge");
+        idpAuthorizeParams.Single(p => p.Key == OidcConstants.AuthorizeRequest.CodeChallengeMethod).Value.ToString().Should().Be(OidcConstants.CodeChallengeMethods.Sha256);
+
+        var backChannelState = idpAuthorizeParams.Single(p => p.Key == "state").Value.ToString();
+        backChannelState.Should().NotBeNullOrEmpty();
+
+        var idpClient = _mockIdPPipeline.Clients.Single(c => c.ClientName == "AuthServer Client");
+        idpClient.AlwaysIncludeUserClaimsInIdToken.Should().BeTrue();
+
+        Debug.Assert(_mockIdPPipeline.BrowserClient != null, "_mockIdPPipeline.BrowserClient != null");
+        var backChannelAuthResult = await _mockIdPPipeline.BrowserClient.GetAsync(backChannelChallengeResponse.Headers.Location);
+
+        backChannelAuthResult.StatusCode.Should().Be(HttpStatusCode.Redirect, await backChannelAuthResult.Content.ReadAsStringAsync());
+        backChannelAuthResult.Headers.Location!.AbsoluteUri.Should().StartWith("https://idpserver/Account/Login");
+
+        // Run IdP /Account/Login
+        var loginCallbackResult = await _mockIdPPipeline.BrowserClient.GetAsync(backChannelAuthResult.Headers.Location!.AbsoluteUri);
+        loginCallbackResult.StatusCode.Should().Be(HttpStatusCode.Redirect, await backChannelAuthResult.Content.ReadAsStringAsync());
+        loginCallbackResult.Headers.Location!.OriginalString.Should().StartWith("/connect/authorize/callback?");
+
+        // Run IdP /connect/authorize/callback
+        var authorizeCallbackResult = await _mockIdPPipeline.BrowserClient.GetAsync(
+            $"https://idpserver{loginCallbackResult.Headers.Location!.OriginalString}");
+        authorizeCallbackResult.StatusCode.Should().Be(HttpStatusCode.Redirect, await authorizeCallbackResult.Content.ReadAsStringAsync());
+        authorizeCallbackResult.Headers.Location.Should().NotBeNull();
+        authorizeCallbackResult.Headers.Location!.AbsoluteUri.Should().StartWith("https://server/federation/udap-tiered/signin?");
+
+        QueryHelpers.ParseQuery(authorizeCallbackResult.Headers.Location.Query).Single(p => p.Key == "code").Value.Should().NotBeEmpty();
+
+        backChannelState.Should().BeEquivalentTo(_mockAuthorServerPipeline.GetClientState(authorizeCallbackResult));
+        clientState.Should().NotBeEquivalentTo(backChannelState);
+
+        _mockAuthorServerPipeline.GetSessionCookie().Should().BeNull();
+        _mockAuthorServerPipeline.BrowserClient.GetCookie("https://server", "idsrv").Should().BeNull();
+
+        // Run Auth Server /federation/udap-tiered/signin
+        // The TieredOAuthAuthenticationHandler.ExchangeCodeAsync must send code_verifier
+        // to the IdP's token endpoint for PKCE validation to succeed.
+        _mockAuthorServerPipeline.BrowserClient.AllowAutoRedirect = true;
+        _mockAuthorServerPipeline.BrowserClient.StopRedirectingAfter = 1;
+        _mockAuthorServerPipeline.BrowserClient.AllowCookies = true;
+
+        var schemeCallbackResult = await _mockAuthorServerPipeline.BrowserClient.GetAsync(authorizeCallbackResult.Headers.Location!.AbsoluteUri);
+
+        schemeCallbackResult.StatusCode.Should().Be(HttpStatusCode.Redirect, await schemeCallbackResult.Content.ReadAsStringAsync());
+        schemeCallbackResult.Headers.Location.Should().NotBeNull();
+        schemeCallbackResult.Headers.Location!.OriginalString.Should().StartWith("/connect/authorize/callback?");
+
+        _mockAuthorServerPipeline.GetSessionCookie().Should().NotBeNull();
+        _mockAuthorServerPipeline.BrowserClient.GetCookie("https://server", "idsrv").Should().NotBeNull();
+
+        _mockIdPPipeline.IdToken.Should().NotBeNull();
+        _mockIdPPipeline.IdToken!.Claims.Should().Contain(c => c.Type == "hl7_identifier");
+        _mockIdPPipeline.IdToken.Claims.Single(c => c.Type == "hl7_identifier").Value.Should().Be("123");
+
+        // Run the authServer  https://server/connect/authorize/callback
+        _mockAuthorServerPipeline.BrowserClient.AllowAutoRedirect = false;
+
+        var clientCallbackResult = await _mockAuthorServerPipeline.BrowserClient.GetAsync(
+                       $"https://server{schemeCallbackResult.Headers.Location!.OriginalString}");
+
+        clientCallbackResult.StatusCode.Should().Be(HttpStatusCode.Redirect, await clientCallbackResult.Content.ReadAsStringAsync());
+        clientCallbackResult.Headers.Location.Should().NotBeNull();
+        clientCallbackResult.Headers.Location!.AbsoluteUri.Should().StartWith("https://code_client/callback?");
+
+        clientState.Should().BeEquivalentTo(_mockAuthorServerPipeline.GetClientState(clientCallbackResult));
+
+        queryParams = QueryHelpers.ParseQuery(clientCallbackResult.Headers.Location.Query);
+        queryParams.Should().Contain(p => p.Key == "code");
+        var code = queryParams.Single(p => p.Key == "code").Value.ToString();
+
+        ////////////////////////////
+        // ClientAuthAccess
+        ///////////////////////////
+
+        var privateCerts = _mockAuthorServerPipeline.Resolve<IPrivateCertificateStore>();
+
+        var tokenRequest = AccessTokenRequestForAuthorizationCodeBuilder.Create(
+            clientId,
+            "https://server/connect/token",
+            privateCerts.IssuedCertificates.Select(ic => ic.Certificate).First(),
+            "https://code_client/callback",
+            code)
+            .Build();
+
+        dynamicIdp.Name = null;
+
+        udapClient = _mockAuthorServerPipeline.Resolve<IUdapClient>();
+        tokenRequest.CodeVerifier = pkce.CodeVerifier;
+
+        var accessToken = await udapClient.ExchangeCodeForTokenResponse(tokenRequest);
+        accessToken.Should().NotBeNull();
+        accessToken.IdentityToken.Should().NotBeNull();
+        var jwt = new JwtSecurityToken(accessToken.IdentityToken);
+        new JwtSecurityToken(accessToken.AccessToken).Should().NotBeNull();
+
+        using var jsonDocument = JsonDocument.Parse(jwt.Payload.SerializeToJson());
+        var formattedStatement = JsonSerializer.Serialize(
+            jsonDocument,
+            IndentedJsonOptions
+        );
+
+        _testOutputHelper.WriteLine(Base64UrlEncoder.Decode(jwt.EncodedHeader));
+        _testOutputHelper.WriteLine(formattedStatement);
+
+        jwt.Claims.Should().Contain(c => c.Type == "aud");
+        jwt.Claims.Single(c => c.Type == "aud").Value.Should().Be(clientId);
+
+        jwt.Claims.Should().Contain(c => c.Type == "iss");
+        jwt.Claims.Single(c => c.Type == "iss").Value.Should().Be(UdapAuthServerPipeline.BaseUrl);
+
+        jwt.Claims.Should().Contain(c => c.Type == "hl7_identifier");
+        jwt.Claims.Single(c => c.Type == "hl7_identifier").Value.Should().Be("123");
+    }
+
+    private void BuildUdapIdentityProvider1WithPkceRequired()
+    {
+        _mockIdPPipeline.OnPostConfigureServices += services =>
+        {
+            services.AddSingleton(
+                sp =>
+                {
+                    var serverSettings = sp.GetRequiredService<IOptions<ServerSettings>>().Value;
+                    serverSettings.DefaultUserScopes = "udap";
+                    serverSettings.DefaultSystemScopes = "udap";
+                    serverSettings.AlwaysIncludeUserClaimsInIdToken = true;
+                    serverSettings.RequireConsent = false;
+                    serverSettings.RequirePkce = true;
+                    serverSettings.SsraaVersion = SsraaVersion.V1_1;
+                    return serverSettings;
+                });
+
+            services.AddSingleton(_mockIdPPipeline.Clients);
+            services.AddSingleton<HttpClient>(sp => _mockAuthorServerPipeline.BrowserClient);
+        };
+
+
+        _mockIdPPipeline.Initialize(enableLogging: true);
+        Debug.Assert(_mockIdPPipeline.BrowserClient != null, "_mockIdPPipeline.BrowserClient != null");
+        _mockIdPPipeline.BrowserClient.AllowAutoRedirect = false;
+
+        _mockIdPPipeline.Communities.Add(new Community
+        {
+            Name = "udap://idp-community-1",
+            Enabled = true,
+            Default = true,
+            Anchors =
+            [
+                new Anchor(_community1Anchor, "udap://idp-community-1")
+                {
+                    BeginDate = _community1Anchor.NotBefore.ToUniversalTime(),
+                    EndDate = _community1Anchor.NotAfter.ToUniversalTime(),
+                    Name = _community1Anchor.Subject,
+                    Enabled = true,
+                    Intermediates = new List<Intermediate>()
+                    {
+                        new(_community1IntermediateCert)
+                        {
+                            BeginDate =  _community1IntermediateCert.NotBefore.ToUniversalTime(),
+                            EndDate = _community1IntermediateCert.NotAfter.ToUniversalTime(),
+                            Name = _community1IntermediateCert.Subject,
+                            Enabled = true
+                        }
+                    }
+                }
+            ]
+        });
+
+        _mockIdPPipeline.IdentityScopes.Add(new IdentityResources.OpenId());
+        _mockIdPPipeline.IdentityScopes.Add(new UdapIdentityResources.Profile());
+        _mockIdPPipeline.ApiScopes.Add(new UdapApiScopes.Udap());
+        _mockIdPPipeline.IdentityScopes.Add(new IdentityResources.Email());
+        _mockIdPPipeline.IdentityScopes.Add(new UdapIdentityResources.FhirUser());
+
+        _mockIdPPipeline.Users.Add(new TestUser
+        {
+            SubjectId = "bob",
+            Username = "bob",
+            Claims =
+            [
+                new Claim("name", "Bob Loblaw"),
+                new Claim("email", "bob@loblaw.com"),
+                new Claim("role", "Attorney"),
+                new Claim("hl7_identifier", "123")
+            ]
+        });
+
+        _mockIdPPipeline.Subject = new IdentityServerUser("bob").CreatePrincipal();
+    }
+
     private async Task<UdapDynamicClientRegistrationDocument?> RegisterClientWithAuthServer()
     {
         var clientCert = new X509Certificate2("CertStore/issued/fhirLabsApiClientLocalhostCert.pfx", "udap-test");
