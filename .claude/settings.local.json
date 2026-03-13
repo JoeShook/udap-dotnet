@@ -29,7 +29,9 @@
       "Bash(find c:\\\\\\\\Source\\\\\\\\GitHub\\\\\\\\JoeShook\\\\\\\\udap-tools\\\\\\\\udap-dotnet:*)",
       "Bash(echo No DPoP in JSON files:*)",
       "Bash(echo No DPoP in README files:*)",
-      "Bash(dotnet restore:*)"
+      "Bash(dotnet restore:*)",
+      "Bash(find examples:*)",
+      "Bash(do unix2dos:*)"
     ]
   }
 }
