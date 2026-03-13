@@ -8,7 +8,6 @@
 #endregion
 
 using System.Text.Json;
-using FluentAssertions;
 using Hl7.Fhir.Model;
 using Hl7.Fhir.Serialization;
 using Udap.Model;
@@ -60,10 +59,10 @@ public class PayloadSerializerTest
         var userPersonJson = File.ReadAllText("Model/Person-FASTIDUDAPPerson-Example.json");
         var parser = new FhirJsonParser();
         var personResource = parser.Parse<Person>(userPersonJson);
-        personResource.Should().NotBeNull();
+        Assert.NotNull(personResource);
         var serializer = new FhirJsonSerializer();
         var userPerson = serializer.SerializeToString(personResource);
-        userPerson.Should().NotBeNullOrEmpty();
+        Assert.False(string.IsNullOrEmpty(userPerson));
         // _testOutputHelper.WriteLine(userPerson);
 
 
@@ -98,15 +97,15 @@ public class PayloadSerializerTest
 
         var b2bHl7Result = ((HL7B2BAuthorizationExtension)extensionsResult[UdapConstants.UdapAuthorizationExtensions.Hl7B2B]);
 
-        b2bHl7Result.Version.Should().BeEquivalentTo(b2bHl7.Version);
-        b2bHl7Result.PurposeOfUse.Should().ContainInOrder(b2bHl7.PurposeOfUse);
-        b2bHl7Result.ConsentPolicy.Should().ContainInOrder(b2bHl7.ConsentPolicy);
+        Assert.Equal(b2bHl7.Version, b2bHl7Result.Version, StringComparer.OrdinalIgnoreCase);
+        Assert.Equal(b2bHl7.PurposeOfUse!.ToList(), b2bHl7Result.PurposeOfUse!.ToList());
+        Assert.Equal(b2bHl7.ConsentPolicy!.ToList(), b2bHl7Result.ConsentPolicy!.ToList());
 
 
         var b2bHl7UserResult = ((HL7B2BUserAuthorizationExtension)extensionsResult[UdapConstants.UdapAuthorizationExtensions.Hl7B2BUSER]);
 
-        b2bHl7UserResult.Version.Should().BeEquivalentTo(b2bHl7User.Version);
-        b2bHl7UserResult.PurposeOfUse.Should().ContainInOrder(b2bHl7User.PurposeOfUse);
-        b2bHl7UserResult.ConsentPolicy.Should().ContainInOrder(b2bHl7User.ConsentPolicy);
+        Assert.Equal(b2bHl7User.Version, b2bHl7UserResult.Version, StringComparer.OrdinalIgnoreCase);
+        Assert.Equal(b2bHl7User.PurposeOfUse!.ToList(), b2bHl7UserResult.PurposeOfUse!.ToList());
+        Assert.Equal(b2bHl7User.ConsentPolicy!.ToList(), b2bHl7UserResult.ConsentPolicy!.ToList());
     }
 }

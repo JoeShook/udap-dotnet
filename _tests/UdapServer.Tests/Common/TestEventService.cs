@@ -14,7 +14,7 @@
 
 using Duende.IdentityServer.Events;
 using Duende.IdentityServer.Services;
-using FluentAssertions;
+using Xunit;
 
 namespace UdapServer.Tests.Common;
 
@@ -31,7 +31,7 @@ public class TestEventService : IEventService
     public T AssertEventWasRaised<T>()
         where T : class
     {
-        _events.ContainsKey(typeof(T)).Should().BeTrue();
+        Assert.True(_events.ContainsKey(typeof(T)));
         return (T)_events.Where(x => x.Key == typeof(T)).Select(x=>x.Value).First();
     }
 

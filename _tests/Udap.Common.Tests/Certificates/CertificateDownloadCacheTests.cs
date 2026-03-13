@@ -8,7 +8,6 @@
 #endregion
 
 using System.Net;
-using FluentAssertions;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using Org.BouncyCastle.Asn1.X509;
@@ -42,17 +41,17 @@ public class CertificateDownloadCacheTests
         handler.SetResponse("https://example.com/intermediate.cer", certBytes);
 
         var cert1 = await cache.GetIntermediateCertificateAsync("https://example.com/intermediate.cer");
-        cert1.Should().NotBeNull();
-        handler.CallCount("https://example.com/intermediate.cer").Should().Be(1);
+        Assert.NotNull(cert1);
+        Assert.Equal(1, handler.CallCount("https://example.com/intermediate.cer"));
 
         var cert2 = await cache.GetIntermediateCertificateAsync("https://example.com/intermediate.cer");
-        cert2.Should().NotBeNull();
-        handler.CallCount("https://example.com/intermediate.cer").Should().Be(1, "second call should come from cache");
+        Assert.NotNull(cert2);
+        Assert.Equal(1, handler.CallCount("https://example.com/intermediate.cer")); // second call should come from cache
 
-        cert1!.Thumbprint.Should().Be(cert2!.Thumbprint);
+        Assert.Equal(cert1!.Thumbprint, cert2!.Thumbprint);
 
-        cache.CachedIntermediateUrls.Should().ContainSingle()
-            .Which.Should().Be("https://example.com/intermediate.cer");
+        var singleIntermediate = Assert.Single(cache.CachedIntermediateUrls);
+        Assert.Equal("https://example.com/intermediate.cer", singleIntermediate);
     }
 
     [Fact]
@@ -64,15 +63,15 @@ public class CertificateDownloadCacheTests
         handler.SetResponse("https://example.com/crl.crl", crlBytes);
 
         var crl1 = await cache.GetCrlAsync("https://example.com/crl.crl");
-        crl1.Should().NotBeNull();
-        handler.CallCount("https://example.com/crl.crl").Should().Be(1);
+        Assert.NotNull(crl1);
+        Assert.Equal(1, handler.CallCount("https://example.com/crl.crl"));
 
         var crl2 = await cache.GetCrlAsync("https://example.com/crl.crl");
-        crl2.Should().NotBeNull();
-        handler.CallCount("https://example.com/crl.crl").Should().Be(1, "second call should come from cache");
+        Assert.NotNull(crl2);
+        Assert.Equal(1, handler.CallCount("https://example.com/crl.crl")); // second call should come from cache
 
-        cache.CachedCrlUrls.Should().ContainSingle()
-            .Which.Should().Be("https://example.com/crl.crl");
+        var singleCrl = Assert.Single(cache.CachedCrlUrls);
+        Assert.Equal("https://example.com/crl.crl", singleCrl);
     }
 
     [Fact]
@@ -86,16 +85,16 @@ public class CertificateDownloadCacheTests
 
         await cache.GetIntermediateCertificateAsync("https://example.com/a.cer");
         await cache.GetIntermediateCertificateAsync("https://example.com/b.cer");
-        cache.CachedIntermediateUrls.Should().HaveCount(2);
+        Assert.Equal(2, cache.CachedIntermediateUrls.Count());
 
         await cache.RemoveIntermediateAsync("https://example.com/a.cer");
 
-        cache.CachedIntermediateUrls.Should().ContainSingle()
-            .Which.Should().Be("https://example.com/b.cer");
+        var singleIntermediate = Assert.Single(cache.CachedIntermediateUrls);
+        Assert.Equal("https://example.com/b.cer", singleIntermediate);
 
         // Next fetch of removed URL should trigger a new download
         await cache.GetIntermediateCertificateAsync("https://example.com/a.cer");
-        handler.CallCount("https://example.com/a.cer").Should().Be(2);
+        Assert.Equal(2, handler.CallCount("https://example.com/a.cer"));
     }
 
     [Fact]
@@ -109,15 +108,15 @@ public class CertificateDownloadCacheTests
 
         await cache.GetCrlAsync("https://example.com/a.crl");
         await cache.GetCrlAsync("https://example.com/b.crl");
-        cache.CachedCrlUrls.Should().HaveCount(2);
+        Assert.Equal(2, cache.CachedCrlUrls.Count());
 
         await cache.RemoveCrlAsync("https://example.com/a.crl");
 
-        cache.CachedCrlUrls.Should().ContainSingle()
-            .Which.Should().Be("https://example.com/b.crl");
+        var singleCrl = Assert.Single(cache.CachedCrlUrls);
+        Assert.Equal("https://example.com/b.crl", singleCrl);
 
         await cache.GetCrlAsync("https://example.com/a.crl");
-        handler.CallCount("https://example.com/a.crl").Should().Be(2);
+        Assert.Equal(2, handler.CallCount("https://example.com/a.crl"));
     }
 
     [Fact]
@@ -137,8 +136,8 @@ public class CertificateDownloadCacheTests
 
         await cache.RemoveAllIntermediatesAsync();
 
-        cache.CachedIntermediateUrls.Should().BeEmpty();
-        cache.CachedCrlUrls.Should().ContainSingle("CRLs should not be affected");
+        Assert.Empty(cache.CachedIntermediateUrls);
+        Assert.Single(cache.CachedCrlUrls); // CRLs should not be affected
     }
 
     [Fact]
@@ -158,8 +157,8 @@ public class CertificateDownloadCacheTests
 
         await cache.RemoveAllCrlsAsync();
 
-        cache.CachedCrlUrls.Should().BeEmpty();
-        cache.CachedIntermediateUrls.Should().ContainSingle("intermediates should not be affected");
+        Assert.Empty(cache.CachedCrlUrls);
+        Assert.Single(cache.CachedIntermediateUrls); // intermediates should not be affected
     }
 
     [Fact]
@@ -177,8 +176,8 @@ public class CertificateDownloadCacheTests
 
         await cache.RemoveAllAsync();
 
-        cache.CachedIntermediateUrls.Should().BeEmpty();
-        cache.CachedCrlUrls.Should().BeEmpty();
+        Assert.Empty(cache.CachedIntermediateUrls);
+        Assert.Empty(cache.CachedCrlUrls);
     }
 
     [Fact]
@@ -189,8 +188,8 @@ public class CertificateDownloadCacheTests
 
         var result = await cache.GetIntermediateCertificateAsync("https://example.com/missing.cer");
 
-        result.Should().BeNull();
-        cache.CachedIntermediateUrls.Should().BeEmpty();
+        Assert.Null(result);
+        Assert.Empty(cache.CachedIntermediateUrls);
     }
 
     [Fact]
@@ -201,8 +200,8 @@ public class CertificateDownloadCacheTests
 
         var result = await cache.GetCrlAsync("https://example.com/missing.crl");
 
-        result.Should().BeNull();
-        cache.CachedCrlUrls.Should().BeEmpty();
+        Assert.Null(result);
+        Assert.Empty(cache.CachedCrlUrls);
     }
 
     [Fact]
@@ -217,8 +216,8 @@ public class CertificateDownloadCacheTests
         var sp = services.BuildServiceProvider();
         var cache = sp.GetRequiredService<ICertificateDownloadCache>();
 
-        cache.Should().NotBeNull();
-        cache.Should().BeOfType<CertificateDownloadCache>();
+        Assert.NotNull(cache);
+        Assert.IsType<CertificateDownloadCache>(cache);
     }
 
     [Fact]
@@ -234,7 +233,7 @@ public class CertificateDownloadCacheTests
         var sp = services.BuildServiceProvider();
         var validator = sp.GetRequiredService<TrustChainValidator>();
 
-        validator.Should().NotBeNull();
+        Assert.NotNull(validator);
     }
 
     [Fact]
@@ -254,17 +253,17 @@ public class CertificateDownloadCacheTests
         await cache.GetCrlAsync("https://ca1.example.com/crl.crl");
         await cache.GetCrlAsync("https://ca2.example.com/crl.crl");
 
-        cache.CachedIntermediateUrls.Should().HaveCount(2);
-        cache.CachedCrlUrls.Should().HaveCount(2);
+        Assert.Equal(2, cache.CachedIntermediateUrls.Count());
+        Assert.Equal(2, cache.CachedCrlUrls.Count());
 
         // Remove one of each
         await cache.RemoveIntermediateAsync("https://ca1.example.com/intermediate.cer");
         await cache.RemoveCrlAsync("https://ca2.example.com/crl.crl");
 
-        cache.CachedIntermediateUrls.Should().ContainSingle()
-            .Which.Should().Be("https://ca2.example.com/intermediate.cer");
-        cache.CachedCrlUrls.Should().ContainSingle()
-            .Which.Should().Be("https://ca1.example.com/crl.crl");
+        var singleIntermediate = Assert.Single(cache.CachedIntermediateUrls);
+        Assert.Equal("https://ca2.example.com/intermediate.cer", singleIntermediate);
+        var singleCrl = Assert.Single(cache.CachedCrlUrls);
+        Assert.Equal("https://ca1.example.com/crl.crl", singleCrl);
     }
 
     #region Helpers

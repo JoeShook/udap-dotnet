@@ -16,7 +16,6 @@ using System.Text.Json;
 using Duende.IdentityModel;
 using Duende.IdentityServer.Models;
 using Duende.IdentityServer.Test;
-using FluentAssertions;
 using Microsoft.AspNetCore.WebUtilities;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
@@ -354,10 +353,10 @@ public class Stu2ComplianceTests
             UdapAuthServerPipeline.RegistrationEndpoint,
             new StringContent(JsonSerializer.Serialize(requestBody), new MediaTypeHeaderValue("application/json")));
 
-        response.StatusCode.Should().Be(HttpStatusCode.Created);
+        Assert.Equal(HttpStatusCode.Created, response.StatusCode);
         var resultDocument = await response.Content.ReadFromJsonAsync<UdapDynamicClientRegistrationDocument>();
-        resultDocument.Should().NotBeNull();
-        resultDocument!.ClientId.Should().NotBeNull();
+        Assert.NotNull(resultDocument);
+        Assert.NotNull(resultDocument!.ClientId);
     }
 
     /// <summary>
@@ -393,11 +392,11 @@ public class Stu2ComplianceTests
             UdapAuthServerPipeline.RegistrationEndpoint,
             new StringContent(JsonSerializer.Serialize(requestBody), new MediaTypeHeaderValue("application/json")));
 
-        response.StatusCode.Should().Be(HttpStatusCode.Created);
+        Assert.Equal(HttpStatusCode.Created, response.StatusCode);
         var resultDocument = await response.Content.ReadFromJsonAsync<UdapDynamicClientRegistrationDocument>();
 
         var client = mockPipeline.Clients.Single(c => c.ClientId == resultDocument!.ClientId);
-        client.RequirePkce.Should().BeTrue("STU 2.0 server policy requires PKCE for all UDAP auth-code clients");
+        Assert.True(client.RequirePkce, "STU 2.0 server policy requires PKCE for all UDAP auth-code clients");
     }
 
     /// <summary>
@@ -435,7 +434,7 @@ public class Stu2ComplianceTests
             UdapAuthServerPipeline.RegistrationEndpoint,
             new StringContent(JsonSerializer.Serialize(requestBody), new MediaTypeHeaderValue("application/json")));
 
-        response.StatusCode.Should().Be(HttpStatusCode.Created);
+        Assert.Equal(HttpStatusCode.Created, response.StatusCode);
         var resultDocument = await response.Content.ReadFromJsonAsync<UdapDynamicClientRegistrationDocument>();
 
         await mockPipeline.LoginAsync("bob");
@@ -456,11 +455,11 @@ public class Stu2ComplianceTests
         mockPipeline.BrowserClient.AllowAutoRedirect = false;
         response = await mockPipeline.BrowserClient.GetAsync(url);
 
-        response.StatusCode.Should().Be(HttpStatusCode.BadRequest);
+        Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
         var errorMessage = await response.Content.ReadFromJsonAsync<ErrorMessage>();
-        errorMessage.Should().NotBeNull();
-        errorMessage!.Error.Should().Be("invalid_request");
-        errorMessage.ErrorDescription.Should().BeEquivalentTo("code challenge required");
+        Assert.NotNull(errorMessage);
+        Assert.Equal("invalid_request", errorMessage!.Error);
+        Assert.Equal("code challenge required", errorMessage.ErrorDescription, StringComparer.OrdinalIgnoreCase);
     }
 
     /// <summary>
@@ -497,7 +496,7 @@ public class Stu2ComplianceTests
             UdapAuthServerPipeline.RegistrationEndpoint,
             new StringContent(JsonSerializer.Serialize(requestBody), new MediaTypeHeaderValue("application/json")));
 
-        response.StatusCode.Should().Be(HttpStatusCode.Created);
+        Assert.Equal(HttpStatusCode.Created, response.StatusCode);
         var resultDocument = await response.Content.ReadFromJsonAsync<UdapDynamicClientRegistrationDocument>();
 
         await mockPipeline.LoginAsync("bob");
@@ -520,11 +519,11 @@ public class Stu2ComplianceTests
         mockPipeline.BrowserClient.AllowAutoRedirect = false;
         response = await mockPipeline.BrowserClient.GetAsync(url);
 
-        response.StatusCode.Should().Be(HttpStatusCode.Redirect);
-        response.Headers.Location.Should().NotBeNull();
+        Assert.Equal(HttpStatusCode.Redirect, response.StatusCode);
+        Assert.NotNull(response.Headers.Location);
         var queryParams = QueryHelpers.ParseQuery(response.Headers.Location!.Query);
-        queryParams.Should().Contain(p => p.Key == "error" && p.Value == "invalid_request");
-        queryParams.Should().Contain(p => p.Key == "error_description" && p.Value.ToString().Contains("Missing state"));
+        Assert.Contains(queryParams, p => p.Key == "error" && p.Value == "invalid_request");
+        Assert.Contains(queryParams, p => p.Key == "error_description" && p.Value.ToString().Contains("Missing state"));
     }
 
     // -----------------------------------------------------------------------
@@ -563,10 +562,10 @@ public class Stu2ComplianceTests
             UdapAuthServerPipeline.RegistrationEndpoint,
             new StringContent(JsonSerializer.Serialize(requestBody), new MediaTypeHeaderValue("application/json")));
 
-        response.StatusCode.Should().Be(HttpStatusCode.Created);
+        Assert.Equal(HttpStatusCode.Created, response.StatusCode);
         var resultDocument = await response.Content.ReadFromJsonAsync<UdapDynamicClientRegistrationDocument>();
-        resultDocument.Should().NotBeNull();
-        resultDocument!.ClientId.Should().NotBeNull();
+        Assert.NotNull(resultDocument);
+        Assert.NotNull(resultDocument!.ClientId);
     }
 
     /// <summary>
@@ -602,11 +601,11 @@ public class Stu2ComplianceTests
             UdapAuthServerPipeline.RegistrationEndpoint,
             new StringContent(JsonSerializer.Serialize(requestBody), new MediaTypeHeaderValue("application/json")));
 
-        response.StatusCode.Should().Be(HttpStatusCode.Created);
+        Assert.Equal(HttpStatusCode.Created, response.StatusCode);
         var resultDocument = await response.Content.ReadFromJsonAsync<UdapDynamicClientRegistrationDocument>();
 
         var client = mockPipeline.Clients.Single(c => c.ClientId == resultDocument!.ClientId);
-        client.RequirePkce.Should().BeFalse("STU 1.1 server does not require PKCE");
+        Assert.False(client.RequirePkce, "STU 1.1 server does not require PKCE");
     }
 
     /// <summary>
@@ -643,7 +642,7 @@ public class Stu2ComplianceTests
             UdapAuthServerPipeline.RegistrationEndpoint,
             new StringContent(JsonSerializer.Serialize(requestBody), new MediaTypeHeaderValue("application/json")));
 
-        response.StatusCode.Should().Be(HttpStatusCode.Created);
+        Assert.Equal(HttpStatusCode.Created, response.StatusCode);
         var resultDocument = await response.Content.ReadFromJsonAsync<UdapDynamicClientRegistrationDocument>();
 
         await mockPipeline.LoginAsync("bob");
@@ -662,12 +661,12 @@ public class Stu2ComplianceTests
         response = await mockPipeline.BrowserClient.GetAsync(url);
 
         // Should redirect to callback with code, not an error
-        response.StatusCode.Should().Be(HttpStatusCode.Redirect);
-        response.Headers.Location.Should().NotBeNull();
-        response.Headers.Location!.AbsoluteUri.Should().Contain("https://code_client/callback");
+        Assert.Equal(HttpStatusCode.Redirect, response.StatusCode);
+        Assert.NotNull(response.Headers.Location);
+        Assert.Contains("https://code_client/callback", response.Headers.Location!.AbsoluteUri);
         var queryParams = QueryHelpers.ParseQuery(response.Headers.Location.Query);
-        queryParams.Should().Contain(p => p.Key == "code");
-        queryParams.Should().NotContain(p => p.Key == "error");
+        Assert.Contains(queryParams, p => p.Key == "code");
+        Assert.DoesNotContain(queryParams, p => p.Key == "error");
     }
 
     /// <summary>
@@ -705,7 +704,7 @@ public class Stu2ComplianceTests
             UdapAuthServerPipeline.RegistrationEndpoint,
             new StringContent(JsonSerializer.Serialize(requestBody), new MediaTypeHeaderValue("application/json")));
 
-        response.StatusCode.Should().Be(HttpStatusCode.Created);
+        Assert.Equal(HttpStatusCode.Created, response.StatusCode);
         var resultDocument = await response.Content.ReadFromJsonAsync<UdapDynamicClientRegistrationDocument>();
 
         await mockPipeline.LoginAsync("bob");
@@ -724,12 +723,11 @@ public class Stu2ComplianceTests
         mockPipeline.BrowserClient.AllowAutoRedirect = false;
         response = await mockPipeline.BrowserClient.GetAsync(url);
 
-        response.StatusCode.Should().Be(HttpStatusCode.BadRequest,
-            "V2_0 server must reject authorize requests missing PKCE code_challenge");
+        Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
         var errorMessage = await response.Content.ReadFromJsonAsync<ErrorMessage>();
-        errorMessage.Should().NotBeNull();
-        errorMessage!.Error.Should().Be("invalid_request");
-        errorMessage.ErrorDescription.Should().BeEquivalentTo("code challenge required");
+        Assert.NotNull(errorMessage);
+        Assert.Equal("invalid_request", errorMessage!.Error);
+        Assert.Equal("code challenge required", errorMessage.ErrorDescription, StringComparer.OrdinalIgnoreCase);
     }
 
     /// <summary>
@@ -766,11 +764,11 @@ public class Stu2ComplianceTests
             UdapAuthServerPipeline.RegistrationEndpoint,
             new StringContent(JsonSerializer.Serialize(requestBody), new MediaTypeHeaderValue("application/json")));
 
-        response.StatusCode.Should().Be(HttpStatusCode.Created);
+        Assert.Equal(HttpStatusCode.Created, response.StatusCode);
         var resultDocument = await response.Content.ReadFromJsonAsync<UdapDynamicClientRegistrationDocument>();
 
         var client = mockPipeline.Clients.Single(c => c.ClientId == resultDocument!.ClientId);
-        client.RequirePkce.Should().BeFalse("RequirePkce=false should override V2_0 default");
+        Assert.False(client.RequirePkce, "RequirePkce=false should override V2_0 default");
 
         await mockPipeline.LoginAsync("bob");
 
@@ -787,12 +785,12 @@ public class Stu2ComplianceTests
         mockPipeline.BrowserClient.AllowAutoRedirect = false;
         response = await mockPipeline.BrowserClient.GetAsync(url);
 
-        response.StatusCode.Should().Be(HttpStatusCode.Redirect);
-        response.Headers.Location.Should().NotBeNull();
-        response.Headers.Location!.AbsoluteUri.Should().Contain("https://code_client/callback");
+        Assert.Equal(HttpStatusCode.Redirect, response.StatusCode);
+        Assert.NotNull(response.Headers.Location);
+        Assert.Contains("https://code_client/callback", response.Headers.Location!.AbsoluteUri);
         var queryParams = QueryHelpers.ParseQuery(response.Headers.Location.Query);
-        queryParams.Should().Contain(p => p.Key == "code");
-        queryParams.Should().NotContain(p => p.Key == "error");
+        Assert.Contains(queryParams, p => p.Key == "code");
+        Assert.DoesNotContain(queryParams, p => p.Key == "error");
     }
 
     /// <summary>
@@ -829,7 +827,7 @@ public class Stu2ComplianceTests
             UdapAuthServerPipeline.RegistrationEndpoint,
             new StringContent(JsonSerializer.Serialize(requestBody), new MediaTypeHeaderValue("application/json")));
 
-        response.StatusCode.Should().Be(HttpStatusCode.Created);
+        Assert.Equal(HttpStatusCode.Created, response.StatusCode);
         var resultDocument = await response.Content.ReadFromJsonAsync<UdapDynamicClientRegistrationDocument>();
 
         await mockPipeline.LoginAsync("bob");
@@ -853,12 +851,12 @@ public class Stu2ComplianceTests
         mockPipeline.BrowserClient.AllowAutoRedirect = false;
         response = await mockPipeline.BrowserClient.GetAsync(url);
 
-        response.StatusCode.Should().Be(HttpStatusCode.Redirect);
-        response.Headers.Location.Should().NotBeNull();
-        response.Headers.Location!.AbsoluteUri.Should().Contain("https://code_client/callback");
+        Assert.Equal(HttpStatusCode.Redirect, response.StatusCode);
+        Assert.NotNull(response.Headers.Location);
+        Assert.Contains("https://code_client/callback", response.Headers.Location!.AbsoluteUri);
         var queryParams = QueryHelpers.ParseQuery(response.Headers.Location.Query);
-        queryParams.Should().Contain(p => p.Key == "code");
-        queryParams.Should().NotContain(p => p.Key == "error");
+        Assert.Contains(queryParams, p => p.Key == "code");
+        Assert.DoesNotContain(queryParams, p => p.Key == "error");
     }
 
     // -----------------------------------------------------------------------
@@ -898,11 +896,11 @@ public class Stu2ComplianceTests
             UdapAuthServerPipeline.RegistrationEndpoint,
             new StringContent(JsonSerializer.Serialize(requestBody), new MediaTypeHeaderValue("application/json")));
 
-        response.StatusCode.Should().Be(HttpStatusCode.BadRequest);
+        Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
         var errorResponse = await response.Content.ReadFromJsonAsync<UdapDynamicClientRegistrationErrorResponse>();
-        errorResponse.Should().NotBeNull();
-        errorResponse!.Error.Should().Be(UdapDynamicClientRegistrationErrors.InvalidClientMetadata);
-        errorResponse.ErrorDescription.Should().Contain("Unsupported UDAP version");
+        Assert.NotNull(errorResponse);
+        Assert.Equal(UdapDynamicClientRegistrationErrors.InvalidClientMetadata, errorResponse!.Error);
+        Assert.Contains("Unsupported UDAP version", errorResponse.ErrorDescription);
     }
 
     /// <summary>
@@ -934,10 +932,10 @@ public class Stu2ComplianceTests
             UdapAuthServerPipeline.RegistrationEndpoint,
             new StringContent(JsonSerializer.Serialize(requestBody), new MediaTypeHeaderValue("application/json")));
 
-        response.StatusCode.Should().Be(HttpStatusCode.BadRequest);
+        Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
         var errorResponse = await response.Content.ReadFromJsonAsync<UdapDynamicClientRegistrationErrorResponse>();
-        errorResponse.Should().NotBeNull();
-        errorResponse!.Error.Should().Be(UdapDynamicClientRegistrationErrors.InvalidClientMetadata);
-        errorResponse.ErrorDescription.Should().Contain("udap version is missing");
+        Assert.NotNull(errorResponse);
+        Assert.Equal(UdapDynamicClientRegistrationErrors.InvalidClientMetadata, errorResponse!.Error);
+        Assert.Contains("udap version is missing", errorResponse.ErrorDescription);
     }
 }

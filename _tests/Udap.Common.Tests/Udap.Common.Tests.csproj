@@ -26,7 +26,6 @@
 
   <ItemGroup>    
     <PackageReference Include="Firely.Fhir.Packages" />
-    <PackageReference Include="FluentAssertions" />
     <PackageReference Include="MartinCostello.Logging.XUnit" />
     <PackageReference Include="Meziantou.Extensions.Logging.Xunit" />
     <PackageReference Include="Microsoft.Data.SqlClient" />

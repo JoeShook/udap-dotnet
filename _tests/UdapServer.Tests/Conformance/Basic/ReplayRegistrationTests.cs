@@ -1,4 +1,4 @@
-﻿#region (c) 2023 Joseph Shook. All rights reserved.
+#region (c) 2023 Joseph Shook. All rights reserved.
 // /*
 //  Authors:
 //     Joseph Shook   Joseph.Shook@Surescripts.com
@@ -13,7 +13,6 @@ using System.Net.Http.Json;
 using System.Security.Cryptography.X509Certificates;
 using System.Text.Json;
 using Duende.IdentityServer.Models;
-using FluentAssertions;
 using Microsoft.Extensions.DependencyInjection;
 using Udap.Client.Configuration;
 using Udap.Common.Models;
@@ -167,9 +166,9 @@ public class ReplayRegistrationTests
             UdapAuthServerPipeline.RegistrationEndpoint,
             new StringContent(JsonSerializer.Serialize(requestBody), new MediaTypeHeaderValue("application/json")));
 
-        regResponse.StatusCode.Should().Be(HttpStatusCode.Created);
+        Assert.Equal(HttpStatusCode.Created, regResponse.StatusCode);
         var regDocumentResult = await regResponse.Content.ReadFromJsonAsync<UdapDynamicClientRegistrationDocument>();
-        regDocumentResult!.Scope.Should().Be("system/Patient.rs");
+        Assert.Equal("system/Patient.rs", regDocumentResult!.Scope);
 
 
 
@@ -180,11 +179,11 @@ public class ReplayRegistrationTests
             UdapAuthServerPipeline.RegistrationEndpoint,
             new StringContent(JsonSerializer.Serialize(requestBody), new MediaTypeHeaderValue("application/json")));
 
-        regResponse.StatusCode.Should().Be(HttpStatusCode.BadRequest);
+        Assert.Equal(HttpStatusCode.BadRequest, regResponse.StatusCode);
         var errorResult = await regResponse.Content.ReadFromJsonAsync<UdapDynamicClientRegistrationErrorResponse>();
-        errorResult.Should().NotBeNull();
-        errorResult!.Error.Should().Be("invalid_client_metadata");
-        errorResult.ErrorDescription.Should().Be("software_statement replayed");
+        Assert.NotNull(errorResult);
+        Assert.Equal("invalid_client_metadata", errorResult!.Error);
+        Assert.Equal("software_statement replayed", errorResult.ErrorDescription);
 
     }
 
@@ -226,11 +225,11 @@ public class ReplayRegistrationTests
             UdapAuthServerPipeline.RegistrationEndpoint,
             new StringContent(JsonSerializer.Serialize(requestBody), new MediaTypeHeaderValue("application/json")));
 
-        regResponse.StatusCode.Should().Be(HttpStatusCode.BadRequest);
+        Assert.Equal(HttpStatusCode.BadRequest, regResponse.StatusCode);
         var errorResult = await regResponse.Content.ReadFromJsonAsync<UdapDynamicClientRegistrationErrorResponse>();
-        errorResult.Should().NotBeNull();
-        errorResult!.Error.Should().Be("invalid_client_metadata");
-        errorResult.ErrorDescription.Should().Be("software_statement jti is invalid");
+        Assert.NotNull(errorResult);
+        Assert.Equal("invalid_client_metadata", errorResult!.Error);
+        Assert.Equal("software_statement jti is invalid", errorResult.ErrorDescription);
 
     }
 
@@ -273,9 +272,9 @@ public class ReplayRegistrationTests
             UdapAuthServerPipeline.RegistrationEndpoint,
             new StringContent(JsonSerializer.Serialize(requestBody), new MediaTypeHeaderValue("application/json")));
 
-        regResponse.StatusCode.Should().Be(HttpStatusCode.Created);
+        Assert.Equal(HttpStatusCode.Created, regResponse.StatusCode);
         var regDocumentResult = await regResponse.Content.ReadFromJsonAsync<UdapDynamicClientRegistrationDocument>();
-        regDocumentResult!.Scope.Should().Be("system/Patient.rs");
+        Assert.Equal("system/Patient.rs", regDocumentResult!.Scope);
 
 
 
@@ -286,7 +285,7 @@ public class ReplayRegistrationTests
             UdapAuthServerPipeline.RegistrationEndpoint,
             new StringContent(JsonSerializer.Serialize(requestBody), new MediaTypeHeaderValue("application/json")));
 
-        regResponse.StatusCode.Should().Be(HttpStatusCode.OK);
+        Assert.Equal(HttpStatusCode.OK, regResponse.StatusCode);
     }
 
 
@@ -328,9 +327,9 @@ public class ReplayRegistrationTests
             UdapAuthServerPipeline.RegistrationEndpoint,
             new StringContent(JsonSerializer.Serialize(requestBody), new MediaTypeHeaderValue("application/json")));
 
-        regResponse.StatusCode.Should().Be(HttpStatusCode.Created);
+        Assert.Equal(HttpStatusCode.Created, regResponse.StatusCode);
         var regDocumentResult = await regResponse.Content.ReadFromJsonAsync<UdapDynamicClientRegistrationDocument>();
-        regDocumentResult!.Scope.Should().Be("system/Patient.rs");
+        Assert.Equal("system/Patient.rs", regDocumentResult!.Scope);
         
     }
 }

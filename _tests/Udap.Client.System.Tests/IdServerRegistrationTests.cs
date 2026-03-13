@@ -18,7 +18,6 @@ using System.Text.Encodings.Web;
 using System.Text.Json;
 using System.Text.Json.Nodes;
 using System.Text.Json.Serialization;
-using FluentAssertions;
 using Duende.IdentityModel;
 using Duende.IdentityModel.Client;
 using Microsoft.Extensions.Configuration;
@@ -84,13 +83,13 @@ public class IdServerRegistrationTests : IClassFixture<TestFixture>
             }
         });
 
-        disco.HttpResponse?.StatusCode.Should().Be(HttpStatusCode.OK);
-        disco.IsError.Should().BeFalse($"{disco.Error} :: {disco.HttpErrorReason}");
+        Assert.Equal(HttpStatusCode.OK, disco.HttpResponse?.StatusCode);
+        Assert.False(disco.IsError, $"{disco.Error} :: {disco.HttpErrorReason}");
         
         
         // Get signed payload and compare registration_endpoint
         var metadata = disco.Json?.Deserialize<UdapMetadata>();
-        metadata.Should().NotBeNull();
+        Assert.NotNull(metadata);
 
         var tokenHandler = new JsonWebTokenHandler();
         var jwt = tokenHandler.ReadJsonWebToken(metadata!.SignedMetadata);
@@ -110,10 +109,9 @@ public class IdServerRegistrationTests : IClassFixture<TestFixture>
             ValidAlgorithms = [jwt!.GetHeaderValue<string>(Microsoft.IdentityModel.JsonWebTokens.JwtHeaderParameterNames.Alg)], //must match signing algorithm
         });
 
-        validatedToken.IsValid.Should().BeTrue(validatedToken.Exception?.Message);
+        Assert.True(validatedToken.IsValid, validatedToken.Exception?.Message);
 
-        jwt.GetPayloadValue<string>(UdapConstants.Discovery.RegistrationEndpoint)
-            .Should().Be(disco.RegistrationEndpoint);
+        Assert.Equal(disco.RegistrationEndpoint, jwt.GetPayloadValue<string>(UdapConstants.Discovery.RegistrationEndpoint));
         
         var cert = Path.Combine(AppContext.BaseDirectory, "CertStore/issued", "udap-sandbox-surescripts.p12");
 
@@ -159,7 +157,7 @@ public class IdServerRegistrationTests : IClassFixture<TestFixture>
             _testOutputHelper.WriteLine(await response.Content.ReadAsStringAsync());
         }
 
-        response.StatusCode.Should().Be(HttpStatusCode.OK);
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
 
         // var documentAsJson = JsonSerializer.Serialize(document);
         var result = await response.Content.ReadFromJsonAsync<UdapDynamicClientRegistrationDocument>();
@@ -259,13 +257,13 @@ public class IdServerRegistrationTests : IClassFixture<TestFixture>
             }
         });
 
-        disco.HttpResponse?.StatusCode.Should().Be(HttpStatusCode.OK);
-        disco.IsError.Should().BeFalse($"{disco.Error} :: {disco.HttpErrorReason}");
+        Assert.Equal(HttpStatusCode.OK, disco.HttpResponse?.StatusCode);
+        Assert.False(disco.IsError, $"{disco.Error} :: {disco.HttpErrorReason}");
 
 
         // Get signed payload and compare registration_endpoint
         var metadata = disco.Json?.Deserialize<UdapMetadata>();
-        metadata.Should().NotBeNull();
+        Assert.NotNull(metadata);
 
         var tokenHandler = new JsonWebTokenHandler();
         var jwt = tokenHandler.ReadJsonWebToken(metadata!.SignedMetadata);
@@ -285,10 +283,9 @@ public class IdServerRegistrationTests : IClassFixture<TestFixture>
             ValidAlgorithms = [jwt.GetHeaderValue<string>(Microsoft.IdentityModel.JsonWebTokens.JwtHeaderParameterNames.Alg)], //must match signing algorithm
         });
 
-        validatedToken.IsValid.Should().BeTrue(validatedToken.Exception?.Message);
+        Assert.True(validatedToken.IsValid, validatedToken.Exception?.Message);
 
-        jwt.GetPayloadValue<string>(UdapConstants.Discovery.RegistrationEndpoint)
-            .Should().Be(disco.RegistrationEndpoint);
+        Assert.Equal(disco.RegistrationEndpoint, jwt.GetPayloadValue<string>(UdapConstants.Discovery.RegistrationEndpoint));
 
         var cert = Path.Combine(AppContext.BaseDirectory, "CertStore/issued", "udap-sandbox-surescripts.p12");
 
@@ -334,7 +331,7 @@ public class IdServerRegistrationTests : IClassFixture<TestFixture>
             _testOutputHelper.WriteLine(await response.Content.ReadAsStringAsync());
         }
 
-        response.StatusCode.Should().Be(HttpStatusCode.Created);
+        Assert.Equal(HttpStatusCode.Created, response.StatusCode);
 
         // var documentAsJson = JsonSerializer.Serialize(document);
         var result = await response.Content.ReadFromJsonAsync<UdapDynamicClientRegistrationDocument>();
@@ -434,8 +431,8 @@ public class IdServerRegistrationTests : IClassFixture<TestFixture>
             }
         });
 
-        disco.HttpResponse?.StatusCode.Should().Be(HttpStatusCode.OK);
-        disco.IsError.Should().BeFalse($"{disco.Error} :: {disco.HttpErrorReason}");
+        Assert.Equal(HttpStatusCode.OK, disco.HttpResponse?.StatusCode);
+        Assert.False(disco.IsError, $"{disco.Error} :: {disco.HttpErrorReason}");
         // var discoJsonFormatted =
         //     JsonSerializer.Serialize(disco.Json, new JsonSerializerOptions { WriteIndented = true });
         // _testOutputHelper.WriteLine(discoJsonFormatted);
@@ -510,7 +507,7 @@ public class IdServerRegistrationTests : IClassFixture<TestFixture>
         var result = await response.Content.ReadAsStringAsync();
         _testOutputHelper.WriteLine(result);
 
-        response.StatusCode.Should().Be(HttpStatusCode.Created);
+        Assert.Equal(HttpStatusCode.Created, response.StatusCode);
 
     }
 
@@ -528,8 +525,8 @@ public class IdServerRegistrationTests : IClassFixture<TestFixture>
             }
         });
 
-        disco.HttpResponse?.StatusCode.Should().Be(HttpStatusCode.OK);
-        disco.IsError.Should().BeFalse($"{disco.Error} :: {disco.HttpErrorReason}");
+        Assert.Equal(HttpStatusCode.OK, disco.HttpResponse?.StatusCode);
+        Assert.False(disco.IsError, $"{disco.Error} :: {disco.HttpErrorReason}");
         // var discoJsonFormatted =
         //     JsonSerializer.Serialize(disco.Json, new JsonSerializerOptions { WriteIndented = true });
         // _testOutputHelper.WriteLine(discoJsonFormatted);
@@ -578,12 +575,12 @@ public class IdServerRegistrationTests : IClassFixture<TestFixture>
         var response = await client.PostAsJsonAsync(reg, requestBody);
         
         
-        // response.StatusCode.Should().Be(HttpStatusCode.Created);
+        // Assert.Equal(HttpStatusCode.Created, response.StatusCode);
         
         var documentAsJson = JsonSerializer.Serialize(document);
         var result = await response.Content.ReadAsStringAsync();
         // _testOutputHelper.WriteLine(result);
-        result.Should().BeEquivalentTo(documentAsJson);
+        Assert.Equal(documentAsJson, result, StringComparer.OrdinalIgnoreCase);
     }
 
 
@@ -600,8 +597,8 @@ public class IdServerRegistrationTests : IClassFixture<TestFixture>
             }
         });
 
-        disco.HttpResponse?.StatusCode.Should().Be(HttpStatusCode.OK);
-        disco.IsError.Should().BeFalse($"{disco.Error} :: {disco.HttpErrorReason}");
+        Assert.Equal(HttpStatusCode.OK, disco.HttpResponse?.StatusCode);
+        Assert.False(disco.IsError, $"{disco.Error} :: {disco.HttpErrorReason}");
         // var discoJsonFormatted =
         //     JsonSerializer.Serialize(disco.Json, new JsonSerializerOptions { WriteIndented = true });
         // _testOutputHelper.WriteLine(discoJsonFormatted);
@@ -651,12 +648,12 @@ public class IdServerRegistrationTests : IClassFixture<TestFixture>
         var response = await client.PostAsJsonAsync(reg, requestBody);
 
 
-        // response.StatusCode.Should().Be(HttpStatusCode.Created);
+        // Assert.Equal(HttpStatusCode.Created, response.StatusCode);
 
         var documentAsJson = JsonSerializer.Serialize(document);
         var result = await response.Content.ReadAsStringAsync();
         // _testOutputHelper.WriteLine(result);
-        result.Should().BeEquivalentTo(documentAsJson);
+        Assert.Equal(documentAsJson, result, StringComparer.OrdinalIgnoreCase);
     }
 
 
@@ -674,8 +671,8 @@ public class IdServerRegistrationTests : IClassFixture<TestFixture>
             }
         });
 
-        disco.HttpResponse?.StatusCode.Should().Be(HttpStatusCode.OK);
-        disco.IsError.Should().BeFalse($"{disco.Error} :: {disco.HttpErrorReason}");
+        Assert.Equal(HttpStatusCode.OK, disco.HttpResponse?.StatusCode);
+        Assert.False(disco.IsError, $"{disco.Error} :: {disco.HttpErrorReason}");
         var discoJsonFormatted =
             JsonSerializer.Serialize(disco.Json, new JsonSerializerOptions { WriteIndented = true });
         _testOutputHelper.WriteLine(discoJsonFormatted);
@@ -717,11 +714,11 @@ public class IdServerRegistrationTests : IClassFixture<TestFixture>
             } // , out SecurityToken validatedToken
         );
 
-        validatedToken.IsValid.Should().BeTrue(validatedToken.Exception?.Message);
+        Assert.True(validatedToken.IsValid, validatedToken.Exception?.Message);
 
-        jwt.Payload.Claims
+        Assert.Equal(regEndpoint, jwt.Payload.Claims
             .Single(c => c.Type == UdapConstants.Discovery.RegistrationEndpoint)
-            .Value.Should().Be(regEndpoint);
+            .Value);
 
         var cert = Path.Combine(AppContext.BaseDirectory, "CertStore/issued", "fhirlabs.net.client.pfx");
 
@@ -775,7 +772,7 @@ public class IdServerRegistrationTests : IClassFixture<TestFixture>
         var response = await idpClient.PostAsJsonAsync(reg, requestBody);
 
         Assert.True(response.StatusCode is HttpStatusCode.Created or HttpStatusCode.OK);
-        response.Content.Headers.ContentType!.ToString().Should().Be("application/json");
+        Assert.Equal("application/json", response.Content.Headers.ContentType!.ToString());
 
         // var documentAsJson = JsonSerializer.Serialize(document);
         var result = await response.Content.ReadFromJsonAsync<UdapDynamicClientRegistrationDocument>();
@@ -896,8 +893,8 @@ public class IdServerRegistrationTests : IClassFixture<TestFixture>
             }
         });
 
-        disco.HttpResponse?.StatusCode.Should().Be(HttpStatusCode.OK);
-        disco.IsError.Should().BeFalse($"{disco.Error} :: {disco.HttpErrorReason}");
+        Assert.Equal(HttpStatusCode.OK, disco.HttpResponse?.StatusCode);
+        Assert.False(disco.IsError, $"{disco.Error} :: {disco.HttpErrorReason}");
         // var discoJsonFormatted =
         //     JsonSerializer.Serialize(disco.Json, new JsonSerializerOptions { WriteIndented = true });
         // _testOutputHelper.WriteLine(discoJsonFormatted);
@@ -939,11 +936,11 @@ public class IdServerRegistrationTests : IClassFixture<TestFixture>
             } // , out SecurityToken validatedToken
         );
 
-        validatedToken.IsValid.Should().BeTrue(validatedToken.Exception?.Message);
+        Assert.True(validatedToken.IsValid, validatedToken.Exception?.Message);
 
-        jwt.Payload.Claims
+        Assert.Equal(regEndpoint, jwt.Payload.Claims
             .Single(c => c.Type == UdapConstants.Discovery.RegistrationEndpoint)
-            .Value.Should().Be(regEndpoint);
+            .Value);
 
         var cert = Path.Combine(AppContext.BaseDirectory, "CertStore/issued", "fhirlabs.net.client.pfx");
 
@@ -1093,7 +1090,7 @@ public class IdServerRegistrationTests : IClassFixture<TestFixture>
         _testOutputHelper.WriteLine(string.Empty);
         _testOutputHelper.WriteLine(string.Empty);
 
-        tokenResponse.Scope.Should().Be("system/*.rs");
+        Assert.Equal("system/*.rs", tokenResponse.Scope);
 
         fhirLabsClient.DefaultRequestHeaders.Authorization =
             new AuthenticationHeaderValue(TokenRequestTypes.Bearer, tokenResponse.AccessToken);
@@ -1120,8 +1117,8 @@ public class IdServerRegistrationTests : IClassFixture<TestFixture>
             }
         });
 
-        disco.HttpResponse?.StatusCode.Should().Be(HttpStatusCode.OK);
-        disco.IsError.Should().BeFalse($"{disco.Error} :: {disco.HttpErrorReason}");
+        Assert.Equal(HttpStatusCode.OK, disco.HttpResponse?.StatusCode);
+        Assert.False(disco.IsError, $"{disco.Error} :: {disco.HttpErrorReason}");
         // var discoJsonFormatted =
         //     JsonSerializer.Serialize(disco.Json, new JsonSerializerOptions { WriteIndented = true });
         // _testOutputHelper.WriteLine(discoJsonFormatted);
@@ -1162,9 +1159,9 @@ public class IdServerRegistrationTests : IClassFixture<TestFixture>
             } // , out SecurityToken validatedToken
         );
 
-        jwt.Payload.Claims
+        Assert.Equal(regEndpoint, jwt.Payload.Claims
             .Single(c => c.Type == UdapConstants.Discovery.RegistrationEndpoint)
-            .Value.Should().Be(regEndpoint);
+            .Value);
 
         var cert = Path.Combine(AppContext.BaseDirectory, "CertStore/issued", "fhirlabs.net.client.pfx");
 
@@ -1213,8 +1210,8 @@ public class IdServerRegistrationTests : IClassFixture<TestFixture>
         using var idpClient = new HttpClient(); // New client.  The existing HttpClient chains up to a CustomTrustStore 
         var response = await idpClient.PostAsJsonAsync(reg, requestBody);
 
-        response.StatusCode.Should().BeOneOf(HttpStatusCode.Created, HttpStatusCode.OK);
-        response.Content.Headers.ContentType!.ToString().Should().Be("application/json");
+        Assert.Contains(response.StatusCode, new[] { HttpStatusCode.Created, HttpStatusCode.OK });
+        Assert.Equal("application/json", response.Content.Headers.ContentType!.ToString());
 
         // var documentAsJson = JsonSerializer.Serialize(document);
         var result = await response.Content.ReadFromJsonAsync<UdapDynamicClientRegistrationDocument>();
@@ -1303,12 +1300,11 @@ public class IdServerRegistrationTests : IClassFixture<TestFixture>
 
         response = await httpClient.GetAsync(url);
         
-        response.StatusCode.Should().Be(HttpStatusCode.Redirect);
+        Assert.Equal(HttpStatusCode.Redirect, response.StatusCode);
 
         var authUri = new Uri(disco.AuthorizeEndpoint!);
         var loginUrl = $"{authUri.Scheme}://{authUri.Authority}/udapaccount/login";
-        response.Headers.Location?.ToString().Should()
-            .StartWith(loginUrl);
+        Assert.StartsWith(loginUrl, response.Headers.Location?.ToString());
 
 
         //
@@ -1351,8 +1347,8 @@ public class IdServerRegistrationTests : IClassFixture<TestFixture>
             }
         });
 
-        disco.HttpResponse?.StatusCode.Should().Be(HttpStatusCode.OK);
-        disco.IsError.Should().BeFalse($"{disco.Error} :: {disco.HttpErrorReason}");
+        Assert.Equal(HttpStatusCode.OK, disco.HttpResponse?.StatusCode);
+        Assert.False(disco.IsError, $"{disco.Error} :: {disco.HttpErrorReason}");
         // var discoJsonFormatted =
         //     JsonSerializer.Serialize(disco.Json, new JsonSerializerOptions { WriteIndented = true });
         // _testOutputHelper.WriteLine(discoJsonFormatted);
@@ -1393,9 +1389,9 @@ public class IdServerRegistrationTests : IClassFixture<TestFixture>
             } // , out SecurityToken validatedToken
         );
 
-        jwt.Payload.Claims
+        Assert.Equal(regEndpoint, jwt.Payload.Claims
             .Single(c => c.Type == UdapConstants.Discovery.RegistrationEndpoint)
-            .Value.Should().Be(regEndpoint);
+            .Value);
 
         var cert = Path.Combine(AppContext.BaseDirectory, "CertStore/issued", "fhirlabs.net.client.pfx");
 
@@ -1438,7 +1434,7 @@ public class IdServerRegistrationTests : IClassFixture<TestFixture>
         var response = await idpClient.PostAsJsonAsync(reg, requestBody);
 
 
-        response.StatusCode.Should().Be(HttpStatusCode.Created);
+        Assert.Equal(HttpStatusCode.Created, response.StatusCode);
 
         // var documentAsJson = JsonSerializer.Serialize(document);
         var result = await response.Content.ReadFromJsonAsync<UdapDynamicClientRegistrationDocument>();
@@ -1516,7 +1512,7 @@ public class IdServerRegistrationTests : IClassFixture<TestFixture>
         _testOutputHelper.WriteLine(string.Empty);
         _testOutputHelper.WriteLine(string.Empty);
 
-        tokenResponse.IsError.Should().BeTrue();
+        Assert.True(tokenResponse.IsError);
         
     }
 
@@ -1535,13 +1531,13 @@ public class IdServerRegistrationTests : IClassFixture<TestFixture>
             Community = "udap://fhirlabs.net"
         });
 
-        disco.HttpResponse?.StatusCode.Should().Be(HttpStatusCode.OK);
-        disco.IsError.Should().BeFalse($"{disco.Error} :: {disco.HttpErrorReason}");
+        Assert.Equal(HttpStatusCode.OK, disco.HttpResponse?.StatusCode);
+        Assert.False(disco.IsError, $"{disco.Error} :: {disco.HttpErrorReason}");
         
 
         // Get signed payload and compare registration_endpoint
         var metadata = disco.Json?.Deserialize<UdapMetadata>();
-        metadata.Should().NotBeNull();
+        Assert.NotNull(metadata);
 
         // Update JwtSecurityToken to JsonWebTokenHandler
         // See: https://stackoverflow.com/questions/60455167/why-we-have-two-classes-for-jwt-tokens-jwtsecuritytokenhandler-vs-jsonwebtokenha
@@ -1566,10 +1562,9 @@ public class IdServerRegistrationTests : IClassFixture<TestFixture>
             ValidAlgorithms = [jwt.GetHeaderValue<string>(Microsoft.IdentityModel.JsonWebTokens.JwtHeaderParameterNames.Alg)], //must match signing algorithm
         });
 
-        validatedToken.IsValid.Should().BeTrue(validatedToken.Exception?.Message);
+        Assert.True(validatedToken.IsValid, validatedToken.Exception?.Message);
 
-        jwt.GetPayloadValue<string>(UdapConstants.Discovery.RegistrationEndpoint)
-            .Should().Be(disco.RegistrationEndpoint);
+        Assert.Equal(disco.RegistrationEndpoint, jwt.GetPayloadValue<string>(UdapConstants.Discovery.RegistrationEndpoint));
 
         var cert = Path.Combine(AppContext.BaseDirectory, "CertStore/issued", "fhirlabs.net.client.pfx");
 
@@ -1617,7 +1612,7 @@ public class IdServerRegistrationTests : IClassFixture<TestFixture>
             _testOutputHelper.WriteLine(await response.Content.ReadAsStringAsync());
         }
 
-        response.Content.Headers.ContentType!.ToString().Should().Be("application/json");
+        Assert.Equal("application/json", response.Content.Headers.ContentType!.ToString());
         response.EnsureSuccessStatusCode();
 
         // var documentAsJson = JsonSerializer.Serialize(document);
@@ -1736,8 +1731,8 @@ public class IdServerRegistrationTests : IClassFixture<TestFixture>
             }
         });
 
-        disco.HttpResponse?.StatusCode.Should().Be(HttpStatusCode.OK);
-        disco.IsError.Should().BeFalse($"{disco.Error} :: {disco.HttpErrorReason}");
+        Assert.Equal(HttpStatusCode.OK, disco.HttpResponse?.StatusCode);
+        Assert.False(disco.IsError, $"{disco.Error} :: {disco.HttpErrorReason}");
         // var discoJsonFormatted =
         //     JsonSerializer.Serialize(disco.Json, new JsonSerializerOptions { WriteIndented = true });
         // _testOutputHelper.WriteLine(discoJsonFormatted);
@@ -1778,9 +1773,9 @@ public class IdServerRegistrationTests : IClassFixture<TestFixture>
             } // , out SecurityToken validatedToken
         );
 
-        jwt.Payload.Claims
+        Assert.Equal(regEndpoint, jwt.Payload.Claims
             .Single(c => c.Type == UdapConstants.Discovery.RegistrationEndpoint)
-            .Value.Should().Be(regEndpoint);
+            .Value);
 
         var cert = Path.Combine(AppContext.BaseDirectory, "CertStore/issued", "fhirlabs.net.client.pfx");
 
@@ -1831,8 +1826,8 @@ public class IdServerRegistrationTests : IClassFixture<TestFixture>
             _testOutputHelper.WriteLine(await response.Content.ReadAsStringAsync());
         }
 
-        response.StatusCode.Should().BeOneOf(HttpStatusCode.Created, HttpStatusCode.OK);
-        response.Content.Headers.ContentType!.ToString().Should().Be("application/json");
+        Assert.Contains(response.StatusCode, new[] { HttpStatusCode.Created, HttpStatusCode.OK });
+        Assert.Equal("application/json", response.Content.Headers.ContentType!.ToString());
 
         // var documentAsJson = JsonSerializer.Serialize(document);
         var result = await response.Content.ReadFromJsonAsync<UdapDynamicClientRegistrationDocument>();
@@ -1912,7 +1907,7 @@ public class IdServerRegistrationTests : IClassFixture<TestFixture>
         // var httpClient = new HttpClient(handler);
         response = await idpClient.GetAsync(url);
         var content = await response.Content.ReadAsStringAsync();
-        response.StatusCode.Should().Be(HttpStatusCode.Redirect, content);
+        Assert.True(response.StatusCode == HttpStatusCode.Redirect, content);
 
         //
         // If you can't control the server this is as far as you can go.  
@@ -1966,8 +1961,8 @@ public class IdServerRegistrationTests : IClassFixture<TestFixture>
             Community = "udap://fhirlabs.net"
         });
 
-        disco.HttpResponse?.StatusCode.Should().Be(HttpStatusCode.OK);
-        disco.IsError.Should().BeFalse($"{disco.Error} :: {disco.HttpErrorReason}");
+        Assert.Equal(HttpStatusCode.OK, disco.HttpResponse?.StatusCode);
+        Assert.False(disco.IsError, $"{disco.Error} :: {disco.HttpErrorReason}");
         
         // var discoJsonFormatted =
         //     JsonSerializer.Serialize(disco.Json, new JsonSerializerOptions { WriteIndented = true });
@@ -2009,11 +2004,11 @@ public class IdServerRegistrationTests : IClassFixture<TestFixture>
             } // , out SecurityToken validatedToken
         );
 
-        validatedToken.IsValid.Should().BeTrue();
+        Assert.True(validatedToken.IsValid);
 
-        jwt.Payload.Claims
+        Assert.Equal(regEndpoint, jwt.Payload.Claims
             .Single(c => c.Type == UdapConstants.Discovery.RegistrationEndpoint)
-            .Value.Should().Be(regEndpoint);
+            .Value);
 
         var cert = Path.Combine(AppContext.BaseDirectory, "CertStore/issued", "fhirlabs.net.client.pfx");
 

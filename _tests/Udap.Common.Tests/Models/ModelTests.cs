@@ -8,8 +8,8 @@
 #endregion
 
 using System.Security.Cryptography.X509Certificates;
-using FluentAssertions;
 using Udap.Common.Models;
+using Xunit;
 // ReSharper disable SuspiciousTypeConversion.Global
 
 namespace Udap.Common.Tests.Models;
@@ -24,24 +24,24 @@ public class ModelTests
 
         var anchor = new Anchor(certificate, "community1");
 
-        anchor.Equals(anchor).Should().BeTrue();
-        anchor.Equals(anchor as object).Should().BeTrue();
+        Assert.True(anchor.Equals(anchor));
+        Assert.True(anchor.Equals(anchor as object));
 
         var secondAnchor = new Anchor(certificate, "community2");
-        anchor.Equals(secondAnchor).Should().BeFalse();
-        anchor.Equals(secondAnchor as object).Should().BeFalse();
+        Assert.False(anchor.Equals(secondAnchor));
+        Assert.False(anchor.Equals(secondAnchor as object));
 
-        anchor.Equals(new object()).Should().BeFalse();
-        anchor.Equals(null).Should().BeFalse();
-        
-        anchor!.EndDate.Should().Be(certificate.NotAfter);
-        anchor.BeginDate.Should().Be(certificate.NotBefore);
-        anchor.Enabled.Should().BeFalse();
-        anchor.Id.Should().Be(0);
+        Assert.False(anchor.Equals(new object()));
+        Assert.False(anchor.Equals(null));
 
-        anchor.ToString().Should().Contain("Name CN=SureFhir-CA, OU=Root, O=Fhir Coding, L=Portland, S=Oregon, C=US | Community community1");
+        Assert.Equal(certificate.NotAfter, anchor!.EndDate);
+        Assert.Equal(certificate.NotBefore, anchor.BeginDate);
+        Assert.False(anchor.Enabled);
+        Assert.Equal(0, anchor.Id);
 
-        anchor.GetHashCode().Should().NotBe(secondAnchor.GetHashCode());
+        Assert.Contains("Name CN=SureFhir-CA, OU=Root, O=Fhir Coding, L=Portland, S=Oregon, C=US | Community community1", anchor.ToString());
+
+        Assert.NotEqual(secondAnchor.GetHashCode(), anchor.GetHashCode());
     }
 
     [Fact]
@@ -51,30 +51,30 @@ public class ModelTests
 
         var intermediate = new Intermediate(intermediateCertificate);
 
-        intermediate.Equals(intermediate).Should().BeTrue();
-        intermediate.Equals(intermediate as object).Should().BeTrue();
+        Assert.True(intermediate.Equals(intermediate));
+        Assert.True(intermediate.Equals(intermediate as object));
 
         var secondAnchor = new Anchor(new X509Certificate2("CertStore/anchors/SureFhirLabs_CA.cer"));
-        intermediate.Equals(secondAnchor).Should().BeFalse();
+        Assert.False(intermediate.Equals(secondAnchor));
 
-        intermediate.Equals(new object()).Should().BeFalse();
-        intermediate.Equals(null).Should().BeFalse();
-        intermediate!.Equals(null as Anchor).Should().BeFalse();
+        Assert.False(intermediate.Equals(new object()));
+        Assert.False(intermediate.Equals(null));
+        Assert.False(intermediate!.Equals(null as Anchor));
 
-        intermediate.EndDate.Should().Be(intermediateCertificate.NotAfter);
-        intermediate.BeginDate.Should().Be(intermediateCertificate.NotBefore);
-        intermediate.Enabled.Should().BeFalse();
-        intermediate.Id.Should().Be(0);
+        Assert.Equal(intermediateCertificate.NotAfter, intermediate.EndDate);
+        Assert.Equal(intermediateCertificate.NotBefore, intermediate.BeginDate);
+        Assert.False(intermediate.Enabled);
+        Assert.Equal(0, intermediate.Id);
 
-        intermediate.ToString().Should().Contain("| Name CN=SureFhir-Intermediate, OU=Intermediate, O=Fhir Coding, L=Portland, S=Oregon, C=US");
+        Assert.Contains("| Name CN=SureFhir-Intermediate, OU=Intermediate, O=Fhir Coding, L=Portland, S=Oregon, C=US", intermediate.ToString());
 
         var anchorCertificate = new X509Certificate2("CertStore/anchors/SureFhirLabs_CA.cer");
         intermediate.Anchor = new Anchor(anchorCertificate);
-        intermediate.AnchorId.Should().Be(0);
-        intermediate.Anchor.Thumbprint.Should().NotBeNullOrWhiteSpace();
+        Assert.Equal(0, intermediate.AnchorId);
+        Assert.False(string.IsNullOrWhiteSpace(intermediate.Anchor.Thumbprint));
 
         var secondIntermediate = new Intermediate(new X509Certificate2("CertStore/anchors/SureFhirLabs_CA.cer"));
-        intermediate.GetHashCode().Should().NotBe(secondIntermediate.GetHashCode());
+        Assert.NotEqual(secondIntermediate.GetHashCode(), intermediate.GetHashCode());
     }
 
     [Fact]
@@ -83,17 +83,17 @@ public class ModelTests
         var issuedCertificate = new X509Certificate2("CertStore/issued/fhirlabs.net.client.pfx", "udap-test");
         var issued = new IssuedCertificate(issuedCertificate);
 
-        issued.Equals(issued).Should().BeTrue();
-        issued.Equals(issued as object).Should().BeTrue();
+        Assert.True(issued.Equals(issued));
+        Assert.True(issued.Equals(issued as object));
 
         var secondIssued = new IssuedCertificate(issuedCertificate, "community2");
-        issued.Equals(secondIssued).Should().BeFalse();
-        issued.Equals(secondIssued as object).Should().BeFalse();
+        Assert.False(issued.Equals(secondIssued));
+        Assert.False(issued.Equals(secondIssued as object));
 
-        issued.Equals(new object()).Should().BeFalse();
-        issued.Equals(null).Should().BeFalse();
+        Assert.False(issued.Equals(new object()));
+        Assert.False(issued.Equals(null));
 
-        issued!.GetHashCode().Should().NotBe(secondIssued.GetHashCode());
+        Assert.NotEqual(secondIssued.GetHashCode(), issued!.GetHashCode());
     }
 
 
@@ -111,26 +111,26 @@ public class ModelTests
         community.Certifications.Add(new Certification());
         community.Certifications.Add(new Certification());
 
-        community.Id.Should().Be(0);
-        community.Anchors.Count.Should().Be(2);
-        community.Certifications.Count.Should().Be(2);
-        community.Default.Should().BeTrue();
+        Assert.Equal(0, community.Id);
+        Assert.Equal(2, community.Anchors.Count);
+        Assert.Equal(2, community.Certifications.Count);
+        Assert.True(community.Default);
     }
 
     [Fact]
     public void SimpleCertificationTest()
     {
         var certification = new Certification();
-        certification.Id.Should().Be(0);
+        Assert.Equal(0, certification.Id);
         certification.Name = "Cert1";
-        certification.Name.Should().Be("Cert1");
+        Assert.Equal("Cert1", certification.Name);
     }
 
     [Fact]
     public void TieredClientTest()
     {
         var tieredClient = new TieredClient();
-        tieredClient.Id.Should().Be(0);
+        Assert.Equal(0, tieredClient.Id);
         tieredClient.ClientName = "Client1";
         tieredClient.ClientId = Guid.NewGuid().ToString();
         tieredClient.IdPBaseUrl = "https://idp1.net";

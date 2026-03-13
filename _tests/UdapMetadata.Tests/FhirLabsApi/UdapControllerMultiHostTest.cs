@@ -10,7 +10,6 @@
 using System.IdentityModel.Tokens.Jwt;
 using System.Net.Http.Json;
 using System.Security.Cryptography.X509Certificates;
-using FluentAssertions;
 using Duende.IdentityModel;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
@@ -101,32 +100,30 @@ public class UdapControllerMultiHostTest : IClassFixture<ApiForCommunityTestFixt
 
             var disco = await udapClient.ValidateResource(baseUrl, "udap://multihost/");
 
-            disco.IsError.Should().BeFalse(
+            Assert.False(disco.IsError,
                 $"Segment '{segment}': {disco.Error} | {disco.ErrorType} | {string.Join("; ", _diagnosticsValidator.ActualErrorMessages)}");
-            udapClient.UdapServerMetaData.Should().NotBeNull();
-            _diagnosticsValidator.ProblemCalled.Should().BeFalse(
+            Assert.NotNull(udapClient.UdapServerMetaData);
+            Assert.False(_diagnosticsValidator.ProblemCalled,
                 $"Segment '{segment}': chain problem: {string.Join("; ", _diagnosticsValidator.ActualErrorMessages)}");
-            _diagnosticsValidator.UntrustedCalled.Should().BeFalse(
+            Assert.False(_diagnosticsValidator.UntrustedCalled,
                 $"Segment '{segment}': untrusted: {_diagnosticsValidator.UnTrustedCertificate}");
-            _diagnosticsValidator.TokenErrorCalled.Should().BeFalse(
+            Assert.False(_diagnosticsValidator.TokenErrorCalled,
                 $"Segment '{segment}': token error: {string.Join("; ", _diagnosticsValidator.ActualErrorMessages)}");
 
             // Verify issuer matches the requested base URL
             var jwt = new JwtSecurityToken(disco.SignedMetadata);
             var issClaim = jwt.Payload.Claims.Single(c => c.Type == JwtClaimTypes.Issuer);
-            issClaim.Value.Should().Be(baseUrl,
-                $"Segment '{segment}': iss should match the requested base URL");
+            Assert.Equal(baseUrl, issClaim.Value);
 
             // Verify subject matches issuer
             var subClaim = jwt.Payload.Claims.Single(c => c.Type == JwtClaimTypes.Subject);
-            subClaim.Value.Should().Be(issClaim.Value);
+            Assert.Equal(issClaim.Value, subClaim.Value);
 
             // Verify signing cert SAN matches the base URL
             var x5cArray = jwt.Header["x5c"] as List<object>;
             var cert = new X509Certificate2(Convert.FromBase64String(x5cArray!.First().ToString()!));
             var subjectAltName = cert.GetNameInfo(X509NameType.UrlName, false);
-            subjectAltName.Should().Be(baseUrl,
-                $"Segment '{segment}': cert SAN should match the requested base URL");
+            Assert.Equal(baseUrl, subjectAltName);
 
             // Collect signed_metadata to verify they're all different
             signedMetadataResults.Add(disco.SignedMetadata!);
@@ -135,8 +132,7 @@ public class UdapControllerMultiHostTest : IClassFixture<ApiForCommunityTestFixt
         }
 
         // All 10 should have different signed metadata (different certs, different signatures)
-        signedMetadataResults.Count.Should().Be(DomainSegments.Length,
-            "Each domain should produce different signed metadata");
+        Assert.Equal(DomainSegments.Length, signedMetadataResults.Count);
     }
 
     [Fact]
@@ -147,7 +143,7 @@ public class UdapControllerMultiHostTest : IClassFixture<ApiForCommunityTestFixt
         var response = await client.GetAsync(
             "https://localhost:7016/eleven/fhir/r4/.well-known/udap?community=udap://multihost/");
 
-        response.StatusCode.Should().Be(System.Net.HttpStatusCode.NotFound);
+        Assert.Equal(System.Net.HttpStatusCode.NotFound, response.StatusCode);
     }
 
     [Fact]
@@ -158,10 +154,10 @@ public class UdapControllerMultiHostTest : IClassFixture<ApiForCommunityTestFixt
         var response = await client.GetAsync(
             "https://localhost:7016/one/fhir/r4/.well-known/udap/communities");
 
-        response.StatusCode.Should().Be(System.Net.HttpStatusCode.OK);
+        Assert.Equal(System.Net.HttpStatusCode.OK, response.StatusCode);
         var communities = await response.Content.ReadFromJsonAsync<List<string>>();
-        communities.Should().NotBeNull();
-        communities.Should().Contain("udap://multihost/");
+        Assert.NotNull(communities);
+        Assert.Contains("udap://multihost/", communities);
     }
 
     [Fact]
@@ -172,10 +168,10 @@ public class UdapControllerMultiHostTest : IClassFixture<ApiForCommunityTestFixt
         var response = await client.GetAsync(
             "https://localhost:7016/five/fhir/r4/.well-known/udap/communities/ashtml");
 
-        response.StatusCode.Should().Be(System.Net.HttpStatusCode.OK);
-        response.Content.Headers.ContentType?.MediaType.Should().Be("text/html");
+        Assert.Equal(System.Net.HttpStatusCode.OK, response.StatusCode);
+        Assert.Equal("text/html", response.Content.Headers.ContentType?.MediaType);
         var html = await response.Content.ReadAsStringAsync();
-        html.Should().Contain("udap://multihost/");
+        Assert.Contains("udap://multihost/", html);
     }
 
     [Fact]
@@ -187,11 +183,11 @@ public class UdapControllerMultiHostTest : IClassFixture<ApiForCommunityTestFixt
             "https://localhost:7016/two/fhir/r4/.well-known/udap");
         var response = await client.SendAsync(request);
 
-        response.StatusCode.Should().Be(System.Net.HttpStatusCode.NoContent);
+        Assert.Equal(System.Net.HttpStatusCode.NoContent, response.StatusCode);
         response.Headers.TryGetValues("Access-Control-Allow-Origin", out var origin);
-        origin.Should().Contain("*");
+        Assert.Contains("*", origin);
         response.Headers.TryGetValues("Access-Control-Allow-Methods", out var methods);
-        methods.Should().Contain("GET, OPTIONS");
+        Assert.Contains("GET, OPTIONS", methods);
     }
 
     [Fact]
@@ -203,9 +199,9 @@ public class UdapControllerMultiHostTest : IClassFixture<ApiForCommunityTestFixt
             "https://localhost:7016/three/fhir/r4/.well-known/udap/communities");
         var response = await client.SendAsync(request);
 
-        response.StatusCode.Should().Be(System.Net.HttpStatusCode.NoContent);
+        Assert.Equal(System.Net.HttpStatusCode.NoContent, response.StatusCode);
         response.Headers.TryGetValues("Access-Control-Allow-Origin", out var origin);
-        origin.Should().Contain("*");
+        Assert.Contains("*", origin);
     }
 
     [Fact]
@@ -217,9 +213,9 @@ public class UdapControllerMultiHostTest : IClassFixture<ApiForCommunityTestFixt
             "https://localhost:7016/four/fhir/r4/.well-known/udap/communities/ashtml");
         var response = await client.SendAsync(request);
 
-        response.StatusCode.Should().Be(System.Net.HttpStatusCode.NoContent);
+        Assert.Equal(System.Net.HttpStatusCode.NoContent, response.StatusCode);
         response.Headers.TryGetValues("Access-Control-Allow-Origin", out var origin);
-        origin.Should().Contain("*");
+        Assert.Contains("*", origin);
     }
 
     [Fact]
@@ -230,7 +226,7 @@ public class UdapControllerMultiHostTest : IClassFixture<ApiForCommunityTestFixt
         var response = await client.GetAsync(
             "https://localhost:7016/one/fhir/r4/.well-known/udap?community=udap://nonexistent/");
 
-        response.StatusCode.Should().Be(System.Net.HttpStatusCode.NotFound);
+        Assert.Equal(System.Net.HttpStatusCode.NotFound, response.StatusCode);
     }
 
     [Fact]
@@ -242,7 +238,7 @@ public class UdapControllerMultiHostTest : IClassFixture<ApiForCommunityTestFixt
             "https://localhost:7016/one/fhir/r4/.well-known/udap", null);
 
         // POST is not handled by the middleware — passes through to next middleware
-        response.StatusCode.Should().NotBe(System.Net.HttpStatusCode.OK);
+        Assert.NotEqual(System.Net.HttpStatusCode.OK, response.StatusCode);
     }
 
     [Fact]
@@ -253,7 +249,7 @@ public class UdapControllerMultiHostTest : IClassFixture<ApiForCommunityTestFixt
         var response = await client.PostAsync(
             "https://localhost:7016/one/fhir/r4/.well-known/udap/communities", null);
 
-        response.StatusCode.Should().NotBe(System.Net.HttpStatusCode.OK);
+        Assert.NotEqual(System.Net.HttpStatusCode.OK, response.StatusCode);
     }
 
     [Fact]
@@ -264,7 +260,7 @@ public class UdapControllerMultiHostTest : IClassFixture<ApiForCommunityTestFixt
         var response = await client.PostAsync(
             "https://localhost:7016/one/fhir/r4/.well-known/udap/communities/ashtml", null);
 
-        response.StatusCode.Should().NotBe(System.Net.HttpStatusCode.OK);
+        Assert.NotEqual(System.Net.HttpStatusCode.OK, response.StatusCode);
     }
 
     [Fact]
@@ -275,6 +271,6 @@ public class UdapControllerMultiHostTest : IClassFixture<ApiForCommunityTestFixt
         var response = await client.GetAsync("https://localhost:7016/some/other/path");
 
         // Should not be handled by the UDAP middleware - passes through to next middleware
-        response.StatusCode.Should().NotBe(System.Net.HttpStatusCode.OK);
+        Assert.NotEqual(System.Net.HttpStatusCode.OK, response.StatusCode);
     }
 }

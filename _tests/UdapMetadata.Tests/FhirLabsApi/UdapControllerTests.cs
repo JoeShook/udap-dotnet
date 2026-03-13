@@ -13,7 +13,6 @@ using System.Net.Http.Json;
 using System.Security.Claims;
 using System.Security.Cryptography.X509Certificates;
 using System.Text.RegularExpressions;
-using FluentAssertions;
 using Duende.IdentityModel;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Mvc.Testing;
@@ -91,14 +90,14 @@ public class SmartControllerTests : IClassFixture<ApiTestFixture>
         var httpClient = _fixture.CreateClient(); //.BaseAddress?.AbsoluteUri + "fhir/r4";
         
         var result = await httpClient.GetAsync("fhir/r4/.well-known/smart-configuration");
-        result.StatusCode.Should().Be(HttpStatusCode.OK);
-        
+        Assert.Equal(HttpStatusCode.OK, result.StatusCode);
+
         var smartMetadata = await result.Content.ReadFromJsonAsync<SmartMetadata>();
-        smartMetadata.Should().NotBeNull();
-        smartMetadata!.issuer.Should().Be("https://host.docker.internal:5002");
+        Assert.NotNull(smartMetadata);
+        Assert.Equal("https://host.docker.internal:5002", smartMetadata!.issuer);
 
         result = await httpClient.GetAsync("fhir/r4/.well-known/smart-configurationx");
-        result.StatusCode.Should().Be(HttpStatusCode.NotFound);
+        Assert.Equal(HttpStatusCode.NotFound, result.StatusCode);
     }
 }
 
@@ -185,9 +184,9 @@ public class UdapControllerTests : IClassFixture<ApiTestFixture>
         var disco = await udapClient.ValidateResource(
             _fixture.CreateClient().BaseAddress?.AbsoluteUri + "fhir/r4");
         
-        disco.IsError.Should().BeFalse($"\nError: {disco.Error} \nError Type: {disco.ErrorType}\n{disco.Raw}");
-        disco.HttpStatusCode.Should().Be(HttpStatusCode.OK);
-        udapClient.UdapServerMetaData.Should().NotBeNull();
+        Assert.False(disco.IsError, $"\nError: {disco.Error} \nError Type: {disco.ErrorType}\n{disco.Raw}");
+        Assert.Equal(HttpStatusCode.OK, disco.HttpStatusCode);
+        Assert.NotNull(udapClient.UdapServerMetaData);
     }
     
 
@@ -203,8 +202,9 @@ public class UdapControllerTests : IClassFixture<ApiTestFixture>
             _fixture.CreateClient().BaseAddress?.AbsoluteUri + "fhir/r4");
 
         var verSupported = disco.UdapVersionsSupported?.ToList();
-        verSupported.Should().NotBeNullOrEmpty();
-        verSupported!.Single().Should().Be("1");
+        Assert.NotNull(verSupported);
+        Assert.NotEmpty(verSupported!);
+        Assert.Equal("1", verSupported!.Single());
     }
 
 
@@ -217,10 +217,11 @@ public class UdapControllerTests : IClassFixture<ApiTestFixture>
             _fixture.CreateClient().BaseAddress?.AbsoluteUri + "fhir/r4");
 
         var extensions = disco.UdapAuthorizationExtensionsSupported?.ToList();
-        extensions.Should().NotBeNullOrEmpty();
+        Assert.NotNull(extensions);
+        Assert.NotEmpty(extensions!);
 
         var hl7B2B = extensions?.SingleOrDefault(c => c == "hl7-b2b");
-        hl7B2B.Should().NotBeNullOrEmpty();
+        Assert.False(string.IsNullOrEmpty(hl7B2B));
     }
 
     /// <summary>
@@ -234,7 +235,7 @@ public class UdapControllerTests : IClassFixture<ApiTestFixture>
         var disco = await udapClient.ValidateResource(
             _fixture.CreateClient().BaseAddress?.AbsoluteUri + "fhir/r4");
 
-        disco.UdapAuthorizationExtensionsRequired.Should().Contain("hl7-b2b");
+        Assert.Contains("hl7-b2b", disco.UdapAuthorizationExtensionsRequired);
     }
 
     /// <summary>
@@ -249,14 +250,14 @@ public class UdapControllerTests : IClassFixture<ApiTestFixture>
             _fixture.CreateClient().BaseAddress?.AbsoluteUri + "fhir/r4");
 
         var certificationsSupported = disco.UdapCertificationsSupported?.SingleOrDefault(c => c == "http://MyUdapCertification");
-        certificationsSupported.Should().NotBeNullOrEmpty();
+        Assert.False(string.IsNullOrEmpty(certificationsSupported));
         var uriCertificationsSupported = new Uri(certificationsSupported!);
-        uriCertificationsSupported.Should().Be("http://MyUdapCertification");
+        Assert.Equal(new Uri("http://MyUdapCertification"), uriCertificationsSupported);
 
         certificationsSupported = disco.UdapCertificationsSupported?.SingleOrDefault(c => c == "http://MyUdapCertification2");
-        certificationsSupported.Should().NotBeNullOrEmpty();
+        Assert.False(string.IsNullOrEmpty(certificationsSupported));
         uriCertificationsSupported = new Uri(certificationsSupported!);
-        uriCertificationsSupported.Should().Be("http://MyUdapCertification2");
+        Assert.Equal(new Uri("http://MyUdapCertification2"), uriCertificationsSupported);
     }
 
     /// <summary>
@@ -271,9 +272,9 @@ public class UdapControllerTests : IClassFixture<ApiTestFixture>
             _fixture.CreateClient().BaseAddress?.AbsoluteUri + "fhir/r4");
 
         var certificationsRequired = disco.UdapCertificationsRequired?.SingleOrDefault();
-        certificationsRequired.Should().NotBeNullOrEmpty();
+        Assert.False(string.IsNullOrEmpty(certificationsRequired));
         var uriCertificationsRequired = new Uri(certificationsRequired!);
-        uriCertificationsRequired.Should().Be("http://MyUdapCertification");
+        Assert.Equal(new Uri("http://MyUdapCertification"), uriCertificationsRequired);
     }
 
     [Fact]
@@ -285,12 +286,13 @@ public class UdapControllerTests : IClassFixture<ApiTestFixture>
             _fixture.CreateClient().BaseAddress?.AbsoluteUri + "fhir/r4");
 
         var grantTypes = disco.GrantTypesSupported?.ToList();
-        grantTypes.Should().NotBeNullOrEmpty();
+        Assert.NotNull(grantTypes);
+        Assert.NotEmpty(grantTypes!);
 
-        grantTypes!.Should().HaveCount(3);
-        grantTypes.Should().Contain("authorization_code");
-        grantTypes.Should().Contain("refresh_token");
-        grantTypes.Should().Contain("client_credentials");
+        Assert.Equal(3, grantTypes!.Count);
+        Assert.Contains("authorization_code", grantTypes);
+        Assert.Contains("refresh_token", grantTypes);
+        Assert.Contains("client_credentials", grantTypes);
     }
 
     [Fact]
@@ -303,10 +305,10 @@ public class UdapControllerTests : IClassFixture<ApiTestFixture>
 
         var scopesSupported = disco.ScopesSupported?.ToList();
 
-        scopesSupported.Should().Contain("openid");
-        scopesSupported.Should().Contain("system/*.read");
-        scopesSupported.Should().Contain("user/*.read");
-        scopesSupported.Should().Contain("patient/*.read");
+        Assert.Contains("openid", scopesSupported);
+        Assert.Contains("system/*.read", scopesSupported);
+        Assert.Contains("user/*.read", scopesSupported);
+        Assert.Contains("patient/*.read", scopesSupported);
     }
 
     [Fact]
@@ -318,7 +320,7 @@ public class UdapControllerTests : IClassFixture<ApiTestFixture>
             _fixture.CreateClient().BaseAddress?.AbsoluteUri + "fhir/r4");
 
         var authorizationEndpoint = disco.AuthorizeEndpoint;
-        authorizationEndpoint.Should().Be("https://host.docker.internal:5002/connect/authorize");
+        Assert.Equal("https://host.docker.internal:5002/connect/authorize", authorizationEndpoint);
     }
 
     [Fact]
@@ -330,7 +332,7 @@ public class UdapControllerTests : IClassFixture<ApiTestFixture>
             _fixture.CreateClient().BaseAddress?.AbsoluteUri + "fhir/r4");
 
         var tokenEndpoint = disco.TokenEndpoint;
-        tokenEndpoint.Should().Be("https://host.docker.internal:5002/connect/token");
+        Assert.Equal("https://host.docker.internal:5002/connect/token", tokenEndpoint);
     }
 
     [Fact]
@@ -342,7 +344,7 @@ public class UdapControllerTests : IClassFixture<ApiTestFixture>
             _fixture.CreateClient().BaseAddress?.AbsoluteUri + "fhir/r4");
 
         var registrationEndpoint = disco.RegistrationEndpoint;
-        registrationEndpoint.Should().Be("https://host.docker.internal:5002/connect/register");
+        Assert.Equal("https://host.docker.internal:5002/connect/register", registrationEndpoint);
     }
 
     [Fact]
@@ -354,8 +356,8 @@ public class UdapControllerTests : IClassFixture<ApiTestFixture>
             _fixture.CreateClient().BaseAddress?.AbsoluteUri + "fhir/r4");
 
         var tokenEndpointAuthMethodSupported = disco.TokenEndpointAuthMethodsSupported?.SingleOrDefault();
-        tokenEndpointAuthMethodSupported.Should().NotBeNullOrEmpty();
-        tokenEndpointAuthMethodSupported.Should().Be("private_key_jwt");
+        Assert.False(string.IsNullOrEmpty(tokenEndpointAuthMethodSupported));
+        Assert.Equal("private_key_jwt", tokenEndpointAuthMethodSupported);
     }
 
     [Fact]
@@ -367,12 +369,13 @@ public class UdapControllerTests : IClassFixture<ApiTestFixture>
             _fixture.CreateClient().BaseAddress?.AbsoluteUri + "fhir/r4");
         
         var registrationSigningAlgValuesSupported = disco.RegistrationEndpointJwtSigningAlgValuesSupported?.ToList();
-        registrationSigningAlgValuesSupported.Should().NotBeNullOrEmpty();
-        registrationSigningAlgValuesSupported.Should().Contain(UdapConstants.SupportedAlgorithm.RS256);
-        registrationSigningAlgValuesSupported.Should().Contain(UdapConstants.SupportedAlgorithm.RS384);
-        registrationSigningAlgValuesSupported.Should().Contain(UdapConstants.SupportedAlgorithm.ES256);
-        registrationSigningAlgValuesSupported.Should().Contain(UdapConstants.SupportedAlgorithm.ES384);
-        registrationSigningAlgValuesSupported!.Should().HaveCount(4);
+        Assert.NotNull(registrationSigningAlgValuesSupported);
+        Assert.NotEmpty(registrationSigningAlgValuesSupported!);
+        Assert.Contains(UdapConstants.SupportedAlgorithm.RS256, registrationSigningAlgValuesSupported);
+        Assert.Contains(UdapConstants.SupportedAlgorithm.RS384, registrationSigningAlgValuesSupported);
+        Assert.Contains(UdapConstants.SupportedAlgorithm.ES256, registrationSigningAlgValuesSupported);
+        Assert.Contains(UdapConstants.SupportedAlgorithm.ES384, registrationSigningAlgValuesSupported);
+        Assert.Equal(4, registrationSigningAlgValuesSupported!.Count);
     }
 
     [Fact]
@@ -384,12 +387,13 @@ public class UdapControllerTests : IClassFixture<ApiTestFixture>
             _fixture.CreateClient().BaseAddress?.AbsoluteUri + "fhir/r4");
 
         var tokenSigningAlgValuesSupported = disco.TokenEndpointAuthSigningAlgValuesSupported?.ToList();
-        tokenSigningAlgValuesSupported.Should().NotBeNullOrEmpty();
-        tokenSigningAlgValuesSupported.Should().Contain(UdapConstants.SupportedAlgorithm.RS256);
-        tokenSigningAlgValuesSupported.Should().Contain(UdapConstants.SupportedAlgorithm.RS384);
-        tokenSigningAlgValuesSupported.Should().Contain(UdapConstants.SupportedAlgorithm.ES256);
-        tokenSigningAlgValuesSupported.Should().Contain(UdapConstants.SupportedAlgorithm.ES384);
-        tokenSigningAlgValuesSupported!.Should().HaveCount(4);
+        Assert.NotNull(tokenSigningAlgValuesSupported);
+        Assert.NotEmpty(tokenSigningAlgValuesSupported!);
+        Assert.Contains(UdapConstants.SupportedAlgorithm.RS256, tokenSigningAlgValuesSupported);
+        Assert.Contains(UdapConstants.SupportedAlgorithm.RS384, tokenSigningAlgValuesSupported);
+        Assert.Contains(UdapConstants.SupportedAlgorithm.ES256, tokenSigningAlgValuesSupported);
+        Assert.Contains(UdapConstants.SupportedAlgorithm.ES384, tokenSigningAlgValuesSupported);
+        Assert.Equal(4, tokenSigningAlgValuesSupported!.Count);
     }
 
     [Fact]
@@ -401,11 +405,11 @@ public class UdapControllerTests : IClassFixture<ApiTestFixture>
             _fixture.CreateClient().BaseAddress?.AbsoluteUri + "fhir/r4");
 
         var signedMetatData = disco.SignedMetadata;
-        signedMetatData.Should().NotBeNullOrEmpty();
+        Assert.False(string.IsNullOrEmpty(signedMetatData));
 
         var pattern = @"^[A-Za-z0-9-_=]+\.[A-Za-z0-9-_=]+\.?[A-Za-z0-9-_.+\/=]*$";
         var regex = new Regex(pattern);
-        regex.IsMatch(signedMetatData!).Should().BeTrue("signed_metadata is not a valid JWT");
+        Assert.True(regex.IsMatch(signedMetatData!), "signed_metadata is not a valid JWT");
     }
 
     [Fact]
@@ -414,7 +418,7 @@ public class UdapControllerTests : IClassFixture<ApiTestFixture>
         var udapClient = _serviceProvider.GetRequiredService<IUdapClient>();
 
         var disco = await udapClient.ValidateResource(_fixture.CreateClient().BaseAddress?.AbsoluteUri + "fhir/r4");
-        disco.IsError.Should().BeFalse($"\nError: {disco.Error} \nError Type: {disco.ErrorType}\n{disco.Raw}");
+        Assert.False(disco.IsError, $"\nError: {disco.Error} \nError Type: {disco.ErrorType}\n{disco.Raw}");
 
         var jwt = new JwtSecurityToken(disco.SignedMetadata);
         var tokenHeader = jwt.Header;
@@ -438,30 +442,30 @@ public class UdapControllerTests : IClassFixture<ApiTestFixture>
         }, out _);
 
         var issClaim = jwt.Payload.Claims.Single(c => c.Type == JwtClaimTypes.Issuer);
-        issClaim.ValueType.Should().Be(ClaimValueTypes.String);
+        Assert.Equal(ClaimValueTypes.String, issClaim.ValueType);
 
         // should be the same as the web base url
-        issClaim.Value.Should().Be("http://localhost/fhir/r4");
+        Assert.Equal("http://localhost/fhir/r4", issClaim.Value);
 
         var subjectAltNames = cert.GetSubjectAltNames(n => n.TagNo == (int)X509Extensions.GeneralNameType.URI); //specification (predicate) will filter to only SANs of type uniformResourceIdentifier
 
-        subjectAltNames.Select(s => s.Item2).Should().Contain(issClaim.Value, $"iss: {issClaim.Value} does not match Subject Alternative Name extension");
-        
-        var subClaim = jwt.Payload.Claims.Single(c => c.Type == JwtClaimTypes.Subject);
-        subClaim.ValueType.Should().Be(ClaimValueTypes.String);
+        Assert.Contains(issClaim.Value, subjectAltNames.Select(s => s.Item2));
 
-        issClaim.Value.Should().BeEquivalentTo(subClaim.Value);
+        var subClaim = jwt.Payload.Claims.Single(c => c.Type == JwtClaimTypes.Subject);
+        Assert.Equal(ClaimValueTypes.String, subClaim.ValueType);
+
+        Assert.Equal(subClaim.Value, issClaim.Value, StringComparer.OrdinalIgnoreCase);
 
 
         var iatClaim = jwt.Payload.Claims.Single(c => c.Type == JwtClaimTypes.IssuedAt);
-        iatClaim.ValueType.Should().Be(ClaimValueTypes.Integer64);
+        Assert.Equal(ClaimValueTypes.Integer64, iatClaim.ValueType);
 
         var expClaim = jwt.Payload.Claims.Single(c => c.Type == JwtClaimTypes.Expiration);
-        expClaim.ValueType.Should().Be(ClaimValueTypes.Integer64);
+        Assert.Equal(ClaimValueTypes.Integer64, expClaim.ValueType);
 
         var iat = int.Parse(iatClaim.Value);
         var exp = int.Parse(expClaim.Value);
         var year = DateTimeOffset.FromUnixTimeSeconds(exp).AddYears(1).ToUnixTimeSeconds();
-        iat.Should().BeLessThanOrEqualTo((int)year);
+        Assert.True(iat <= (int)year);
     }
 }

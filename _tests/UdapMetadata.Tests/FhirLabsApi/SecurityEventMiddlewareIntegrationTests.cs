@@ -11,7 +11,6 @@ using System.IdentityModel.Tokens.Jwt;
 using System.Net;
 using System.Net.Http.Headers;
 using System.Security.Claims;
-using FluentAssertions;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Mvc.Testing;
 using Microsoft.Extensions.Hosting;
@@ -62,7 +61,7 @@ public class SecurityEventMiddlewareIntegrationTests : IClassFixture<SecurityEve
 
         var response = await client.GetAsync("/fhir/r4/Patient");
 
-        response.StatusCode.Should().Be(HttpStatusCode.Unauthorized);
+        Assert.Equal(HttpStatusCode.Unauthorized, response.StatusCode);
     }
 
     [Fact]
@@ -74,7 +73,7 @@ public class SecurityEventMiddlewareIntegrationTests : IClassFixture<SecurityEve
 
         var response = await client.GetAsync("/fhir/r4/Patient");
 
-        response.StatusCode.Should().Be(HttpStatusCode.Unauthorized);
+        Assert.Equal(HttpStatusCode.Unauthorized, response.StatusCode);
     }
 
     [Fact]
@@ -87,7 +86,7 @@ public class SecurityEventMiddlewareIntegrationTests : IClassFixture<SecurityEve
 
         var response = await client.GetAsync("/fhir/r4/Patient");
 
-        response.StatusCode.Should().Be(HttpStatusCode.Unauthorized);
+        Assert.Equal(HttpStatusCode.Unauthorized, response.StatusCode);
     }
 
     [Fact]
@@ -98,7 +97,7 @@ public class SecurityEventMiddlewareIntegrationTests : IClassFixture<SecurityEve
 
         var response = await client.GetAsync("/fhir/r4/Patient");
 
-        response.StatusCode.Should().Be(HttpStatusCode.Unauthorized);
+        Assert.Equal(HttpStatusCode.Unauthorized, response.StatusCode);
     }
 
     [Fact]
@@ -111,7 +110,7 @@ public class SecurityEventMiddlewareIntegrationTests : IClassFixture<SecurityEve
 
         var response = await client.GetAsync("/fhir/r4/Patient");
 
-        response.StatusCode.Should().Be(HttpStatusCode.Unauthorized);
+        Assert.Equal(HttpStatusCode.Unauthorized, response.StatusCode);
     }
 
     [Fact]
@@ -121,7 +120,7 @@ public class SecurityEventMiddlewareIntegrationTests : IClassFixture<SecurityEve
 
         var response = await client.GetAsync("/fhir/r4/.well-known/udap");
 
-        response.StatusCode.Should().Be(HttpStatusCode.OK);
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
     }
 
     private static string CreateTestJwt(string clientId, bool expired = false)

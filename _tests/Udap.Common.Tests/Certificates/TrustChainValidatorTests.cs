@@ -11,7 +11,6 @@ using System.IdentityModel.Tokens.Jwt;
 using System.Security.Cryptography.X509Certificates;
 using System.Text.Json;
 using System.Text.Json.Nodes;
-using FluentAssertions;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
@@ -92,8 +91,8 @@ public class TrustChainValidatorTests
                            ChainProblemStatus.NotSignatureValid |
                            ChainProblemStatus.InvalidBasicConstraints;
 
-        (await ValidateCertificateChain(cert, problemFlags, "udap://fhirlabs.net")).Should().BeTrue();
-        _diagnosticsChainValidator.Called.Should().BeFalse();
+        Assert.True(await ValidateCertificateChain(cert, problemFlags, "udap://fhirlabs.net"));
+        Assert.False(_diagnosticsChainValidator.Called);
     }
 
     [Fact]
@@ -119,7 +118,7 @@ public class TrustChainValidatorTests
             Substitute.For<ILogger<UdapMetaDataBuilder<UdapMetadataOptions, UdapMetadata>>>());
         var metadata = await metaDataBuilder.SignMetaData("https://fhirlabs.net/fhir/r4", "http://MissingCertificate");
 
-        metadata.Should().BeNull();
+        Assert.Null(metadata);
     }
 
     [Fact]
@@ -142,7 +141,7 @@ public class TrustChainValidatorTests
             Substitute.For<ILogger<UdapMetaDataBuilder<UdapMetadataOptions, UdapMetadata>>>());
         var metadata = await metaDataBuilder.SignMetaData("https://fhirlabs.net/fhir/r4", "udap://unknown");
 
-        metadata.Should().BeNull();
+        Assert.Null(metadata);
     }
 
     [Fact]
@@ -167,16 +166,16 @@ public class TrustChainValidatorTests
             Substitute.For<ILogger<UdapMetaDataBuilder<UdapMetadataOptions, UdapMetadata>>>());
         var communities = metaDataBuilder.GetCommunities();
 
-        communities.Count.Should().Be(6);
-        communities.Should().Contain(c => c == "udap://fhirlabs.net");
-        communities.Should().Contain(c => c == "udap://expired.fhirlabs.net/");
-        communities.Should().Contain(c => c == "udap://untrusted.fhirlabs.net/");
+        Assert.Equal(6, communities.Count);
+        Assert.Contains(communities, c => c == "udap://fhirlabs.net");
+        Assert.Contains(communities, c => c == "udap://expired.fhirlabs.net/");
+        Assert.Contains(communities, c => c == "udap://untrusted.fhirlabs.net/");
 
         var communityHtml = metaDataBuilder.GetCommunitiesAsHtml("https://baseurl");
 
-        communityHtml.Should().NotBeNullOrWhiteSpace();
-        communityHtml.Should().Contain("href=\"https://baseurl/.well-known/udap?community=udap://fhirlabs.net\"");
-        communityHtml.Should().Contain("href=\"https://baseurl/.well-known/udap?community=udap://untrusted.fhirlabs.net/\"");
+        Assert.False(string.IsNullOrWhiteSpace(communityHtml));
+        Assert.Contains("href=\"https://baseurl/.well-known/udap?community=udap://fhirlabs.net\"", communityHtml);
+        Assert.Contains("href=\"https://baseurl/.well-known/udap?community=udap://untrusted.fhirlabs.net/\"", communityHtml);
         return Task.CompletedTask;
     }
 
@@ -208,7 +207,7 @@ public class TrustChainValidatorTests
         var anchors = certificateStore.AnchorCertificates.ToList();
 
         // Coverage for frameworks not hosted in example projects.  Funky but works.
-        certStore.AnchorCertificates.AsEnumerable().ToX509Collection().Should().NotBeNullOrEmpty();
+        Assert.NotEmpty(certStore.AnchorCertificates.AsEnumerable().ToX509Collection());
 
         var intermediates = anchors
             .SelectMany(a => a.Intermediates!.Select(i => X509Certificate2.CreateFromPem(i.Certificate))).ToArray()
@@ -241,7 +240,7 @@ public class TrustChainValidatorTests
             intermediates,
             anchorCertificates!);
 
-        trusted.Should().BeFalse();
+        Assert.False(trusted);
     }
 
     public async Task<bool> ValidateCertificateChain(
@@ -272,7 +271,7 @@ public class TrustChainValidatorTests
             .ToList();
 
         // Coverage for frameworks not hosted in example projects.  Funky but works.
-        certStore.AnchorCertificates.AsEnumerable().ToX509Collection().Should().NotBeNullOrEmpty();
+        Assert.NotEmpty(certStore.AnchorCertificates.AsEnumerable().ToX509Collection());
 
         var intermediates = anchors
             .SelectMany(a => a.Intermediates!.Select(i => X509Certificate2.CreateFromPem(i.Certificate))).ToArray()

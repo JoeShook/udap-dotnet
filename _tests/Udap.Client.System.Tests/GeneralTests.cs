@@ -7,7 +7,6 @@
 // */
 #endregion
 
-using FluentAssertions;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
@@ -48,7 +47,7 @@ namespace Udap.Client.System.Tests
             var client = new HttpClient();
             var response = await client.GetAsync("https://test.udap.org/fhir/r4/stage/metadata");
             var metadata = await response.Content.ReadAsStringAsync();
-            metadata.Should().NotBeNullOrEmpty();
+            Assert.False(string.IsNullOrEmpty(metadata));
             // _testOutputHelper.WriteLine(metadata);
             //
             // Example
@@ -165,7 +164,7 @@ namespace Udap.Client.System.Tests
             }
 
             var registrationEndpoint = disco.RegistrationEndpoint;
-            registrationEndpoint.Should().BeEquivalentTo("https://securedcontrols.net/connect/register");
+            Assert.Equal("https://securedcontrols.net/connect/register", registrationEndpoint, StringComparer.OrdinalIgnoreCase);
         }
 
         [Fact]
@@ -212,8 +211,8 @@ namespace Udap.Client.System.Tests
                                ChainProblemStatus.InvalidBasicConstraints |
                                ChainProblemStatus.OfflineRevocation;
 
-            (await ValidateCertificateChain(cert, problemFlags, "udap://fhirlabs.net/")).Should().BeTrue();
-            _diagnosticsChainValidator.Called.Should().BeFalse();
+            Assert.True(await ValidateCertificateChain(cert, problemFlags, "udap://fhirlabs.net/"));
+            Assert.False(_diagnosticsChainValidator.Called);
         }
 
         [Fact]
@@ -226,10 +225,10 @@ namespace Udap.Client.System.Tests
             };
             
             var result = await udapClient.ValidateResource("https://dev-mtx-interop.meditech.com", "urn:oid:4.5.6");
-            result.IsError.Should().BeFalse(result.Error);
-            
+            Assert.False(result.IsError, result.Error);
+
             var metaData = udapClient.UdapServerMetaData;
-            metaData.Should().NotBeNull();
+            Assert.NotNull(metaData);
         }
 
         [Fact]
@@ -276,8 +275,8 @@ namespace Udap.Client.System.Tests
                                ChainProblemStatus.InvalidBasicConstraints |
                                ChainProblemStatus.OfflineRevocation;
             
-            (await ValidateCertificateChain(cert, problemFlags, "https://stage.healthtogo.me:8181")).Should().BeTrue();
-            _diagnosticsChainValidator.Called.Should().BeFalse();
+            Assert.True(await ValidateCertificateChain(cert, problemFlags, "https://stage.healthtogo.me:8181"));
+            Assert.False(_diagnosticsChainValidator.Called);
         }
 
 

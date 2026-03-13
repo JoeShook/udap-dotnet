@@ -8,7 +8,6 @@
 #endregion
 
 using System.Security.Cryptography.X509Certificates;
-using FluentAssertions;
 using Microsoft.Extensions.Logging;
 using Udap.Common.Certificates;
 using Xunit.Abstractions;
@@ -43,14 +42,14 @@ public class TerminateAtAnchorTest
         var anchors = new X509Certificate2Collection { anchor };
 
         var result = await validator.IsTrustedCertificateAsync("client_name", cert, null, anchors);
-        result.Should().BeTrue(
+        Assert.True(result,
             string.Join("\r\n", diagnosticsChainValidator.ActualProblemMessages)
             + "\r\n" + string.Join("\r\n", diagnosticsChainValidator.ActualErrorMessages)
             + "\r\n" + string.Join("\r\n", diagnosticsChainValidator.ActualUntrustedMessages));
 
-        diagnosticsChainValidator.ActualErrorMessages.Count.Should().Be(0);
-        diagnosticsChainValidator.ActualProblemMessages.Count.Should().Be(0);
-        diagnosticsChainValidator.ActualUntrustedMessages.Count.Should().Be(0);
+        Assert.Equal(0, diagnosticsChainValidator.ActualErrorMessages.Count);
+        Assert.Equal(0, diagnosticsChainValidator.ActualProblemMessages.Count);
+        Assert.Equal(0, diagnosticsChainValidator.ActualUntrustedMessages.Count);
     }
 
     [Fact(Skip = "Anchor Termination works but I have some details to work out for this test to pass")]
@@ -64,17 +63,18 @@ public class TerminateAtAnchorTest
         X509Certificate2Collection anchors = new X509Certificate2Collection { anchor };
 
         var result = await validator.IsTrustedCertificateAsync("client_name", cert, null, anchors);
-        result.Should().BeFalse(
+        Assert.False(result,
             string.Join("\r\n", diagnosticsChainValidator.ActualProblemMessages)
             + "\r\n" + string.Join("\r\n", diagnosticsChainValidator.ActualErrorMessages)
             + "\r\n" + string.Join("\r\n", diagnosticsChainValidator.ActualUntrustedMessages));
 
-        diagnosticsChainValidator.ActualErrorMessages.Count.Should().Be(0);
+        Assert.Equal(0, diagnosticsChainValidator.ActualErrorMessages.Count);
 
-        diagnosticsChainValidator.ActualProblemMessages.Should().Contain(message =>
+        Assert.Contains(diagnosticsChainValidator.ActualProblemMessages, message =>
             message.Contains("Trust ERROR"));
 
-        diagnosticsChainValidator.ActualUntrustedMessages.Should().ContainMatch("Untrusted Certificate*");
+        Assert.Contains(diagnosticsChainValidator.ActualUntrustedMessages, message =>
+            message.StartsWith("Untrusted Certificate"));
     }
 
     

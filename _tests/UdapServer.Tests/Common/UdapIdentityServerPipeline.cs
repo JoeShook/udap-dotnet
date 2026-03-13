@@ -24,7 +24,7 @@ using Duende.IdentityServer.Configuration;
 using Duende.IdentityServer.Models;
 using Duende.IdentityServer.Services;
 using Duende.IdentityServer.Test;
-using FluentAssertions;
+using Xunit;
 using Duende.IdentityModel.Client;
 using Microsoft.AspNetCore.Authentication;
 using Microsoft.AspNetCore.Builder;
@@ -590,7 +590,7 @@ public class UdapIdentityServerPipeline
 
         var url = CreateAuthorizeUrl(clientId, responseType, scope, redirectUri, state, nonce, loginHint, acrValues, responseMode, codeChallenge, codeChallengeMethod, extra);
         var result = await BrowserClient.GetAsync(url);
-        result.StatusCode.Should().Be(HttpStatusCode.Found);
+        Assert.Equal(HttpStatusCode.Found, result.StatusCode);
 
         BrowserClient.AllowAutoRedirect = old;
 

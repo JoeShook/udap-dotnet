@@ -16,7 +16,6 @@ using Duende.IdentityServer.EntityFramework.Mappers;
 using Duende.IdentityServer.EntityFramework.Options;
 using Duende.IdentityServer.EntityFramework.Storage;
 using Duende.IdentityServer.Models;
-using FluentAssertions;
 using Duende.IdentityModel;
 using Microsoft.AspNetCore.Http;
 using Microsoft.EntityFrameworkCore;
@@ -151,7 +150,7 @@ namespace UdapServer.Tests
 
             var client = new Client();
             client = await store.GetClient(client);
-            client.Should().BeNull();
+            Assert.Null(client);
 
 
             client = new Client
@@ -162,7 +161,7 @@ namespace UdapServer.Tests
             
 
             client = await store.GetClient(client);
-            client.Should().NotBeNull();
+            Assert.NotNull(client);
 
             //
             // Checking to see two contexts are working together.
@@ -173,20 +172,20 @@ namespace UdapServer.Tests
             client.ClientId = clientId;
 
             var entity = await context.Clients.SingleOrDefaultAsync(c => c.ClientId == client.ClientId);
-            entity.Should().BeNull();
+            Assert.Null(entity);
 
             context.Clients.Add(client.ToEntity());
             await context.SaveChangesAsync();
             entity = await context.Clients.SingleOrDefaultAsync(c => c.ClientId == client.ClientId);
             client = entity.ToModel();
-            client.Should().NotBeNull();
+            Assert.NotNull(client);
 
             client = await store.GetClient(new Client() { ClientId = clientId });
-            client!.ClientId.Should().Be(clientId);
+            Assert.Equal(clientId, client!.ClientId);
 
             var anchors = (await store.GetAnchors()).ToList();
-            anchors.Count.Should().Be(2);
-            anchors.First().Certificate.ToLf().Should().BeEquivalentTo(_anchorCert.ToPemFormat().ToLf());
+            Assert.Equal(2, anchors.Count);
+            Assert.Equal(_anchorCert.ToPemFormat().ToLf(), anchors.First().Certificate.ToLf(), StringComparer.OrdinalIgnoreCase);
         }
 
 
@@ -262,10 +261,9 @@ namespace UdapServer.Tests
                     signingCredentials);
             var signedSoftwareStatement = string.Concat(encodedHeader, ".", encodedPayloadJwt, ".", encodedSignature);
 
-            jwtPayload.SerializeToJson().Should()
-                .BeEquivalentTo(JsonSerializer.Serialize(document));
+            Assert.Equal(JsonSerializer.Serialize(document), jwtPayload.SerializeToJson(), StringComparer.OrdinalIgnoreCase);
 
-            encodedPayloadJwt.Should().BeEquivalentTo(encodedPayload);
+            Assert.Equal(encodedPayload, encodedPayloadJwt, StringComparer.OrdinalIgnoreCase);
 
             var handler = new JwtSecurityTokenHandler();
             var token = handler.ReadToken(signedSoftwareStatement) as JwtSecurityToken;
@@ -366,7 +364,7 @@ namespace UdapServer.Tests
                  UdapConstants.UdapVersionsSupportedValue
             );
 
-            document.ClientId.Should().BeNull();
+            Assert.Null(document.ClientId);
 
             var store = sp.GetRequiredService<IUdapClientRegistrationStore>();
             var communityAnchors = await store.GetAnchorsCertificates("http://localhost");
@@ -381,8 +379,8 @@ namespace UdapServer.Tests
                 communityAnchors!,
                 anchors);
 
-            result.IsError.Should().BeFalse($"{result.Error} : {result.ErrorDescription}");
-            result.Document.Should().BeEquivalentTo(document);
+            Assert.False(result.IsError, $"{result.Error} : {result.ErrorDescription}");
+            Assert.Equal(document, result.Document);
 
 
         }
@@ -480,7 +478,7 @@ namespace UdapServer.Tests
                  UdapConstants.UdapVersionsSupportedValue
             );
 
-            document.ClientId.Should().BeNull();
+            Assert.Null(document.ClientId);
 
             var store = sp.GetRequiredService<IUdapClientRegistrationStore>();
             var communityAnchors = await store.GetAnchorsCertificates("http://localhost");
@@ -495,8 +493,8 @@ namespace UdapServer.Tests
                 communityAnchors!,
                 anchors);
 
-            result.IsError.Should().BeFalse($"{result.Error} : {result.ErrorDescription}");
-            result.Document.Should().BeEquivalentTo(document);
+            Assert.False(result.IsError, $"{result.Error} : {result.ErrorDescription}");
+            Assert.Equal(document, result.Document);
 
 
         }
@@ -616,10 +614,9 @@ namespace UdapServer.Tests
                     signingCredentials);
             var signedSoftwareStatement = string.Concat(encodedHeader, ".", encodedPayloadJwt, ".", encodedSignature);
 
-            jwtPayload.SerializeToJson().Should()
-                .BeEquivalentTo(JsonSerializer.Serialize(document));
+            Assert.Equal(JsonSerializer.Serialize(document), jwtPayload.SerializeToJson(), StringComparer.OrdinalIgnoreCase);
             
-            encodedPayloadJwt.Should().BeEquivalentTo(encodedPayload);
+            Assert.Equal(encodedPayload, encodedPayloadJwt, StringComparer.OrdinalIgnoreCase);
             
             var handler = new JwtSecurityTokenHandler();
             var token = handler.ReadToken(signedSoftwareStatement) as JwtSecurityToken;

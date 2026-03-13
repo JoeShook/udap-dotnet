@@ -9,7 +9,6 @@
 
 using System.IdentityModel.Tokens.Jwt;
 using System.Security.Claims;
-using FluentAssertions;
 using Microsoft.AspNetCore.Authentication;
 using Microsoft.AspNetCore.Http;
 using Microsoft.Extensions.Logging;
@@ -62,10 +61,8 @@ public class SecurityEventMiddlewareTests
 
         await middleware.InvokeAsync(context);
 
-        _logMessages.Should().Contain(m =>
-            m.Contains("AuthenticationFailure") &&
-            m.Contains("/fhir/r4/Patient"));
-        _logLevels.Should().Contain(LogLevel.Warning);
+        Assert.Contains(_logMessages, m => m.Contains("AuthenticationFailure") && m.Contains("/fhir/r4/Patient"));
+        Assert.Contains(LogLevel.Warning, _logLevels);
     }
 
     [Fact]
@@ -84,10 +81,8 @@ public class SecurityEventMiddlewareTests
 
         await middleware.InvokeAsync(context);
 
-        _logMessages.Should().Contain(m =>
-            m.Contains("SuccessfulAccess") &&
-            m.Contains("my-client"));
-        _logLevels.Should().Contain(LogLevel.Information);
+        Assert.Contains(_logMessages, m => m.Contains("SuccessfulAccess") && m.Contains("my-client"));
+        Assert.Contains(LogLevel.Information, _logLevels);
     }
 
     [Fact]
@@ -106,9 +101,7 @@ public class SecurityEventMiddlewareTests
 
         await middleware.InvokeAsync(context);
 
-        _logMessages.Should().Contain(m =>
-            m.Contains("SuccessfulAccess") &&
-            m.Contains("user-subject"));
+        Assert.Contains(_logMessages, m => m.Contains("SuccessfulAccess") && m.Contains("user-subject"));
     }
 
     [Fact]
@@ -126,10 +119,7 @@ public class SecurityEventMiddlewareTests
 
         await middleware.InvokeAsync(context);
 
-        _logMessages.Should().Contain(m =>
-            m.Contains("AuthenticationFailure") &&
-            m.Contains("failed-client") &&
-            m.Contains("Bearer"));
+        Assert.Contains(_logMessages, m => m.Contains("AuthenticationFailure") && m.Contains("failed-client") && m.Contains("Bearer"));
     }
 
     [Fact]
@@ -147,10 +137,7 @@ public class SecurityEventMiddlewareTests
 
         await middleware.InvokeAsync(context);
 
-        _logMessages.Should().Contain(m =>
-            m.Contains("AuthenticationFailure") &&
-            m.Contains("dpop-client") &&
-            m.Contains("DPoP"));
+        Assert.Contains(_logMessages, m => m.Contains("AuthenticationFailure") && m.Contains("dpop-client") && m.Contains("DPoP"));
     }
 
     [Fact]
@@ -167,9 +154,7 @@ public class SecurityEventMiddlewareTests
 
         await middleware.InvokeAsync(context);
 
-        _logMessages.Should().Contain(m =>
-            m.Contains("AuthenticationFailure") &&
-            m.Contains("Bearer"));
+        Assert.Contains(_logMessages, m => m.Contains("AuthenticationFailure") && m.Contains("Bearer"));
     }
 
     [Fact]
@@ -185,7 +170,7 @@ public class SecurityEventMiddlewareTests
 
         await middleware.InvokeAsync(context);
 
-        _logMessages.Should().Contain(m => m.Contains("401"));
+        Assert.Contains(_logMessages, m => m.Contains("401"));
     }
 
     [Fact]
@@ -202,9 +187,7 @@ public class SecurityEventMiddlewareTests
 
         await middleware.InvokeAsync(context);
 
-        _logMessages.Should().Contain(m =>
-            m.Contains("POST") &&
-            m.Contains("?_count=10&_sort=name"));
+        Assert.Contains(_logMessages, m => m.Contains("POST") && m.Contains("?_count=10&_sort=name"));
     }
 
     [Fact]
@@ -221,7 +204,7 @@ public class SecurityEventMiddlewareTests
 
         await middleware.InvokeAsync(context);
 
-        _logMessages.Should().Contain(m => m.Contains("gzip, br"));
+        Assert.Contains(_logMessages, m => m.Contains("gzip, br"));
     }
 
     [Fact]
@@ -237,7 +220,7 @@ public class SecurityEventMiddlewareTests
 
         await middleware.InvokeAsync(context);
 
-        _logMessages.Should().Contain(m => m.Contains("gzip"));
+        Assert.Contains(_logMessages, m => m.Contains("gzip"));
     }
 
     [Fact]
@@ -252,49 +235,49 @@ public class SecurityEventMiddlewareTests
 
         await middleware.InvokeAsync(context);
 
-        nextCalled.Should().BeTrue();
+        Assert.True(nextCalled);
     }
 
     [Fact]
     public void ExtractTokenValue_BearerWithToken_ReturnsToken()
     {
         var result = SecurityEventMiddleware.ExtractTokenValue("Bearer eyJ0eXAiOiJKV1Qi");
-        result.Should().Be("eyJ0eXAiOiJKV1Qi");
+        Assert.Equal("eyJ0eXAiOiJKV1Qi", result);
     }
 
     [Fact]
     public void ExtractTokenValue_SchemeOnly_ReturnsNull()
     {
         var result = SecurityEventMiddleware.ExtractTokenValue("Bearer");
-        result.Should().BeNull();
+        Assert.Null(result);
     }
 
     [Fact]
     public void ExtractTokenValue_ExtraSpaces_ReturnsCleanToken()
     {
         var result = SecurityEventMiddleware.ExtractTokenValue("Bearer   eyJ0eXAiOiJKV1Qi  ");
-        result.Should().Be("eyJ0eXAiOiJKV1Qi");
+        Assert.Equal("eyJ0eXAiOiJKV1Qi", result);
     }
 
     [Fact]
     public void ExtractAuthScheme_Bearer_ReturnsBearer()
     {
         var result = SecurityEventMiddleware.ExtractAuthScheme("Bearer eyJ0eXA");
-        result.Should().Be("Bearer");
+        Assert.Equal("Bearer", result);
     }
 
     [Fact]
     public void ExtractAuthScheme_DPoP_ReturnsDPoP()
     {
         var result = SecurityEventMiddleware.ExtractAuthScheme("DPoP eyJ0eXA");
-        result.Should().Be("DPoP");
+        Assert.Equal("DPoP", result);
     }
 
     [Fact]
     public void ExtractAuthScheme_Null_ReturnsNull()
     {
         var result = SecurityEventMiddleware.ExtractAuthScheme(null);
-        result.Should().BeNull();
+        Assert.Null(result);
     }
 
     [Fact]
@@ -302,14 +285,14 @@ public class SecurityEventMiddlewareTests
     {
         var token = CreateTestJwt("my-client");
         var result = SecurityEventMiddleware.ExtractClientId(token);
-        result.Should().Be("my-client");
+        Assert.Equal("my-client", result);
     }
 
     [Fact]
     public void ExtractClientId_InvalidToken_ReturnsNull()
     {
         var result = SecurityEventMiddleware.ExtractClientId("not-a-jwt");
-        result.Should().BeNull();
+        Assert.Null(result);
     }
 
     [Fact]
@@ -317,8 +300,8 @@ public class SecurityEventMiddlewareTests
     {
         var token = CreateTestJwtWithClaims(new Claim("sub", "some-subject"));
         var result = SecurityEventMiddleware.ExtractClientId(token, _logger);
-        result.Should().BeNull();
-        _logMessages.Should().Contain(m => m.Contains("no client_id claim"));
+        Assert.Null(result);
+        Assert.Contains(_logMessages, m => m.Contains("no client_id claim"));
     }
 
     [Fact]
@@ -326,7 +309,7 @@ public class SecurityEventMiddlewareTests
     {
         var token = CreateTestJwtWithClaims(new Claim("sub", "some-subject"));
         var result = SecurityEventMiddleware.ExtractClientId(token);
-        result.Should().BeNull();
+        Assert.Null(result);
     }
 
     [Fact]
@@ -348,7 +331,7 @@ public class SecurityEventMiddlewareTests
 
         await middleware.InvokeAsync(context);
 
-        _logMessages.Should().Contain(m => m.Contains("Token expired"));
+        Assert.Contains(_logMessages, m => m.Contains("Token expired"));
     }
 
     [Fact]
@@ -356,7 +339,7 @@ public class SecurityEventMiddlewareTests
     {
         // Three base64 segments that look like JWT structure but aren't valid
         var result = SecurityEventMiddleware.ExtractClientId("eyx.eyy.ezz", _logger);
-        result.Should().BeNull();
+        Assert.Null(result);
     }
 
     [Fact]
@@ -379,17 +362,17 @@ public class SecurityEventMiddlewareTests
 
         await middleware.InvokeAsync(context);
 
-        var logEntry = _logMessages.Should().ContainSingle().Subject;
-        logEntry.Should().Contain("SuccessfulAccess");
-        logEntry.Should().Contain("full-test-client");
-        logEntry.Should().Contain("Bearer");
-        logEntry.Should().Contain("192.168.1.100");
-        logEntry.Should().Contain("200");
-        logEntry.Should().Contain("GET");
-        logEntry.Should().Contain("/fhir/r4/Patient");
-        logEntry.Should().Contain("?_count=5");
-        logEntry.Should().Contain("gzip");
-        logEntry.Should().Contain("br");
+        var logEntry = Assert.Single(_logMessages);
+        Assert.Contains("SuccessfulAccess", logEntry);
+        Assert.Contains("full-test-client", logEntry);
+        Assert.Contains("Bearer", logEntry);
+        Assert.Contains("192.168.1.100", logEntry);
+        Assert.Contains("200", logEntry);
+        Assert.Contains("GET", logEntry);
+        Assert.Contains("/fhir/r4/Patient", logEntry);
+        Assert.Contains("?_count=5", logEntry);
+        Assert.Contains("gzip", logEntry);
+        Assert.Contains("br", logEntry);
     }
 
     private static string CreateTestJwt(string clientId)
