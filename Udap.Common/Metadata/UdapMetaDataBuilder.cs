@@ -9,6 +9,7 @@
 
 using System.Security.Claims;
 using System.Security.Cryptography.X509Certificates;
+using System.Text;
 using Duende.IdentityModel;
 using Microsoft.Extensions.Logging;
 using Microsoft.IdentityModel.Tokens;
@@ -51,16 +52,76 @@ public class UdapMetaDataBuilder<TUdapMetadataOptions, TUdapMetadata>
     }
 
     /// <summary>
-    /// List of community HTML Anchors
+    /// List of community HTML Anchors.
+    /// For communities with multiple certificates, generates per-SAN links
+    /// filtered to only SANs matching the current host.
     /// </summary>
     /// <param name="path">Base URL.  The same as the UDAP subject alternative name. </param>
+    /// <param name="token"></param>
     /// <returns></returns>
-    public string GetCommunitiesAsHtml(string path)
+    public async Task<string> GetCommunitiesAsHtml(string path, CancellationToken token = default)
     {
         var options = _optionsProvider.Value;
         var udapMetaData = (TUdapMetadata)Activator.CreateInstance(typeof(TUdapMetadata), options)!;
 
-        return udapMetaData.CommunitiesAsHtml(path);
+        var store = await _certificateStore.Resolve(token);
+        var pathUri = new Uri(path.TrimEnd('/'));
+        var hostAuthority = $"{pathUri.Scheme}://{pathUri.Authority}";
+
+        var sb = new StringBuilder();
+        sb.AppendLine("<!DOCTYPE html>");
+        sb.AppendLine("<html><head>");
+        sb.AppendLine("<title>Supported UDAP Communities</title>");
+        sb.AppendLine("<style>");
+        sb.AppendLine("  body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; max-width: 960px; margin: 2rem auto; padding: 0 1rem; color: #1a1a1a; }");
+        sb.AppendLine("  h1 { font-size: 1.4rem; border-bottom: 2px solid #0078d4; padding-bottom: 0.4rem; }");
+        sb.AppendLine("  .community { margin-bottom: 1.2rem; }");
+        sb.AppendLine("  .community-name { font-weight: 600; font-size: 1rem; margin-bottom: 0.3rem; }");
+        sb.AppendLine("  .community a { display: inline-block; color: #0078d4; text-decoration: none; padding: 0.15rem 0; font-size: 0.9rem; }");
+        sb.AppendLine("  .community a:hover { text-decoration: underline; }");
+        sb.AppendLine("  .san-list { margin-left: 1.2rem; }");
+        sb.AppendLine("</style>");
+        sb.AppendLine("</head><body>");
+        sb.AppendLine("<h1>Supported UDAP Communities</h1>");
+
+        foreach (var community in udapMetaData.Communities())
+        {
+            var communityCerts = store.IssuedCertificates
+                .Where(c => c.Community == community)
+                .ToList();
+
+            var matchingSans = communityCerts
+                .SelectMany(c => c.SubjectAltNames)
+                .Where(san => san.StartsWith(hostAuthority, StringComparison.OrdinalIgnoreCase))
+                .Distinct(StringComparer.OrdinalIgnoreCase)
+                .OrderBy(san => san)
+                .ToList();
+
+            sb.AppendLine("<div class=\"community\">");
+
+            if (matchingSans.Count > 1)
+            {
+                sb.AppendLine($"  <div class=\"community-name\">{community}</div>");
+                sb.AppendLine("  <div class=\"san-list\">");
+                foreach (var san in matchingSans)
+                {
+                    var sanPath = san.TrimEnd('/');
+                    var href = $"{sanPath}/.well-known/udap?community={community}";
+                    sb.AppendLine($"    <a href=\"{href}\" target=\"_blank\">{sanPath}</a><br/>");
+                }
+                sb.AppendLine("  </div>");
+            }
+            else
+            {
+                var href = $"{path.TrimEnd('/')}/.well-known/udap?community={community}";
+                sb.AppendLine($"  <a href=\"{href}\" target=\"_blank\">{community}</a>");
+            }
+
+            sb.AppendLine("</div>");
+        }
+
+        sb.AppendLine("</body></html>");
+        return sb.ToString();
     }
 
     /// <summary>

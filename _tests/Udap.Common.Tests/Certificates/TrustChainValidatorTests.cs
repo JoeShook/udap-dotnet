@@ -145,7 +145,7 @@ public class TrustChainValidatorTests
     }
 
     [Fact]
-    public Task FindCommunityTest()
+    public async Task FindCommunityTest()
     {
         var file = _configuration["UdapMetadataOptionsFile"] ?? "udap.metadata.options.json";
         var json = File.ReadAllText(file);
@@ -171,12 +171,11 @@ public class TrustChainValidatorTests
         Assert.Contains(communities, c => c == "udap://expired.fhirlabs.net/");
         Assert.Contains(communities, c => c == "udap://untrusted.fhirlabs.net/");
 
-        var communityHtml = metaDataBuilder.GetCommunitiesAsHtml("https://baseurl");
+        var communityHtml = await metaDataBuilder.GetCommunitiesAsHtml("https://baseurl");
 
         Assert.False(string.IsNullOrWhiteSpace(communityHtml));
         Assert.Contains("href=\"https://baseurl/.well-known/udap?community=udap://fhirlabs.net\"", communityHtml);
         Assert.Contains("href=\"https://baseurl/.well-known/udap?community=udap://untrusted.fhirlabs.net/\"", communityHtml);
-        return Task.CompletedTask;
     }
 
     [Fact]

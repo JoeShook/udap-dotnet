@@ -1470,7 +1470,7 @@ public partial class BuildTestCerts : CertificateBase
                 rootCA,
                 subCA.GetRSAPrivateKey()!,
                 $"CN=fhirlabs.net {segment}, OU=UDAP, O=Fhir Coding, L=Portland, S=Oregon, C=US",
-                new List<string> { $"https://localhost:7016/{segment}/fhir/r4", $"https://localhost:7074/{segment}/fhir/r4", $"https://fhirlabs.net/{segment}/fhir/r4" },
+                new List<string> { $"https://localhost:7016/{segment}/fhir/r4", $"https://localhost:7074/{segment}/fhir/r4", $"https://host.docker.internal:7016/{segment}/fhir/r4", $"https://fhirlabs.net/{segment}/fhir/r4" },
                 $"{SureFhirlabsUdapIssued}/fhirlabs.net.{segment}.client",
                 SureFhirLabsIntermediateCrl,
                 SureFhirLabsIntermediatePublicCertHosted

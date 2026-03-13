@@ -31,7 +31,10 @@
       "Bash(echo No DPoP in README files:*)",
       "Bash(dotnet restore:*)",
       "Bash(find examples:*)",
-      "Bash(do unix2dos:*)"
+      "Bash(do unix2dos:*)",
+      "Bash(xargs grep:*)",
+      "WebFetch(domain:raw.githubusercontent.com)",
+      "Bash(gh search:*)"
     ]
   }
 }

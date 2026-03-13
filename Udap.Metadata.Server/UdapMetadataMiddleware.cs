@@ -42,7 +42,7 @@ public class UdapMetadataMiddleware<TUdapMetadataOptions, TUdapMetadata>
             if (context.Request.Method == HttpMethods.Get)
             {
                 var endpoint = context.RequestServices.GetRequiredService<UdapMetaDataEndpoint<TUdapMetadataOptions, TUdapMetadata>>();
-                var result = endpoint.GetCommunitiesAsHtml(context);
+                var result = await endpoint.GetCommunitiesAsHtml(context);
                 await result.ExecuteAsync(context);
                 return;
             }
