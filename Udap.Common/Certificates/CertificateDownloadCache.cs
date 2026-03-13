@@ -7,7 +7,6 @@
 // */
 #endregion
 
-using System.Collections.Concurrent;
 using System.Security.Cryptography.X509Certificates;
 using Microsoft.Extensions.Logging;
 using Org.BouncyCastle.X509;
@@ -29,9 +28,6 @@ public class CertificateDownloadCache : ICertificateDownloadCache
 
     private const string IntermediatePrefix = "intermediate:";
     private const string CrlPrefix = "crl:";
-
-    private readonly ConcurrentDictionary<string, byte> _intermediateKeys = new();
-    private readonly ConcurrentDictionary<string, byte> _crlKeys = new();
 
     private readonly IFusionCache _cache;
     private readonly HttpClient _httpClient;
@@ -75,7 +71,6 @@ public class CertificateDownloadCache : ICertificateDownloadCache
             }
 
             await _cache.SetAsync(cacheKey, data, options, cancellationToken);
-            _intermediateKeys.TryAdd(url, 0);
 
             return cert;
         }
@@ -113,7 +108,6 @@ public class CertificateDownloadCache : ICertificateDownloadCache
             }
 
             await _cache.SetAsync(cacheKey, data, options, cancellationToken);
-            _crlKeys.TryAdd(url, 0);
 
             return crl;
         }
@@ -128,7 +122,6 @@ public class CertificateDownloadCache : ICertificateDownloadCache
     public async Task RemoveIntermediateAsync(string url, CancellationToken cancellationToken = default)
     {
         await _cache.RemoveAsync($"{IntermediatePrefix}{url}", token: cancellationToken);
-        _intermediateKeys.TryRemove(url, out _);
         _logger.LogDebug("Removed cached intermediate certificate for {Url}", url);
     }
 
@@ -136,45 +129,6 @@ public class CertificateDownloadCache : ICertificateDownloadCache
     public async Task RemoveCrlAsync(string url, CancellationToken cancellationToken = default)
     {
         await _cache.RemoveAsync($"{CrlPrefix}{url}", token: cancellationToken);
-        _crlKeys.TryRemove(url, out _);
         _logger.LogDebug("Removed cached CRL for {Url}", url);
     }
-
-    /// <inheritdoc />
-    public async Task RemoveAllIntermediatesAsync(CancellationToken cancellationToken = default)
-    {
-        foreach (var url in _intermediateKeys.Keys)
-        {
-            await _cache.RemoveAsync($"{IntermediatePrefix}{url}", token: cancellationToken);
-        }
-
-        _intermediateKeys.Clear();
-        _logger.LogInformation("Removed all cached intermediate certificates");
-    }
-
-    /// <inheritdoc />
-    public async Task RemoveAllCrlsAsync(CancellationToken cancellationToken = default)
-    {
-        foreach (var url in _crlKeys.Keys)
-        {
-            await _cache.RemoveAsync($"{CrlPrefix}{url}", token: cancellationToken);
-        }
-
-        _crlKeys.Clear();
-        _logger.LogInformation("Removed all cached CRLs");
-    }
-
-    /// <inheritdoc />
-    public async Task RemoveAllAsync(CancellationToken cancellationToken = default)
-    {
-        await RemoveAllIntermediatesAsync(cancellationToken);
-        await RemoveAllCrlsAsync(cancellationToken);
-        _logger.LogInformation("Certificate download cache cleared");
-    }
-
-    /// <inheritdoc />
-    public IReadOnlyCollection<string> CachedIntermediateUrls => _intermediateKeys.Keys.ToList().AsReadOnly();
-
-    /// <inheritdoc />
-    public IReadOnlyCollection<string> CachedCrlUrls => _crlKeys.Keys.ToList().AsReadOnly();
 }

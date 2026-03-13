@@ -39,29 +39,4 @@ public interface ICertificateDownloadCache
     /// Remove a specific CRL from the cache by its CDP URL.
     /// </summary>
     Task RemoveCrlAsync(string url, CancellationToken cancellationToken = default);
-
-    /// <summary>
-    /// Remove all cached intermediate certificates.
-    /// </summary>
-    Task RemoveAllIntermediatesAsync(CancellationToken cancellationToken = default);
-
-    /// <summary>
-    /// Remove all cached CRLs.
-    /// </summary>
-    Task RemoveAllCrlsAsync(CancellationToken cancellationToken = default);
-
-    /// <summary>
-    /// Remove all cached items (intermediates and CRLs).
-    /// </summary>
-    Task RemoveAllAsync(CancellationToken cancellationToken = default);
-
-    /// <summary>
-    /// URLs of currently cached intermediate certificates.
-    /// </summary>
-    IReadOnlyCollection<string> CachedIntermediateUrls { get; }
-
-    /// <summary>
-    /// URLs of currently cached CRLs.
-    /// </summary>
-    IReadOnlyCollection<string> CachedCrlUrls { get; }
 }
