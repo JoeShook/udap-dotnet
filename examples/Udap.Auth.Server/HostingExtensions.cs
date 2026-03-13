@@ -19,7 +19,9 @@ using OpenTelemetry.Trace;
 using Serilog;
 using Udap.Client.Configuration;
 using Udap.Common;
+using Udap.Common.Certificates;
 using Udap.Model;
+using ZiggyCreatures.Caching.Fusion;
 using Udap.Server.Configuration;
 using Udap.Server.Security.Authentication.TieredOAuth;
 using Udap.Server.Storage.DbContexts;
@@ -64,6 +66,13 @@ internal static class HostingExtensions
         
         
         builder.Services.Configure<UdapClientOptions>(builder.Configuration.GetSection("UdapClientOptions"));
+
+        builder.Services.AddUdapCertificateCache()
+            .WithDefaultEntryOptions(new FusionCacheEntryOptions
+            {
+                Duration = TimeSpan.FromHours(12),
+                FailSafeMaxDuration = TimeSpan.FromHours(48)
+            });
 
         builder.Services.AddUdapServer(
                 options =>

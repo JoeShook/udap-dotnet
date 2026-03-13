@@ -42,7 +42,7 @@ namespace Udap.Common.Certificates
     {
         private readonly ChainProblemStatus _problemFlags;
         private readonly bool _checkRevocation;
-        private readonly CertificateDownloadCache? _downloadCache;
+        private readonly ICertificateDownloadCache? _downloadCache;
         private readonly ILogger<TrustChainValidator> _logger;
         private const int MaxChainDepth = 10;
 
@@ -76,7 +76,7 @@ namespace Udap.Common.Certificates
         /// </summary>
         public TrustChainValidator(
             ILogger<TrustChainValidator> logger,
-            CertificateDownloadCache? downloadCache = null)
+            ICertificateDownloadCache? downloadCache = null)
             : this(DefaultProblemFlags, true, logger, downloadCache)
         {
         }
@@ -88,7 +88,7 @@ namespace Udap.Common.Certificates
             ChainProblemStatus problemFlags,
             bool checkRevocation,
             ILogger<TrustChainValidator> logger,
-            CertificateDownloadCache? downloadCache = null)
+            ICertificateDownloadCache? downloadCache = null)
         {
             _problemFlags = problemFlags;
             _checkRevocation = checkRevocation;

@@ -17,6 +17,7 @@ using Microsoft.Extensions.Options;
 using Microsoft.IdentityModel.Tokens;
 using Udap.Common.Certificates;
 using Udap.Common.Models;
+using ZiggyCreatures.Caching.Fusion;
 using Udap.Model;
 using Udap.Server.Registration;
 using Udap.Server.Validation;
@@ -49,8 +50,15 @@ public static class UdapConfigurationServiceCollectionExtensions
         builder.Services.TryAddTransient<IUdapDynamicClientRegistrationValidator, UdapDynamicClientRegistrationValidator>();
         builder.Services.TryAddTransient<IUdapDynamicClientRegistrationProcessor, UdapDynamicClientRegistrationProcessor>();
         builder.Services.TryAddSingleton<TrustChainValidator>();
+
+        if (!builder.Services.Any(sd => sd.ServiceType == typeof(UdapCertificateCacheMarker)))
+        {
+            builder.Services.AddFusionCache(CertificateDownloadCache.CacheName);
+            builder.Services.AddSingleton<UdapCertificateCacheMarker>();
+        }
+
         builder.Services.AddHttpClient<CertificateDownloadCache>();
-        builder.Services.TryAddSingleton<CertificateDownloadCache>();
+        builder.Services.TryAddSingleton<ICertificateDownloadCache, CertificateDownloadCache>();
 
         return builder;
     }

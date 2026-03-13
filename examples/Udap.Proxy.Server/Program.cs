@@ -25,6 +25,7 @@ using Firely.Fhir.Validation;
 using Microsoft.AspNetCore.Http.Json;
 using Udap.CdsHooks.Model;
 using Udap.Common;
+using Udap.Common.Certificates;
 using Udap.Proxy.Server;
 using Udap.Proxy.Server.IDIPatientMatch;
 using Udap.Metadata.Server.Security;
@@ -64,7 +65,7 @@ builder.Services.Configure<UdapFileCertStoreManifest>(builder.Configuration.GetS
 builder.Services.AddCdsServices();
 builder.Services.AddSmartMetadata();
 builder.Services.AddUdapMetadataServer(builder.Configuration);
-builder.Services.AddFusionCache()
+builder.Services.AddFusionCache("FhirMetadata")
     .WithDefaultEntryOptions(new FusionCacheEntryOptions
     {
         Duration = TimeSpan.FromMinutes(10),
@@ -72,6 +73,15 @@ builder.Services.AddFusionCache()
         AllowTimedOutFactoryBackgroundCompletion = true,
         FailSafeMaxDuration = TimeSpan.FromHours(12)
     });
+
+builder.Services.AddUdapCertificateCache()
+    .WithDefaultEntryOptions(new FusionCacheEntryOptions
+    {
+        Duration = TimeSpan.FromHours(12),
+        FailSafeMaxDuration = TimeSpan.FromHours(48)
+    });
+builder.Services.AddHttpClient<CertificateDownloadCache>();
+builder.Services.AddSingleton<ICertificateDownloadCache, CertificateDownloadCache>();
 
 builder.Services.Configure<ForwardedHeadersOptions>(options =>
 {
@@ -172,7 +182,7 @@ builder.Services.AddReverseProxy()
                     return;
                 }
 
-                var cache = responseContext.HttpContext.RequestServices.GetRequiredService<IFusionCache>();
+                var cache = responseContext.HttpContext.RequestServices.GetRequiredService<IFusionCacheProvider>().GetCache("FhirMetadata");
                 var bytes = await cache.GetOrSetAsync("metadata", _ => GetFhirMetadata(responseContext, builder));
 
                 // Change Content-Length to match the modified body, or remove it.

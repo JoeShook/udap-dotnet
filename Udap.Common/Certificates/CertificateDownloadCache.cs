@@ -11,77 +11,72 @@ using System.Collections.Concurrent;
 using System.Security.Cryptography.X509Certificates;
 using Microsoft.Extensions.Logging;
 using Org.BouncyCastle.X509;
+using ZiggyCreatures.Caching.Fusion;
 
 namespace Udap.Common.Certificates;
 
 /// <summary>
-/// In-memory cache for AIA-fetched intermediate certificates and CRLs.
-/// Provides full control over cache lifetime — no OS-level caching involved.
-/// Thread-safe and flushable at any time without process restart.
+/// FusionCache-backed cache for AIA-fetched intermediate certificates and CRLs.
+/// Consumers can configure the named cache (<see cref="CacheName"/>) with any backend:
+/// in-memory (default), Redis, or hybrid.
 /// </summary>
-public class CertificateDownloadCache
+public class CertificateDownloadCache : ICertificateDownloadCache
 {
-    private readonly ConcurrentDictionary<string, CachedCrl> _crlCache = new();
-    private readonly ConcurrentDictionary<string, CachedIntermediate> _intermediateCache = new();
+    /// <summary>
+    /// Named cache identifier. Register with <c>services.AddFusionCache("UdapCertificates")</c>.
+    /// </summary>
+    public const string CacheName = "UdapCertificates";
+
+    private const string IntermediatePrefix = "intermediate:";
+    private const string CrlPrefix = "crl:";
+
+    private readonly ConcurrentDictionary<string, byte> _intermediateKeys = new();
+    private readonly ConcurrentDictionary<string, byte> _crlKeys = new();
+
+    private readonly IFusionCache _cache;
     private readonly HttpClient _httpClient;
     private readonly ILogger<CertificateDownloadCache> _logger;
     private readonly TimeSpan _defaultCrlTtl;
 
     public CertificateDownloadCache(
+        IFusionCacheProvider cacheProvider,
         HttpClient httpClient,
         ILogger<CertificateDownloadCache> logger,
         TimeSpan? defaultCrlTtl = null)
     {
+        _cache = cacheProvider.GetCache(CacheName);
         _httpClient = httpClient;
         _logger = logger;
         _defaultCrlTtl = defaultCrlTtl ?? TimeSpan.FromHours(12);
     }
 
-    /// <summary>
-    /// Flush all cached CRLs and intermediate certificates immediately.
-    /// Takes effect instantly — no process restart required.
-    /// </summary>
-    public void Flush()
-    {
-        _crlCache.Clear();
-        _intermediateCache.Clear();
-        _logger.LogInformation("Certificate download cache flushed");
-    }
-
-    /// <summary>
-    /// Flush only CRL cache entries.
-    /// </summary>
-    public void FlushCrls()
-    {
-        _crlCache.Clear();
-        _logger.LogInformation("CRL cache flushed");
-    }
-
-    /// <summary>
-    /// Flush only intermediate certificate cache entries.
-    /// </summary>
-    public void FlushIntermediates()
-    {
-        _intermediateCache.Clear();
-        _logger.LogInformation("Intermediate certificate cache flushed");
-    }
-
-    /// <summary>
-    /// Download an intermediate certificate from the given AIA URL, with caching.
-    /// </summary>
+    /// <inheritdoc />
     public async Task<X509Certificate2?> GetIntermediateCertificateAsync(string url, CancellationToken cancellationToken = default)
     {
-        if (_intermediateCache.TryGetValue(url, out var cached) && !cached.IsExpired)
+        var cacheKey = $"{IntermediatePrefix}{url}";
+
+        var result = await _cache.TryGetAsync<byte[]>(cacheKey, token: cancellationToken);
+        if (result.HasValue)
         {
-            return cached.Certificate;
+            return new X509Certificate2(result.Value);
         }
 
         try
         {
             _logger.LogDebug("Downloading intermediate certificate from {Url}", url);
-            var bytes = await _httpClient.GetByteArrayAsync(url, cancellationToken);
-            var cert = new X509Certificate2(bytes);
-            _intermediateCache[url] = new CachedIntermediate(cert);
+            var data = await _httpClient.GetByteArrayAsync(url, cancellationToken);
+            var cert = new X509Certificate2(data);
+
+            var timeToExpiry = cert.NotAfter.ToUniversalTime() - DateTime.UtcNow;
+            var options = new FusionCacheEntryOptions();
+            if (timeToExpiry > TimeSpan.Zero)
+            {
+                options.Duration = timeToExpiry;
+            }
+
+            await _cache.SetAsync(cacheKey, data, options, cancellationToken);
+            _intermediateKeys.TryAdd(url, 0);
+
             return cert;
         }
         catch (Exception ex)
@@ -91,27 +86,35 @@ public class CertificateDownloadCache
         }
     }
 
-    /// <summary>
-    /// Download a CRL from the given CDP URL, with caching.
-    /// Respects the CRL's nextUpdate field for cache expiry.
-    /// </summary>
+    /// <inheritdoc />
     public async Task<X509Crl?> GetCrlAsync(string url, CancellationToken cancellationToken = default)
     {
-        if (_crlCache.TryGetValue(url, out var cached) && !cached.IsExpired)
+        var cacheKey = $"{CrlPrefix}{url}";
+
+        var result = await _cache.TryGetAsync<byte[]>(cacheKey, token: cancellationToken);
+        if (result.HasValue)
         {
-            return cached.Crl;
+            return new X509CrlParser().ReadCrl(result.Value);
         }
 
         try
         {
             _logger.LogDebug("Downloading CRL from {Url}", url);
-            var bytes = await _httpClient.GetByteArrayAsync(url, cancellationToken);
-            var crlParser = new X509CrlParser();
-            var crl = crlParser.ReadCrl(bytes);
+            var data = await _httpClient.GetByteArrayAsync(url, cancellationToken);
 
+            var crl = new X509CrlParser().ReadCrl(data);
             var expiry = crl.NextUpdate ?? DateTime.UtcNow.Add(_defaultCrlTtl);
+            var timeToExpiry = expiry.ToUniversalTime() - DateTime.UtcNow;
 
-            _crlCache[url] = new CachedCrl(crl, expiry);
+            var options = new FusionCacheEntryOptions();
+            if (timeToExpiry > TimeSpan.Zero)
+            {
+                options.Duration = timeToExpiry;
+            }
+
+            await _cache.SetAsync(cacheKey, data, options, cancellationToken);
+            _crlKeys.TryAdd(url, 0);
+
             return crl;
         }
         catch (Exception ex)
@@ -121,37 +124,57 @@ public class CertificateDownloadCache
         }
     }
 
-    /// <summary>
-    /// Number of cached intermediate certificates.
-    /// </summary>
-    public int IntermediateCacheCount => _intermediateCache.Count;
-
-    /// <summary>
-    /// Number of cached CRLs.
-    /// </summary>
-    public int CrlCacheCount => _crlCache.Count;
-
-    private class CachedIntermediate
+    /// <inheritdoc />
+    public async Task RemoveIntermediateAsync(string url, CancellationToken cancellationToken = default)
     {
-        public CachedIntermediate(X509Certificate2 certificate)
-        {
-            Certificate = certificate;
-        }
-
-        public X509Certificate2 Certificate { get; }
-        public bool IsExpired => DateTime.UtcNow >= Certificate.NotAfter.ToUniversalTime();
+        await _cache.RemoveAsync($"{IntermediatePrefix}{url}", token: cancellationToken);
+        _intermediateKeys.TryRemove(url, out _);
+        _logger.LogDebug("Removed cached intermediate certificate for {Url}", url);
     }
 
-    private class CachedCrl
+    /// <inheritdoc />
+    public async Task RemoveCrlAsync(string url, CancellationToken cancellationToken = default)
     {
-        public CachedCrl(X509Crl crl, DateTime expiresUtc)
+        await _cache.RemoveAsync($"{CrlPrefix}{url}", token: cancellationToken);
+        _crlKeys.TryRemove(url, out _);
+        _logger.LogDebug("Removed cached CRL for {Url}", url);
+    }
+
+    /// <inheritdoc />
+    public async Task RemoveAllIntermediatesAsync(CancellationToken cancellationToken = default)
+    {
+        foreach (var url in _intermediateKeys.Keys)
         {
-            Crl = crl;
-            ExpiresUtc = expiresUtc;
+            await _cache.RemoveAsync($"{IntermediatePrefix}{url}", token: cancellationToken);
         }
 
-        public X509Crl Crl { get; }
-        public DateTime ExpiresUtc { get; }
-        public bool IsExpired => DateTime.UtcNow >= ExpiresUtc;
+        _intermediateKeys.Clear();
+        _logger.LogInformation("Removed all cached intermediate certificates");
     }
+
+    /// <inheritdoc />
+    public async Task RemoveAllCrlsAsync(CancellationToken cancellationToken = default)
+    {
+        foreach (var url in _crlKeys.Keys)
+        {
+            await _cache.RemoveAsync($"{CrlPrefix}{url}", token: cancellationToken);
+        }
+
+        _crlKeys.Clear();
+        _logger.LogInformation("Removed all cached CRLs");
+    }
+
+    /// <inheritdoc />
+    public async Task RemoveAllAsync(CancellationToken cancellationToken = default)
+    {
+        await RemoveAllIntermediatesAsync(cancellationToken);
+        await RemoveAllCrlsAsync(cancellationToken);
+        _logger.LogInformation("Certificate download cache cleared");
+    }
+
+    /// <inheritdoc />
+    public IReadOnlyCollection<string> CachedIntermediateUrls => _intermediateKeys.Keys.ToList().AsReadOnly();
+
+    /// <inheritdoc />
+    public IReadOnlyCollection<string> CachedCrlUrls => _crlKeys.Keys.ToList().AsReadOnly();
 }
