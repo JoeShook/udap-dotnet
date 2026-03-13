@@ -34,7 +34,11 @@
       "Bash(do unix2dos:*)",
       "Bash(xargs grep:*)",
       "WebFetch(domain:raw.githubusercontent.com)",
-      "Bash(gh search:*)"
+      "Bash(gh search:*)",
+      "Bash(dotnet list:*)",
+      "Bash(dotnet:*)",
+      "Bash(rm:*)",
+      "Bash(node:*)"
     ]
   }
 }

@@ -75,16 +75,20 @@ namespace Udap.Common.Certificates
 
         /// <summary>
         /// Creates an instance with default problem flags and online revocation checking.
+        /// When no <see cref="ICertificateDownloadCache"/> is registered, a default HttpClient
+        /// is created for direct CRL/AIA downloads.
         /// </summary>
         public TrustChainValidator(
             ILogger<TrustChainValidator> logger,
             ICertificateDownloadCache? downloadCache = null)
-            : this(DefaultProblemFlags, true, logger, downloadCache)
+            : this(DefaultProblemFlags, true, logger, downloadCache, downloadCache == null ? new HttpClient() : null)
         {
         }
 
         /// <summary>
         /// Creates an instance with custom problem flags and revocation settings.
+        /// No automatic HttpClient is created; CRL/AIA downloads require either a
+        /// <see cref="ICertificateDownloadCache"/> or an explicit HttpClient via the 5-parameter constructor.
         /// </summary>
         public TrustChainValidator(
             ChainProblemStatus problemFlags,

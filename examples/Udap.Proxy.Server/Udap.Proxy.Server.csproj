@@ -13,8 +13,8 @@
 
   <ItemGroup>
 	  <PackageReference Include="Duende.AspNetCore.Authentication.JwtBearer" Version="0.3.0" />
-	  <PackageReference Include="Firely.Fhir.Packages" Version="5.0.1" />
-    <PackageReference Include="Firely.Fhir.Validation.R4B" Version="3.1.0" />
+	  <PackageReference Include="Firely.Fhir.Packages" Version="4.9.1" />
+    <PackageReference Include="Firely.Fhir.Validation.R4B" Version="2.7.1" />
     <PackageReference Include="Google.Apis.Auth" Version="1.73.0" />
     <PackageReference Include="LazyCache" Version="2.4.0" />
     <PackageReference Include="Microsoft.AspNetCore.Authentication.JwtBearer" Version="10.0.3" />
