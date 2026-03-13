@@ -15,6 +15,11 @@
   </PropertyGroup>
 
   <ItemGroup>
+    <PackageReference Include="Serilog.AspNetCore" />
+    <PackageReference Include="Serilog.Enrichers.Thread" />
+  </ItemGroup>
+
+  <ItemGroup>
     <Content Remove="wwwroot\certs\.gitignore" />
     <Content Remove="wwwroot\certs\SureFhirmTLS_Intermediate.cer" />
     <Content Remove="wwwroot\crl\.gitignore" />

@@ -1,8 +1,10 @@
 <Project>
   <PropertyGroup>
     <ManagePackageVersionsCentrally>true</ManagePackageVersionsCentrally>
+    <CentralPackageTransitivePinningEnabled>true</CentralPackageTransitivePinningEnabled>
   </PropertyGroup>
   <ItemGroup>
+    <PackageVersion Include="Microsoft.Bcl.Memory" Version="10.0.5" />
     <!-- https://learn.microsoft.com/en-us/nuget/concepts/package-versioning#version-ranges -->
     <PackageVersion Include="Duende.IdentityServer" Version="7.4.6" />
     <PackageVersion Include="Duende.IdentityServer.Storage" Version="7.4.6" />
