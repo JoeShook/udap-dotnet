@@ -43,8 +43,10 @@ namespace Udap.Common.Certificates
         private readonly ChainProblemStatus _problemFlags;
         private readonly bool _checkRevocation;
         private readonly ICertificateDownloadCache? _downloadCache;
+        private readonly HttpClient? _httpClient;
         private readonly ILogger<TrustChainValidator> _logger;
         private const int MaxChainDepth = 10;
+        private bool _noCacheWarningLogged;
 
         /// <summary>
         /// Event fired when a certificate is untrusted
@@ -89,11 +91,26 @@ namespace Udap.Common.Certificates
             bool checkRevocation,
             ILogger<TrustChainValidator> logger,
             ICertificateDownloadCache? downloadCache = null)
+            : this(problemFlags, checkRevocation, logger, downloadCache, null)
+        {
+        }
+
+        /// <summary>
+        /// Creates an instance with custom problem flags, revocation settings, and an optional HttpClient
+        /// for direct CRL/AIA downloads when no <see cref="ICertificateDownloadCache"/> is registered.
+        /// </summary>
+        public TrustChainValidator(
+            ChainProblemStatus problemFlags,
+            bool checkRevocation,
+            ILogger<TrustChainValidator> logger,
+            ICertificateDownloadCache? downloadCache,
+            HttpClient? httpClient)
         {
             _problemFlags = problemFlags;
             _checkRevocation = checkRevocation;
             _logger = logger;
             _downloadCache = downloadCache;
+            _httpClient = httpClient;
         }
 
         public async Task<bool> IsTrustedCertificateAsync(
@@ -316,7 +333,7 @@ namespace Udap.Common.Certificates
                 issuer = FindIssuer(current, intermediates);
 
                 // If not found, try AIA chasing
-                if (issuer == null && _downloadCache != null)
+                if (issuer == null && (_downloadCache != null || _httpClient != null))
                 {
                     issuer = await ChaseAiaAsync(current, cancellationToken);
 
@@ -446,7 +463,7 @@ namespace Udap.Common.Certificates
 
                     _logger.LogDebug("AIA chasing intermediate from {Url}", url);
 
-                    var intermediateCert = await _downloadCache!.GetIntermediateCertificateAsync(url, cancellationToken);
+                    var intermediateCert = await DownloadIntermediateCertificateAsync(url, cancellationToken);
                     if (intermediateCert != null)
                     {
                         var parser = new X509CertificateParser();
@@ -471,6 +488,61 @@ namespace Udap.Common.Certificates
             }
 
             return null;
+        }
+
+        private async Task<X509Certificate2?> DownloadIntermediateCertificateAsync(
+            string url, CancellationToken cancellationToken)
+        {
+            if (_downloadCache != null)
+            {
+                return await _downloadCache.GetIntermediateCertificateAsync(url, cancellationToken);
+            }
+
+            LogNoCacheWarning();
+
+            try
+            {
+                var data = await _httpClient!.GetByteArrayAsync(url, cancellationToken);
+                return new X509Certificate2(data);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogWarning(ex, "Failed to download intermediate certificate from {Url}", url);
+                return null;
+            }
+        }
+
+        private async Task<X509Crl?> DownloadCrlAsync(
+            string url, CancellationToken cancellationToken)
+        {
+            if (_downloadCache != null)
+            {
+                return await _downloadCache.GetCrlAsync(url, cancellationToken);
+            }
+
+            LogNoCacheWarning();
+
+            try
+            {
+                var data = await _httpClient!.GetByteArrayAsync(url, cancellationToken);
+                return new X509CrlParser().ReadCrl(data);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogWarning(ex, "Failed to download CRL from {Url}", url);
+                return null;
+            }
+        }
+
+        private void LogNoCacheWarning()
+        {
+            if (!_noCacheWarningLogged)
+            {
+                _logger.LogWarning(
+                    "No ICertificateDownloadCache is configured. CRL and AIA downloads will not be cached, " +
+                    "which may impact performance. Consider registering an ICertificateDownloadCache implementation.");
+                _noCacheWarningLogged = true;
+            }
         }
 
         private async Task<List<ChainProblem>> CheckRevocationAsync(
@@ -522,18 +594,18 @@ namespace Udap.Common.Certificates
                             continue;
                         }
 
-                        if (_downloadCache == null)
+                        if (_downloadCache == null && _httpClient == null)
                         {
                             if ((_problemFlags & ChainProblemStatus.OfflineRevocation) != 0)
                             {
                                 problems.Add(new ChainProblem(
                                     ChainProblemStatus.OfflineRevocation,
-                                    $"No download cache available to check CRL at {url}"));
+                                    $"No download cache or HttpClient available to check CRL at {url}"));
                             }
                             return problems;
                         }
 
-                        var crl = await _downloadCache.GetCrlAsync(url, cancellationToken);
+                        var crl = await DownloadCrlAsync(url, cancellationToken);
 
                         if (crl == null)
                         {
