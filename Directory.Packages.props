@@ -23,7 +23,6 @@
     <PackageVersion Include="MSTest.TestAdapter" Version="4.1.0" />
     <PackageVersion Include="MSTest.TestFramework" Version="4.1.0" />
     <PackageVersion Include="Duende.IdentityModel" Version="8.0.0" />
-    <PackageVersion Include="AutoMapper" Version="14.0.0" />
     <PackageVersion Include="Duende.IdentityServer" Version="7.4.6" />
     <PackageVersion Include="Duende.IdentityServer.AspNetIdentity" Version="7.4.6" />
     <PackageVersion Include="Duende.IdentityServer.EntityFramework.Storage" Version="7.4.6" />

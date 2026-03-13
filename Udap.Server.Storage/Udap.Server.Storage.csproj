@@ -21,7 +21,6 @@
   </PropertyGroup>
 
 	<ItemGroup>
-		<PackageReference Include="AutoMapper" Version="14.0.0" />
 		<PackageReference Include="Duende.IdentityServer.EntityFramework.Storage" Version="7.4.6" />
 		<PackageReference Include="Duende.IdentityServer.Storage" Version="7.4.6" />
 		<PackageReference Include="Microsoft.AspNetCore.DataProtection.EntityFrameworkCore" Version="8.0.19" Condition="'$(TargetFramework)' == 'net8.0'" />

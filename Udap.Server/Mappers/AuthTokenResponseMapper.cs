@@ -1,36 +1,35 @@
-﻿#region (c) 2024 Joseph Shook. All rights reserved.
+#region (c) 2024 Joseph Shook. All rights reserved.
 // /*
 //  Authors:
 //     Joseph Shook   Joseph.Shook@Surescripts.com
-// 
+//
 //  See LICENSE in the project root for license information.
 // */
 #endregion
 
-using AutoMapper;
 using Udap.Common.Authentication;
 
 namespace Udap.Server.Mappers;
+
 public static class AuthTokenResponseMapper
 {
-    static AuthTokenResponseMapper()
-    {
-        Mapper = new MapperConfiguration(cfg =>
-            {
-                cfg.AddProfile<AuthTokenResponseMapperProfile>();
-            })
-            .CreateMapper();
-    }
-
-    private static IMapper Mapper { get; }
-
     /// <summary>
     /// Maps a <see cref="OAuthTokenResponse"/> to a <see cref="Microsoft.AspNetCore.Authentication.OAuth.OAuthTokenResponse"/>.
     /// </summary>
     /// <returns></returns>
     public static Microsoft.AspNetCore.Authentication.OAuth.OAuthTokenResponse ToMSAuthTokenResponse(this OAuthTokenResponse response)
     {
-        return Mapper.Map<Microsoft.AspNetCore.Authentication.OAuth.OAuthTokenResponse>(response);
+        if (response.Error != null)
+        {
+            return Microsoft.AspNetCore.Authentication.OAuth.OAuthTokenResponse.Failed(response.Error);
+        }
+
+        if (response.Response != null)
+        {
+            return Microsoft.AspNetCore.Authentication.OAuth.OAuthTokenResponse.Success(response.Response);
+        }
+
+        return Microsoft.AspNetCore.Authentication.OAuth.OAuthTokenResponse.Failed(new Exception("Unknown"));
     }
 
     /// <summary>
@@ -40,32 +39,16 @@ public static class AuthTokenResponseMapper
     /// <returns></returns>
     public static OAuthTokenResponse ToClientAuthTokenResponse(this Microsoft.AspNetCore.Authentication.OAuth.OAuthTokenResponse response)
     {
-        return Mapper.Map<OAuthTokenResponse>(response);
-    }
-}
+        if (response.Error != null)
+        {
+            return OAuthTokenResponse.Failed(response.Error);
+        }
 
-public class AuthTokenResponseMapperProfile : Profile
-{
-    public AuthTokenResponseMapperProfile()
-    {
-        CreateMap<OAuthTokenResponse, Microsoft.AspNetCore.Authentication.OAuth.OAuthTokenResponse>()
-            .ConstructUsing((src, _) =>
-            {
-                if (src.Error != null)
-                {
-                    return Microsoft.AspNetCore.Authentication.OAuth.OAuthTokenResponse.Failed(src.Error);
-                }
-                else
-                {
-                    if (src.Response != null)
-                    {
-                        return Microsoft.AspNetCore.Authentication.OAuth.OAuthTokenResponse.Success(src.Response);
-                    }
-                    else
-                    {
-                        return Microsoft.AspNetCore.Authentication.OAuth.OAuthTokenResponse.Failed(new Exception("Unknown"));
-                    }
-                }
-            });
+        if (response.Response != null)
+        {
+            return OAuthTokenResponse.Success(response.Response);
+        }
+
+        return OAuthTokenResponse.Failed(new Exception("Unknown"));
     }
 }

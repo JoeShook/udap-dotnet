@@ -44,8 +44,6 @@ try
     builder.Services.AddRazorPages();
     builder.Services.AddServerSideBlazor();
     builder.Services.AddMudServices();
-    builder.Services.AddAutoMapper(typeof(Program));
-
     _ = provider switch
     {
         "sqlite" => builder.Services.AddDbContext<IUdapCaContext, UdapCaContext>(

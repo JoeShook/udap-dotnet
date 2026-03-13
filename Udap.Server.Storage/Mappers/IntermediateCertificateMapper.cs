@@ -1,31 +1,19 @@
-﻿#region (c) 2022-2025 Joseph Shook. All rights reserved.
+#region (c) 2022-2025 Joseph Shook. All rights reserved.
 // /*
 //  Authors:
 //     Joseph Shook   Joseph.Shook@Surescripts.com
-// 
+//
 //  See LICENSE in the project root for license information.
 // */
 #endregion
 
 using System.Security.Cryptography.X509Certificates;
-using AutoMapper;
 using Udap.Server.Storage.Entities;
 
 namespace Udap.Server.Storage.Mappers;
 
 public static class IntermediateCertificateMapper
 {
-    static IntermediateCertificateMapper()
-    {
-        Mapper = new MapperConfiguration(cfg =>
-        {
-            cfg.AddProfile<IntermediateCertificateMapperProfile>();
-        })
-            .CreateMapper();
-    }
-
-    internal static IMapper Mapper { get; }
-
     /// <summary>
     /// Maps an entity to a model.
     /// </summary>
@@ -33,7 +21,20 @@ public static class IntermediateCertificateMapper
     /// <returns></returns>
     public static Udap.Common.Models.Intermediate ToModel(this Intermediate entity)
     {
-        return Mapper.Map<Udap.Common.Models.Intermediate>(entity);
+        var certBase64 = entity.X509Certificate
+            .Replace("-----BEGIN CERTIFICATE-----", "")
+            .Replace("-----END CERTIFICATE-----", "")
+            .Trim();
+
+        return new Udap.Common.Models.Intermediate(
+            new X509Certificate2(Convert.FromBase64String(certBase64)),
+            entity.Name)
+        {
+            Id = entity.Id,
+            AnchorId = entity.AnchorId,
+            Enabled = entity.Enabled,
+            Certificate = entity.X509Certificate
+        };
     }
 
     /// <summary>
@@ -43,32 +44,16 @@ public static class IntermediateCertificateMapper
     /// <returns></returns>
     public static Intermediate ToEntity(this Udap.Common.Models.Intermediate model)
     {
-        return Mapper.Map<Intermediate>(model);
+        return new Intermediate
+        {
+            Id = (int)model.Id,
+            AnchorId = (int)model.AnchorId,
+            Enabled = model.Enabled,
+            Name = model.Name,
+            X509Certificate = model.Certificate,
+            Thumbprint = model.Thumbprint,
+            BeginDate = model.BeginDate,
+            EndDate = model.EndDate
+        };
     }
 }
-
-public class IntermediateCertificateMapperProfile : Profile
-{
-    public IntermediateCertificateMapperProfile()
-    {
-        CreateMap<Intermediate, Udap.Common.Models.Intermediate>(MemberList.Destination)
-            .ConstructUsing(src => new Udap.Common.Models.Intermediate(
-                new X509Certificate2(Convert.FromBase64String(
-                    src.X509Certificate
-                        .Replace("-----BEGIN CERTIFICATE-----", "")
-                        .Replace("-----END CERTIFICATE-----", "")
-                        .Trim()
-                    )),
-                src.Name))
-
-
-            .ForMember(model => model.Certificate, opts =>
-                opts.MapFrom(entity => entity.X509Certificate))
-
-            .ReverseMap()
-
-            .ForMember(entity => entity.X509Certificate, opts =>
-                opts.MapFrom(model => model.Certificate));
-    }
-}
-
