@@ -167,5 +167,22 @@ public interface IUdapClient : IUdapClientEvents
     Task<IEnumerable<SecurityKey>?> ResolveJwtKeys(DiscoveryDocumentRequest? request = null, CancellationToken cancellationToken = default);
 
     Task<DiscoveryDocumentResponse> ResolveOpenIdConfig(DiscoveryDocumentRequest? request = null, CancellationToken cancellationToken = default);
-    
+
+    /// <summary>
+    /// Removes a cached AIA intermediate certificate by its download URL.
+    /// Requires <see cref="ICertificateDownloadCache"/> to be registered in DI.
+    /// </summary>
+    /// <param name="url">The AIA URL used to download the intermediate certificate.</param>
+    /// <param name="cancellationToken">A token to cancel the operation.</param>
+    /// <returns>A task that completes when the cache entry is removed.</returns>
+    Task RemoveCachedIntermediateAsync(string url, CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Removes a cached CRL by its distribution point URL.
+    /// Requires <see cref="ICertificateDownloadCache"/> to be registered in DI.
+    /// </summary>
+    /// <param name="url">The CDP URL used to download the CRL.</param>
+    /// <param name="cancellationToken">A token to cancel the operation.</param>
+    /// <returns>A task that completes when the cache entry is removed.</returns>
+    Task RemoveCachedCrlAsync(string url, CancellationToken cancellationToken = default);
 }

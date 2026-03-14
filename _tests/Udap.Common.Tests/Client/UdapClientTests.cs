@@ -399,4 +399,74 @@ public class UdapClientTests
 
         return (httpClientMock, udapClientDiscoveryValidator, udapClientIOptions, trustAnchorStore);
     }
+
+    [Fact]
+    public async Task RemoveCachedIntermediateAsync_WithCache_DelegatesToCache()
+    {
+        var (httpClientMock, udapClientDiscoveryValidator, udapClientIOptions, _) = await BuildClientSupport();
+
+        var cache = Substitute.For<ICertificateDownloadCache>();
+        var udapClient = new UdapClient(
+            httpClientMock,
+            udapClientDiscoveryValidator,
+            udapClientIOptions,
+            _serviceProvider.GetRequiredService<ILogger<UdapClient>>(),
+            certificateDownloadCache: cache);
+
+        await udapClient.RemoveCachedIntermediateAsync("https://example.com/intermediate.cer");
+
+        await cache.Received(1).RemoveIntermediateAsync("https://example.com/intermediate.cer", Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task RemoveCachedCrlAsync_WithCache_DelegatesToCache()
+    {
+        var (httpClientMock, udapClientDiscoveryValidator, udapClientIOptions, _) = await BuildClientSupport();
+
+        var cache = Substitute.For<ICertificateDownloadCache>();
+        var udapClient = new UdapClient(
+            httpClientMock,
+            udapClientDiscoveryValidator,
+            udapClientIOptions,
+            _serviceProvider.GetRequiredService<ILogger<UdapClient>>(),
+            certificateDownloadCache: cache);
+
+        await udapClient.RemoveCachedCrlAsync("https://example.com/crl.crl");
+
+        await cache.Received(1).RemoveCrlAsync("https://example.com/crl.crl", Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task RemoveCachedIntermediateAsync_WithoutCache_ThrowsInvalidOperationException()
+    {
+        var (httpClientMock, udapClientDiscoveryValidator, udapClientIOptions, _) = await BuildClientSupport();
+
+        var udapClient = new UdapClient(
+            httpClientMock,
+            udapClientDiscoveryValidator,
+            udapClientIOptions,
+            _serviceProvider.GetRequiredService<ILogger<UdapClient>>());
+
+        var ex = await Assert.ThrowsAsync<InvalidOperationException>(
+            () => udapClient.RemoveCachedIntermediateAsync("https://example.com/intermediate.cer"));
+
+        Assert.Contains(nameof(ICertificateDownloadCache), ex.Message);
+    }
+
+    [Fact]
+    public async Task RemoveCachedCrlAsync_WithoutCache_ThrowsInvalidOperationException()
+    {
+        var (httpClientMock, udapClientDiscoveryValidator, udapClientIOptions, _) = await BuildClientSupport();
+
+        var udapClient = new UdapClient(
+            httpClientMock,
+            udapClientDiscoveryValidator,
+            udapClientIOptions,
+            _serviceProvider.GetRequiredService<ILogger<UdapClient>>());
+
+        var ex = await Assert.ThrowsAsync<InvalidOperationException>(
+            () => udapClient.RemoveCachedCrlAsync("https://example.com/crl.crl"));
+
+        Assert.Contains(nameof(ICertificateDownloadCache), ex.Message);
+    }
 }
