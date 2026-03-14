@@ -98,6 +98,60 @@ public class ModelTests
 
 
     [Fact]
+    public void Anchor_DefaultConstructor_CanSetProperties()
+    {
+        var anchor = new Anchor();
+
+        anchor.Id = 1;
+        anchor.Enabled = true;
+        anchor.Name = "Test Anchor";
+        anchor.Community = "udap://test";
+        anchor.CommunityId = 5;
+        anchor.Certificate = "PEM-DATA";
+        anchor.Thumbprint = "ABC123";
+        anchor.BeginDate = new DateTime(2024, 1, 1);
+        anchor.EndDate = new DateTime(2025, 1, 1);
+        anchor.Intermediates = new List<Intermediate>();
+
+        Assert.Equal(1, anchor.Id);
+        Assert.True(anchor.Enabled);
+        Assert.Equal("Test Anchor", anchor.Name);
+        Assert.Equal("udap://test", anchor.Community);
+        Assert.Equal(5, anchor.CommunityId);
+        Assert.Equal("PEM-DATA", anchor.Certificate);
+        Assert.Equal("ABC123", anchor.Thumbprint);
+        Assert.Equal(new DateTime(2024, 1, 1), anchor.BeginDate);
+        Assert.Equal(new DateTime(2025, 1, 1), anchor.EndDate);
+        Assert.Empty(anchor.Intermediates);
+    }
+
+    [Fact]
+    public void Intermediate_DefaultConstructor_CanSetProperties()
+    {
+        var intermediate = new Intermediate();
+
+        intermediate.Id = 2;
+        intermediate.AnchorId = 1;
+        intermediate.Enabled = true;
+        intermediate.Name = "Test Intermediate";
+        intermediate.Certificate = "PEM-DATA";
+        intermediate.Thumbprint = "DEF456";
+        intermediate.BeginDate = new DateTime(2024, 1, 1);
+        intermediate.EndDate = new DateTime(2025, 1, 1);
+        intermediate.Anchor = new Anchor();
+
+        Assert.Equal(2, intermediate.Id);
+        Assert.Equal(1, intermediate.AnchorId);
+        Assert.True(intermediate.Enabled);
+        Assert.Equal("Test Intermediate", intermediate.Name);
+        Assert.Equal("PEM-DATA", intermediate.Certificate);
+        Assert.Equal("DEF456", intermediate.Thumbprint);
+        Assert.Equal(new DateTime(2024, 1, 1), intermediate.BeginDate);
+        Assert.Equal(new DateTime(2025, 1, 1), intermediate.EndDate);
+        Assert.NotNull(intermediate.Anchor);
+    }
+
+    [Fact]
     public void SimpleCommunityTest()
     {
         var community = new Community
@@ -139,6 +193,33 @@ public class ModelTests
         tieredClient.CommunityId = 10;
         tieredClient.Enabled = true;
         tieredClient.TokenEndpoint = "https://idp1.net/token";
+    }
+
+    [Fact]
+    public void DuplicateCommunityException_SetsMessage()
+    {
+        var exception = new DuplicateCommunityException("Community already exists");
+
+        Assert.Equal("Community already exists", exception.Message);
+        Assert.IsAssignableFrom<Exception>(exception);
+    }
+
+    [Fact]
+    public void DuplicateAnchorException_SetsMessage()
+    {
+        var exception = new DuplicateAnchorException("Anchor already exists");
+
+        Assert.Equal("Anchor already exists", exception.Message);
+        Assert.IsAssignableFrom<Exception>(exception);
+    }
+
+    [Fact]
+    public void DuplicateIntermediateCertificateException_SetsMessage()
+    {
+        var exception = new DuplicateIntermediateCertificateException("Intermediate already exists");
+
+        Assert.Equal("Intermediate already exists", exception.Message);
+        Assert.IsAssignableFrom<Exception>(exception);
     }
 }
 
