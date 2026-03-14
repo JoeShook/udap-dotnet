@@ -28,6 +28,7 @@ using Org.BouncyCastle.X509.Extension;
 using Udap.Common.Certificates;
 using Udap.Common.Extensions;
 using Udap.Common.Metadata;
+using Udap.Common.Models;
 using Udap.Model;
 using Udap.Util.Extensions;
 using Xunit.Abstractions;
@@ -1228,6 +1229,695 @@ public class TrustChainValidatorTests
     }
 
     [Fact]
+    public async Task IsTrustedCertificateAsync_ExceptionDuringValidation_FiresErrorEvent()
+    {
+        // Trigger the outer catch in IsTrustedCertificateAsync by passing an
+        // IEnumerable<Anchor> that throws when enumerated. The code calls
+        // anchors.ToList() inside the try block after chain building succeeds,
+        // causing an exception that the outer catch handles.
+        var (caKeyPair, bcRootCert) = CreateCaKeyPairAndRoot();
+        var leafSerialNumber = BigInteger.ProbablePrime(120, new Random());
+        const string crlUrl = "https://example.com/error-event.crl";
+        var bcLeafCert = CreateLeafCert(caKeyPair, bcRootCert, leafSerialNumber, crlUrl);
+
+        var crlGenerator = new X509V2CrlGenerator();
+        crlGenerator.SetIssuerDN(new X509Name("CN=Test Root CA"));
+        crlGenerator.SetThisUpdate(DateTime.UtcNow);
+        crlGenerator.SetNextUpdate(DateTime.UtcNow.AddHours(24));
+        var crl = crlGenerator.Generate(new Asn1SignatureFactory("SHA256WithRSA", caKeyPair.Private));
+
+        var handler = new MockHttpHandler();
+        handler.SetResponse(crlUrl, crl.GetEncoded());
+        var httpClient = new HttpClient(handler);
+
+        var services = new ServiceCollection();
+        services.AddLogging(b => b.AddXUnit(_testOutputHelper));
+        var sp = services.BuildServiceProvider();
+        var logger = sp.GetRequiredService<ILogger<TrustChainValidator>>();
+
+        var validator = new TrustChainValidator(
+            TrustChainValidator.DefaultProblemFlags,
+            true,
+            logger,
+            downloadCache: null,
+            httpClient: httpClient);
+
+        var errorEvents = new List<(X509Certificate2 cert, Exception ex)>();
+        var untrustedEvents = new List<X509Certificate2>();
+        validator.Error += (cert, ex) => errorEvents.Add((cert, ex));
+        validator.Untrusted += cert => untrustedEvents.Add(cert);
+
+        var leafDotNet = new X509Certificate2(bcLeafCert.GetEncoded());
+        var rootDotNet = new X509Certificate2(bcRootCert.GetEncoded());
+        var anchorCerts = new X509Certificate2Collection(rootDotNet);
+
+        // Create an IEnumerable<Anchor> that throws on enumeration.
+        // When the chain reaches the anchor, it calls anchors.ToList() which
+        // invokes GetEnumerator → throws → caught by outer catch → NotifyError.
+        var faultyAnchors = Substitute.For<IEnumerable<Anchor>>();
+        faultyAnchors.GetEnumerator().Returns(
+            _ => throw new InvalidOperationException("Simulated anchor store failure"));
+
+        var result = await validator.IsTrustedCertificateAsync(
+            "test_client",
+            leafDotNet,
+            intermediateCertificates: null,
+            anchorCerts,
+            anchors: faultyAnchors);
+
+        Assert.False(result.IsValid);
+        Assert.Empty(result.ChainElements); // outer catch returns empty
+
+        // Error event fires with the leaf cert and the exception
+        Assert.Single(errorEvents);
+        Assert.Equal(leafDotNet.Thumbprint, errorEvents[0].cert.Thumbprint);
+        Assert.IsType<InvalidOperationException>(errorEvents[0].ex);
+        Assert.Contains("Simulated anchor store failure", errorEvents[0].ex.Message);
+
+        // Untrusted event also fires (after the catch block)
+        Assert.Single(untrustedEvents);
+    }
+
+    // ========================================================================
+    // AIA Chasing Tests
+    // ========================================================================
+
+    [Fact]
+    public async Task AiaChasing_SuccessfulDownload_CompletesChain()
+    {
+        // Leaf → (AIA chase) → Intermediate → Root
+        // Intermediate is NOT provided; the validator must AIA-chase it.
+        const string aiaUrl = "https://example.com/intermediate.cer";
+        var (caKeyPair, bcRootCert, intKeyPair, bcIntCert, bcLeafCert) =
+            CreateThreeLevelPkiWithAia(aiaUrl);
+
+        var handler = new MockHttpHandler();
+        handler.SetResponse(aiaUrl, bcIntCert.GetEncoded());
+        var httpClient = new HttpClient(handler);
+
+        var services = new ServiceCollection();
+        services.AddLogging(b => b.AddXUnit(_testOutputHelper));
+        var sp = services.BuildServiceProvider();
+        var logger = sp.GetRequiredService<ILogger<TrustChainValidator>>();
+
+        var validator = new TrustChainValidator(
+            ChainProblemStatus.NotTimeValid |
+            ChainProblemStatus.NotSignatureValid |
+            ChainProblemStatus.InvalidBasicConstraints,
+            false, // no revocation checking
+            logger,
+            downloadCache: null,
+            httpClient: httpClient);
+
+        var leafDotNet = new X509Certificate2(bcLeafCert.GetEncoded());
+        var rootDotNet = new X509Certificate2(bcRootCert.GetEncoded());
+        var anchors = new X509Certificate2Collection(rootDotNet);
+
+        var result = await validator.IsTrustedCertificateAsync(
+            "test_client",
+            leafDotNet,
+            intermediateCertificates: null, // no intermediates provided
+            anchors);
+
+        Assert.True(result);
+        Assert.Equal(1, handler.CallCount(aiaUrl));
+    }
+
+    [Fact]
+    public async Task AiaChasing_ViaCache_CompletesChain()
+    {
+        const string aiaUrl = "https://example.com/cached-intermediate.cer";
+        var (caKeyPair, bcRootCert, intKeyPair, bcIntCert, bcLeafCert) =
+            CreateThreeLevelPkiWithAia(aiaUrl);
+
+        var handler = new MockHttpHandler();
+        handler.SetResponse(aiaUrl, bcIntCert.GetEncoded());
+        var httpClient = new HttpClient(handler);
+
+        var services = new ServiceCollection();
+        services.AddLogging(b => b.AddXUnit(_testOutputHelper));
+        services.AddFusionCache(CertificateDownloadCache.CacheName);
+        var sp = services.BuildServiceProvider();
+
+        var cacheProvider = sp.GetRequiredService<IFusionCacheProvider>();
+        var cacheLogger = sp.GetRequiredService<ILogger<CertificateDownloadCache>>();
+        var downloadCache = new CertificateDownloadCache(cacheProvider, httpClient, cacheLogger);
+
+        var logger = sp.GetRequiredService<ILogger<TrustChainValidator>>();
+
+        var validator = new TrustChainValidator(
+            ChainProblemStatus.NotTimeValid |
+            ChainProblemStatus.NotSignatureValid |
+            ChainProblemStatus.InvalidBasicConstraints,
+            false,
+            logger,
+            downloadCache: downloadCache);
+
+        var leafDotNet = new X509Certificate2(bcLeafCert.GetEncoded());
+        var rootDotNet = new X509Certificate2(bcRootCert.GetEncoded());
+        var anchors = new X509Certificate2Collection(rootDotNet);
+
+        // First call: downloads and caches
+        var result1 = await validator.IsTrustedCertificateAsync(
+            "test_client", leafDotNet, intermediateCertificates: null, anchors);
+        Assert.True(result1);
+        Assert.Equal(1, handler.CallCount(aiaUrl));
+
+        // Second call: served from cache, no additional HTTP call
+        var result2 = await validator.IsTrustedCertificateAsync(
+            "test_client", leafDotNet, intermediateCertificates: null, anchors);
+        Assert.True(result2);
+        Assert.Equal(1, handler.CallCount(aiaUrl));
+    }
+
+    [Fact]
+    public async Task AiaChasing_NoAiaExtension_ChainIncomplete()
+    {
+        // Leaf signed by intermediate, but no AIA and intermediate not provided → partial chain
+        var (caKeyPair, bcRootCert, intKeyPair, bcIntCert, bcLeafCert) =
+            CreateThreeLevelPkiWithAia(aiaUrl: null); // no AIA
+
+        var handler = new MockHttpHandler();
+        var httpClient = new HttpClient(handler);
+
+        var services = new ServiceCollection();
+        services.AddLogging(b => b.AddXUnit(_testOutputHelper));
+        var sp = services.BuildServiceProvider();
+        var logger = sp.GetRequiredService<ILogger<TrustChainValidator>>();
+
+        var validator = new TrustChainValidator(
+            ChainProblemStatus.NotTimeValid |
+            ChainProblemStatus.NotSignatureValid |
+            ChainProblemStatus.InvalidBasicConstraints,
+            false,
+            logger,
+            downloadCache: null,
+            httpClient: httpClient);
+
+        var untrustedEvents = new List<X509Certificate2>();
+        validator.Untrusted += cert => untrustedEvents.Add(cert);
+
+        var leafDotNet = new X509Certificate2(bcLeafCert.GetEncoded());
+        var rootDotNet = new X509Certificate2(bcRootCert.GetEncoded());
+        var anchors = new X509Certificate2Collection(rootDotNet);
+
+        var result = await validator.IsTrustedCertificateAsync(
+            "test_client",
+            leafDotNet,
+            intermediateCertificates: null,
+            anchors);
+
+        Assert.False(result);
+        Assert.Single(untrustedEvents); // couldn't reach anchor
+    }
+
+    [Fact]
+    public async Task AiaChasing_DownloadFails_ChainIncomplete()
+    {
+        const string aiaUrl = "https://example.com/missing-intermediate.cer";
+        var (caKeyPair, bcRootCert, intKeyPair, bcIntCert, bcLeafCert) =
+            CreateThreeLevelPkiWithAia(aiaUrl);
+
+        // Handler does NOT have the URL registered → 404
+        var handler = new MockHttpHandler();
+        var httpClient = new HttpClient(handler);
+
+        var services = new ServiceCollection();
+        services.AddLogging(b => b.AddXUnit(_testOutputHelper));
+        var sp = services.BuildServiceProvider();
+        var logger = sp.GetRequiredService<ILogger<TrustChainValidator>>();
+
+        var validator = new TrustChainValidator(
+            ChainProblemStatus.NotTimeValid |
+            ChainProblemStatus.NotSignatureValid |
+            ChainProblemStatus.InvalidBasicConstraints,
+            false,
+            logger,
+            downloadCache: null,
+            httpClient: httpClient);
+
+        var untrustedEvents = new List<X509Certificate2>();
+        validator.Untrusted += cert => untrustedEvents.Add(cert);
+
+        var leafDotNet = new X509Certificate2(bcLeafCert.GetEncoded());
+        var rootDotNet = new X509Certificate2(bcRootCert.GetEncoded());
+        var anchors = new X509Certificate2Collection(rootDotNet);
+
+        var result = await validator.IsTrustedCertificateAsync(
+            "test_client",
+            leafDotNet,
+            intermediateCertificates: null,
+            anchors);
+
+        Assert.False(result);
+        Assert.Single(untrustedEvents);
+        Assert.Equal(1, handler.CallCount(aiaUrl));
+    }
+
+    [Fact]
+    public async Task AiaChasing_FetchedCertNotIssuer_ChainIncomplete()
+    {
+        const string aiaUrl = "https://example.com/wrong-intermediate.cer";
+        var (caKeyPair, bcRootCert, intKeyPair, bcIntCert, bcLeafCert) =
+            CreateThreeLevelPkiWithAia(aiaUrl);
+
+        // Serve a completely different cert that won't verify as issuer
+        var (wrongKeyPair, wrongCert) = CreateCaKeyPairAndRoot(); // self-signed, wrong key
+
+        var handler = new MockHttpHandler();
+        handler.SetResponse(aiaUrl, wrongCert.GetEncoded());
+        var httpClient = new HttpClient(handler);
+
+        var services = new ServiceCollection();
+        services.AddLogging(b => b.AddXUnit(_testOutputHelper));
+        var sp = services.BuildServiceProvider();
+        var logger = sp.GetRequiredService<ILogger<TrustChainValidator>>();
+
+        var validator = new TrustChainValidator(
+            ChainProblemStatus.NotTimeValid |
+            ChainProblemStatus.NotSignatureValid |
+            ChainProblemStatus.InvalidBasicConstraints,
+            false,
+            logger,
+            downloadCache: null,
+            httpClient: httpClient);
+
+        var untrustedEvents = new List<X509Certificate2>();
+        validator.Untrusted += cert => untrustedEvents.Add(cert);
+
+        var leafDotNet = new X509Certificate2(bcLeafCert.GetEncoded());
+        var rootDotNet = new X509Certificate2(bcRootCert.GetEncoded());
+        var anchors = new X509Certificate2Collection(rootDotNet);
+
+        var result = await validator.IsTrustedCertificateAsync(
+            "test_client",
+            leafDotNet,
+            intermediateCertificates: null,
+            anchors);
+
+        Assert.False(result);
+        Assert.Single(untrustedEvents);
+    }
+
+    [Fact]
+    public async Task AiaChasing_NonCaIssuersMethod_IsSkipped()
+    {
+        // AIA with OCSP access method (not caIssuers) should be skipped.
+        // Add a second AIA entry with caIssuers that works.
+        const string aiaUrl = "https://example.com/aia-non-ca-issuers.cer";
+        var (caKeyPair, bcRootCert, intKeyPair, bcIntCert, bcLeafCert) =
+            CreateThreeLevelPkiWithMixedAia(aiaUrl);
+
+        var handler = new MockHttpHandler();
+        handler.SetResponse(aiaUrl, bcIntCert.GetEncoded());
+        var httpClient = new HttpClient(handler);
+
+        var services = new ServiceCollection();
+        services.AddLogging(b => b.AddXUnit(_testOutputHelper));
+        var sp = services.BuildServiceProvider();
+        var logger = sp.GetRequiredService<ILogger<TrustChainValidator>>();
+
+        var validator = new TrustChainValidator(
+            ChainProblemStatus.NotTimeValid |
+            ChainProblemStatus.NotSignatureValid |
+            ChainProblemStatus.InvalidBasicConstraints,
+            false,
+            logger,
+            downloadCache: null,
+            httpClient: httpClient);
+
+        var leafDotNet = new X509Certificate2(bcLeafCert.GetEncoded());
+        var rootDotNet = new X509Certificate2(bcRootCert.GetEncoded());
+        var anchors = new X509Certificate2Collection(rootDotNet);
+
+        var result = await validator.IsTrustedCertificateAsync(
+            "test_client",
+            leafDotNet,
+            intermediateCertificates: null,
+            anchors);
+
+        // OCSP entry was skipped, caIssuers entry was used
+        Assert.True(result);
+        Assert.Equal(1, handler.CallCount(aiaUrl));
+    }
+
+    [Fact]
+    public async Task AiaChasing_NonUriAccessLocation_IsSkipped()
+    {
+        // AIA with DirectoryName (not URI) should be skipped.
+        const string aiaUrl = "https://example.com/aia-after-dirname.cer";
+        var (caKeyPair, bcRootCert, intKeyPair, bcIntCert, bcLeafCert) =
+            CreateThreeLevelPkiWithNonUriAia(aiaUrl);
+
+        var handler = new MockHttpHandler();
+        handler.SetResponse(aiaUrl, bcIntCert.GetEncoded());
+        var httpClient = new HttpClient(handler);
+
+        var services = new ServiceCollection();
+        services.AddLogging(b => b.AddXUnit(_testOutputHelper));
+        var sp = services.BuildServiceProvider();
+        var logger = sp.GetRequiredService<ILogger<TrustChainValidator>>();
+
+        var validator = new TrustChainValidator(
+            ChainProblemStatus.NotTimeValid |
+            ChainProblemStatus.NotSignatureValid |
+            ChainProblemStatus.InvalidBasicConstraints,
+            false,
+            logger,
+            downloadCache: null,
+            httpClient: httpClient);
+
+        var leafDotNet = new X509Certificate2(bcLeafCert.GetEncoded());
+        var rootDotNet = new X509Certificate2(bcRootCert.GetEncoded());
+        var anchors = new X509Certificate2Collection(rootDotNet);
+
+        var result = await validator.IsTrustedCertificateAsync(
+            "test_client",
+            leafDotNet,
+            intermediateCertificates: null,
+            anchors);
+
+        // DirectoryName skipped, valid URI used
+        Assert.True(result);
+        Assert.Equal(1, handler.CallCount(aiaUrl));
+    }
+
+    [Fact]
+    public async Task AiaChasing_EmptyUrl_IsSkipped()
+    {
+        // AIA with empty URL should be skipped, valid URL should work.
+        const string aiaUrl = "https://example.com/aia-after-empty.cer";
+        var (caKeyPair, bcRootCert, intKeyPair, bcIntCert, bcLeafCert) =
+            CreateThreeLevelPkiWithEmptyAiaUrl(aiaUrl);
+
+        var handler = new MockHttpHandler();
+        handler.SetResponse(aiaUrl, bcIntCert.GetEncoded());
+        var httpClient = new HttpClient(handler);
+
+        var services = new ServiceCollection();
+        services.AddLogging(b => b.AddXUnit(_testOutputHelper));
+        var sp = services.BuildServiceProvider();
+        var logger = sp.GetRequiredService<ILogger<TrustChainValidator>>();
+
+        var validator = new TrustChainValidator(
+            ChainProblemStatus.NotTimeValid |
+            ChainProblemStatus.NotSignatureValid |
+            ChainProblemStatus.InvalidBasicConstraints,
+            false,
+            logger,
+            downloadCache: null,
+            httpClient: httpClient);
+
+        var leafDotNet = new X509Certificate2(bcLeafCert.GetEncoded());
+        var rootDotNet = new X509Certificate2(bcRootCert.GetEncoded());
+        var anchors = new X509Certificate2Collection(rootDotNet);
+
+        var result = await validator.IsTrustedCertificateAsync(
+            "test_client",
+            leafDotNet,
+            intermediateCertificates: null,
+            anchors);
+
+        Assert.True(result);
+        Assert.Equal(1, handler.CallCount(aiaUrl));
+    }
+
+    [Fact]
+    public async Task AiaChasing_NoCacheOrHttpClient_NotAttempted()
+    {
+        // With no cache and no httpClient, AIA chasing should be skipped entirely.
+        const string aiaUrl = "https://example.com/unreachable.cer";
+        var (caKeyPair, bcRootCert, intKeyPair, bcIntCert, bcLeafCert) =
+            CreateThreeLevelPkiWithAia(aiaUrl);
+
+        var services = new ServiceCollection();
+        services.AddLogging(b => b.AddXUnit(_testOutputHelper));
+        var sp = services.BuildServiceProvider();
+        var logger = sp.GetRequiredService<ILogger<TrustChainValidator>>();
+
+        var validator = new TrustChainValidator(
+            ChainProblemStatus.NotTimeValid |
+            ChainProblemStatus.NotSignatureValid |
+            ChainProblemStatus.InvalidBasicConstraints,
+            false,
+            logger,
+            downloadCache: null,
+            httpClient: null);
+
+        var untrustedEvents = new List<X509Certificate2>();
+        validator.Untrusted += cert => untrustedEvents.Add(cert);
+
+        var leafDotNet = new X509Certificate2(bcLeafCert.GetEncoded());
+        var rootDotNet = new X509Certificate2(bcRootCert.GetEncoded());
+        var anchors = new X509Certificate2Collection(rootDotNet);
+
+        var result = await validator.IsTrustedCertificateAsync(
+            "test_client",
+            leafDotNet,
+            intermediateCertificates: null,
+            anchors);
+
+        // Chain can't be completed without AIA → untrusted
+        Assert.False(result);
+        Assert.Single(untrustedEvents);
+    }
+
+    [Fact]
+    public async Task AiaChasing_MalformedAiaExtension_HandledGracefully()
+    {
+        // Malformed AIA extension → outer catch → returns null → chain incomplete
+        var (caKeyPair, bcRootCert) = CreateCaKeyPairAndRoot();
+
+        var leafKeyPairGenerator = new RsaKeyPairGenerator();
+        leafKeyPairGenerator.Init(new Org.BouncyCastle.Crypto.KeyGenerationParameters(new SecureRandom(), 2048));
+        var leafKeyPair = leafKeyPairGenerator.GenerateKeyPair();
+
+        // Create intermediate (we need the leaf to be signed by it, not the root)
+        var intKeyPairGenerator = new RsaKeyPairGenerator();
+        intKeyPairGenerator.Init(new Org.BouncyCastle.Crypto.KeyGenerationParameters(new SecureRandom(), 2048));
+        var intKeyPair = intKeyPairGenerator.GenerateKeyPair();
+
+        var intCertGen = new X509V3CertificateGenerator();
+        intCertGen.SetSerialNumber(BigInteger.ProbablePrime(120, new Random()));
+        intCertGen.SetIssuerDN(new X509Name("CN=Test Root CA"));
+        intCertGen.SetSubjectDN(new X509Name("CN=Test Intermediate"));
+        intCertGen.SetNotBefore(DateTime.UtcNow.AddDays(-1));
+        intCertGen.SetNotAfter(DateTime.UtcNow.AddYears(1));
+        intCertGen.SetPublicKey(intKeyPair.Public);
+        intCertGen.AddExtension(BcX509Extensions.BasicConstraints, true, new BasicConstraints(true));
+        intCertGen.AddExtension(BcX509Extensions.SubjectKeyIdentifier, false,
+            new SubjectKeyIdentifierStructure(intKeyPair.Public));
+        intCertGen.AddExtension(BcX509Extensions.AuthorityKeyIdentifier, false,
+            new AuthorityKeyIdentifierStructure(bcRootCert));
+        var bcIntCert = intCertGen.Generate(new Asn1SignatureFactory("SHA256WithRSA", caKeyPair.Private));
+
+        // Leaf with malformed AIA extension
+        var leafCertGen = new X509V3CertificateGenerator();
+        leafCertGen.SetSerialNumber(BigInteger.ProbablePrime(120, new Random()));
+        leafCertGen.SetIssuerDN(new X509Name("CN=Test Intermediate"));
+        leafCertGen.SetSubjectDN(new X509Name("CN=Test Leaf Malformed AIA"));
+        leafCertGen.SetNotBefore(DateTime.UtcNow.AddDays(-1));
+        leafCertGen.SetNotAfter(DateTime.UtcNow.AddYears(1));
+        leafCertGen.SetPublicKey(leafKeyPair.Public);
+        leafCertGen.AddExtension(BcX509Extensions.AuthorityKeyIdentifier, false,
+            new AuthorityKeyIdentifierStructure(bcIntCert));
+        // Malformed AIA: raw garbage instead of proper ASN.1 structure
+        leafCertGen.AddExtension(BcX509Extensions.AuthorityInfoAccess, false,
+            new Org.BouncyCastle.Asn1.DerUtf8String("not-valid-aia"));
+        var bcLeafCert = leafCertGen.Generate(new Asn1SignatureFactory("SHA256WithRSA", intKeyPair.Private));
+
+        var handler = new MockHttpHandler();
+        var httpClient = new HttpClient(handler);
+
+        var services = new ServiceCollection();
+        services.AddLogging(b => b.AddXUnit(_testOutputHelper));
+        var sp = services.BuildServiceProvider();
+        var logger = sp.GetRequiredService<ILogger<TrustChainValidator>>();
+
+        var validator = new TrustChainValidator(
+            ChainProblemStatus.NotTimeValid |
+            ChainProblemStatus.NotSignatureValid |
+            ChainProblemStatus.InvalidBasicConstraints,
+            false,
+            logger,
+            downloadCache: null,
+            httpClient: httpClient);
+
+        var untrustedEvents = new List<X509Certificate2>();
+        validator.Untrusted += cert => untrustedEvents.Add(cert);
+
+        var leafDotNet = new X509Certificate2(bcLeafCert.GetEncoded());
+        var rootDotNet = new X509Certificate2(bcRootCert.GetEncoded());
+        var anchors = new X509Certificate2Collection(rootDotNet);
+
+        var result = await validator.IsTrustedCertificateAsync(
+            "test_client",
+            leafDotNet,
+            intermediateCertificates: null,
+            anchors);
+
+        // Malformed AIA → ChaseAiaAsync returns null → chain incomplete
+        Assert.False(result);
+        Assert.Single(untrustedEvents);
+    }
+
+    [Fact]
+    public async Task AiaChasing_MultiHop_ChasesFullChain()
+    {
+        // Root → Intermediate1 → Intermediate2 → Leaf
+        // Leaf AIA → Int2 URL, Int2 AIA → Int1 URL
+        // Neither intermediate is provided; both must be AIA-chased.
+        const string int1Url = "https://example.com/intermediate1.cer";
+        const string int2Url = "https://example.com/intermediate2.cer";
+
+        var (caKeyPair, bcRootCert) = CreateCaKeyPairAndRoot();
+
+        // Intermediate 1 (signed by root, has AIA to root - but root is the anchor so AIA won't be needed)
+        var int1KeyPairGen = new RsaKeyPairGenerator();
+        int1KeyPairGen.Init(new Org.BouncyCastle.Crypto.KeyGenerationParameters(new SecureRandom(), 2048));
+        var int1KeyPair = int1KeyPairGen.GenerateKeyPair();
+
+        var int1CertGen = new X509V3CertificateGenerator();
+        int1CertGen.SetSerialNumber(BigInteger.ProbablePrime(120, new Random()));
+        int1CertGen.SetIssuerDN(new X509Name("CN=Test Root CA"));
+        int1CertGen.SetSubjectDN(new X509Name("CN=Intermediate1"));
+        int1CertGen.SetNotBefore(DateTime.UtcNow.AddDays(-1));
+        int1CertGen.SetNotAfter(DateTime.UtcNow.AddYears(1));
+        int1CertGen.SetPublicKey(int1KeyPair.Public);
+        int1CertGen.AddExtension(BcX509Extensions.BasicConstraints, true, new BasicConstraints(true));
+        int1CertGen.AddExtension(BcX509Extensions.SubjectKeyIdentifier, false,
+            new SubjectKeyIdentifierStructure(int1KeyPair.Public));
+        int1CertGen.AddExtension(BcX509Extensions.AuthorityKeyIdentifier, false,
+            new AuthorityKeyIdentifierStructure(bcRootCert));
+        var bcInt1Cert = int1CertGen.Generate(new Asn1SignatureFactory("SHA256WithRSA", caKeyPair.Private));
+
+        // Intermediate 2 (signed by Int1, AIA points to Int1)
+        var int2KeyPairGen = new RsaKeyPairGenerator();
+        int2KeyPairGen.Init(new Org.BouncyCastle.Crypto.KeyGenerationParameters(new SecureRandom(), 2048));
+        var int2KeyPair = int2KeyPairGen.GenerateKeyPair();
+
+        var int2CertGen = new X509V3CertificateGenerator();
+        int2CertGen.SetSerialNumber(BigInteger.ProbablePrime(120, new Random()));
+        int2CertGen.SetIssuerDN(new X509Name("CN=Intermediate1"));
+        int2CertGen.SetSubjectDN(new X509Name("CN=Intermediate2"));
+        int2CertGen.SetNotBefore(DateTime.UtcNow.AddDays(-1));
+        int2CertGen.SetNotAfter(DateTime.UtcNow.AddYears(1));
+        int2CertGen.SetPublicKey(int2KeyPair.Public);
+        int2CertGen.AddExtension(BcX509Extensions.BasicConstraints, true, new BasicConstraints(true));
+        int2CertGen.AddExtension(BcX509Extensions.SubjectKeyIdentifier, false,
+            new SubjectKeyIdentifierStructure(int2KeyPair.Public));
+        int2CertGen.AddExtension(BcX509Extensions.AuthorityKeyIdentifier, false,
+            new AuthorityKeyIdentifierStructure(bcInt1Cert));
+        // AIA pointing to Int1
+        int2CertGen.AddExtension(BcX509Extensions.AuthorityInfoAccess, false,
+            new AuthorityInformationAccess(AccessDescription.IdADCAIssuers,
+                new GeneralName(GeneralName.UniformResourceIdentifier, int1Url)));
+        var bcInt2Cert = int2CertGen.Generate(new Asn1SignatureFactory("SHA256WithRSA", int1KeyPair.Private));
+
+        // Leaf (signed by Int2, AIA points to Int2)
+        var leafKeyPairGen = new RsaKeyPairGenerator();
+        leafKeyPairGen.Init(new Org.BouncyCastle.Crypto.KeyGenerationParameters(new SecureRandom(), 2048));
+        var leafKeyPair = leafKeyPairGen.GenerateKeyPair();
+
+        var leafCertGen = new X509V3CertificateGenerator();
+        leafCertGen.SetSerialNumber(BigInteger.ProbablePrime(120, new Random()));
+        leafCertGen.SetIssuerDN(new X509Name("CN=Intermediate2"));
+        leafCertGen.SetSubjectDN(new X509Name("CN=Leaf MultiHop"));
+        leafCertGen.SetNotBefore(DateTime.UtcNow.AddDays(-1));
+        leafCertGen.SetNotAfter(DateTime.UtcNow.AddYears(1));
+        leafCertGen.SetPublicKey(leafKeyPair.Public);
+        leafCertGen.AddExtension(BcX509Extensions.AuthorityKeyIdentifier, false,
+            new AuthorityKeyIdentifierStructure(bcInt2Cert));
+        leafCertGen.AddExtension(BcX509Extensions.AuthorityInfoAccess, false,
+            new AuthorityInformationAccess(AccessDescription.IdADCAIssuers,
+                new GeneralName(GeneralName.UniformResourceIdentifier, int2Url)));
+        var bcLeafCert = leafCertGen.Generate(new Asn1SignatureFactory("SHA256WithRSA", int2KeyPair.Private));
+
+        var handler = new MockHttpHandler();
+        handler.SetResponse(int1Url, bcInt1Cert.GetEncoded());
+        handler.SetResponse(int2Url, bcInt2Cert.GetEncoded());
+        var httpClient = new HttpClient(handler);
+
+        var services = new ServiceCollection();
+        services.AddLogging(b => b.AddXUnit(_testOutputHelper));
+        var sp = services.BuildServiceProvider();
+        var logger = sp.GetRequiredService<ILogger<TrustChainValidator>>();
+
+        var validator = new TrustChainValidator(
+            ChainProblemStatus.NotTimeValid |
+            ChainProblemStatus.NotSignatureValid |
+            ChainProblemStatus.InvalidBasicConstraints,
+            false,
+            logger,
+            downloadCache: null,
+            httpClient: httpClient);
+
+        var leafDotNet = new X509Certificate2(bcLeafCert.GetEncoded());
+        var rootDotNet = new X509Certificate2(bcRootCert.GetEncoded());
+        var anchors = new X509Certificate2Collection(rootDotNet);
+
+        var result = await validator.IsTrustedCertificateAsync(
+            "test_client",
+            leafDotNet,
+            intermediateCertificates: null,
+            anchors);
+
+        Assert.True(result);
+        Assert.Equal(1, handler.CallCount(int1Url));
+        Assert.Equal(1, handler.CallCount(int2Url));
+    }
+
+    [Fact]
+    public async Task AiaChasing_IntermediateAvailableForCrlLookup()
+    {
+        // When an intermediate is AIA-chased, it should be added to the intermediates
+        // list so it's available as the CRL issuer for signature verification.
+        const string aiaUrl = "https://example.com/aia-crl-issuer.cer";
+        const string crlUrl = "https://example.com/leaf-revocation.crl";
+        var (caKeyPair, bcRootCert, intKeyPair, bcIntCert, bcLeafCert) =
+            CreateThreeLevelPkiWithAiaAndCrl(aiaUrl, crlUrl);
+
+        // CRL signed by the intermediate (not revoked)
+        var crlGenerator = new X509V2CrlGenerator();
+        crlGenerator.SetIssuerDN(new X509Name("CN=Test Intermediate"));
+        crlGenerator.SetThisUpdate(DateTime.UtcNow);
+        crlGenerator.SetNextUpdate(DateTime.UtcNow.AddHours(24));
+        var crl = crlGenerator.Generate(new Asn1SignatureFactory("SHA256WithRSA", intKeyPair.Private));
+
+        var handler = new MockHttpHandler();
+        handler.SetResponse(aiaUrl, bcIntCert.GetEncoded());
+        handler.SetResponse(crlUrl, crl.GetEncoded());
+        var httpClient = new HttpClient(handler);
+
+        var services = new ServiceCollection();
+        services.AddLogging(b => b.AddXUnit(_testOutputHelper));
+        var sp = services.BuildServiceProvider();
+        var logger = sp.GetRequiredService<ILogger<TrustChainValidator>>();
+
+        var validator = new TrustChainValidator(
+            TrustChainValidator.DefaultProblemFlags,
+            true, // revocation checking ON
+            logger,
+            downloadCache: null,
+            httpClient: httpClient);
+
+        var leafDotNet = new X509Certificate2(bcLeafCert.GetEncoded());
+        var rootDotNet = new X509Certificate2(bcRootCert.GetEncoded());
+        var anchors = new X509Certificate2Collection(rootDotNet);
+
+        var result = await validator.IsTrustedCertificateAsync(
+            "test_client",
+            leafDotNet,
+            intermediateCertificates: null, // intermediate must be AIA-chased
+            anchors);
+
+        // Chain completed via AIA, CRL verified against AIA-fetched intermediate
+        Assert.True(result);
+        Assert.Equal(1, handler.CallCount(aiaUrl));
+        Assert.Equal(1, handler.CallCount(crlUrl));
+    }
+
+    [Fact]
     public async Task ExpiredCrl_WithCache_EvictsStaleEntry()
     {
         var (caKeyPair, bcRootCert) = CreateCaKeyPairAndRoot();
@@ -1514,6 +2204,302 @@ public class TrustChainValidatorTests
             new AuthorityKeyIdentifierStructure(bcRootCert));
 
         return leafCertGenerator.Generate(new Asn1SignatureFactory("SHA256WithRSA", caKeyPair.Private));
+    }
+
+    /// <summary>
+    /// Creates a 3-level PKI: Root → Intermediate → Leaf.
+    /// The leaf has an AIA extension pointing to the given URL (or none if null).
+    /// No CRL distribution point on the leaf.
+    /// </summary>
+    private static (
+        Org.BouncyCastle.Crypto.AsymmetricCipherKeyPair caKeyPair,
+        Org.BouncyCastle.X509.X509Certificate bcRootCert,
+        Org.BouncyCastle.Crypto.AsymmetricCipherKeyPair intKeyPair,
+        Org.BouncyCastle.X509.X509Certificate bcIntCert,
+        Org.BouncyCastle.X509.X509Certificate bcLeafCert)
+        CreateThreeLevelPkiWithAia(string? aiaUrl)
+    {
+        var (caKeyPair, bcRootCert) = CreateCaKeyPairAndRoot();
+
+        var intKeyPairGen = new RsaKeyPairGenerator();
+        intKeyPairGen.Init(new Org.BouncyCastle.Crypto.KeyGenerationParameters(new SecureRandom(), 2048));
+        var intKeyPair = intKeyPairGen.GenerateKeyPair();
+
+        var intCertGen = new X509V3CertificateGenerator();
+        intCertGen.SetSerialNumber(BigInteger.ProbablePrime(120, new Random()));
+        intCertGen.SetIssuerDN(new X509Name("CN=Test Root CA"));
+        intCertGen.SetSubjectDN(new X509Name("CN=Test Intermediate"));
+        intCertGen.SetNotBefore(DateTime.UtcNow.AddDays(-1));
+        intCertGen.SetNotAfter(DateTime.UtcNow.AddYears(1));
+        intCertGen.SetPublicKey(intKeyPair.Public);
+        intCertGen.AddExtension(BcX509Extensions.BasicConstraints, true, new BasicConstraints(true));
+        intCertGen.AddExtension(BcX509Extensions.SubjectKeyIdentifier, false,
+            new SubjectKeyIdentifierStructure(intKeyPair.Public));
+        intCertGen.AddExtension(BcX509Extensions.AuthorityKeyIdentifier, false,
+            new AuthorityKeyIdentifierStructure(bcRootCert));
+        var bcIntCert = intCertGen.Generate(new Asn1SignatureFactory("SHA256WithRSA", caKeyPair.Private));
+
+        var leafKeyPairGen = new RsaKeyPairGenerator();
+        leafKeyPairGen.Init(new Org.BouncyCastle.Crypto.KeyGenerationParameters(new SecureRandom(), 2048));
+        var leafKeyPair = leafKeyPairGen.GenerateKeyPair();
+
+        var leafCertGen = new X509V3CertificateGenerator();
+        leafCertGen.SetSerialNumber(BigInteger.ProbablePrime(120, new Random()));
+        leafCertGen.SetIssuerDN(new X509Name("CN=Test Intermediate"));
+        leafCertGen.SetSubjectDN(new X509Name("CN=Test Leaf AIA"));
+        leafCertGen.SetNotBefore(DateTime.UtcNow.AddDays(-1));
+        leafCertGen.SetNotAfter(DateTime.UtcNow.AddYears(1));
+        leafCertGen.SetPublicKey(leafKeyPair.Public);
+        leafCertGen.AddExtension(BcX509Extensions.AuthorityKeyIdentifier, false,
+            new AuthorityKeyIdentifierStructure(bcIntCert));
+        if (aiaUrl != null)
+        {
+            leafCertGen.AddExtension(BcX509Extensions.AuthorityInfoAccess, false,
+                new AuthorityInformationAccess(AccessDescription.IdADCAIssuers,
+                    new GeneralName(GeneralName.UniformResourceIdentifier, aiaUrl)));
+        }
+        var bcLeafCert = leafCertGen.Generate(new Asn1SignatureFactory("SHA256WithRSA", intKeyPair.Private));
+
+        return (caKeyPair, bcRootCert, intKeyPair, bcIntCert, bcLeafCert);
+    }
+
+    /// <summary>
+    /// Creates a 3-level PKI where the leaf has AIA with both caIssuers and a CRL DP.
+    /// </summary>
+    private static (
+        Org.BouncyCastle.Crypto.AsymmetricCipherKeyPair caKeyPair,
+        Org.BouncyCastle.X509.X509Certificate bcRootCert,
+        Org.BouncyCastle.Crypto.AsymmetricCipherKeyPair intKeyPair,
+        Org.BouncyCastle.X509.X509Certificate bcIntCert,
+        Org.BouncyCastle.X509.X509Certificate bcLeafCert)
+        CreateThreeLevelPkiWithAiaAndCrl(string aiaUrl, string crlUrl)
+    {
+        var (caKeyPair, bcRootCert) = CreateCaKeyPairAndRoot();
+
+        var intKeyPairGen = new RsaKeyPairGenerator();
+        intKeyPairGen.Init(new Org.BouncyCastle.Crypto.KeyGenerationParameters(new SecureRandom(), 2048));
+        var intKeyPair = intKeyPairGen.GenerateKeyPair();
+
+        var intCertGen = new X509V3CertificateGenerator();
+        intCertGen.SetSerialNumber(BigInteger.ProbablePrime(120, new Random()));
+        intCertGen.SetIssuerDN(new X509Name("CN=Test Root CA"));
+        intCertGen.SetSubjectDN(new X509Name("CN=Test Intermediate"));
+        intCertGen.SetNotBefore(DateTime.UtcNow.AddDays(-1));
+        intCertGen.SetNotAfter(DateTime.UtcNow.AddYears(1));
+        intCertGen.SetPublicKey(intKeyPair.Public);
+        intCertGen.AddExtension(BcX509Extensions.BasicConstraints, true, new BasicConstraints(true));
+        intCertGen.AddExtension(BcX509Extensions.SubjectKeyIdentifier, false,
+            new SubjectKeyIdentifierStructure(intKeyPair.Public));
+        intCertGen.AddExtension(BcX509Extensions.AuthorityKeyIdentifier, false,
+            new AuthorityKeyIdentifierStructure(bcRootCert));
+        var bcIntCert = intCertGen.Generate(new Asn1SignatureFactory("SHA256WithRSA", caKeyPair.Private));
+
+        var leafKeyPairGen = new RsaKeyPairGenerator();
+        leafKeyPairGen.Init(new Org.BouncyCastle.Crypto.KeyGenerationParameters(new SecureRandom(), 2048));
+        var leafKeyPair = leafKeyPairGen.GenerateKeyPair();
+
+        var leafCertGen = new X509V3CertificateGenerator();
+        leafCertGen.SetSerialNumber(BigInteger.ProbablePrime(120, new Random()));
+        leafCertGen.SetIssuerDN(new X509Name("CN=Test Intermediate"));
+        leafCertGen.SetSubjectDN(new X509Name("CN=Test Leaf AIA CRL"));
+        leafCertGen.SetNotBefore(DateTime.UtcNow.AddDays(-1));
+        leafCertGen.SetNotAfter(DateTime.UtcNow.AddYears(1));
+        leafCertGen.SetPublicKey(leafKeyPair.Public);
+        leafCertGen.AddExtension(BcX509Extensions.AuthorityKeyIdentifier, false,
+            new AuthorityKeyIdentifierStructure(bcIntCert));
+        leafCertGen.AddExtension(BcX509Extensions.AuthorityInfoAccess, false,
+            new AuthorityInformationAccess(AccessDescription.IdADCAIssuers,
+                new GeneralName(GeneralName.UniformResourceIdentifier, aiaUrl)));
+        var crlDp = new DistributionPoint(
+            new DistributionPointName(
+                DistributionPointName.FullName,
+                new GeneralNames(new GeneralName(GeneralName.UniformResourceIdentifier, crlUrl))),
+            null, null);
+        leafCertGen.AddExtension(BcX509Extensions.CrlDistributionPoints, false,
+            new CrlDistPoint(new[] { crlDp }));
+        var bcLeafCert = leafCertGen.Generate(new Asn1SignatureFactory("SHA256WithRSA", intKeyPair.Private));
+
+        return (caKeyPair, bcRootCert, intKeyPair, bcIntCert, bcLeafCert);
+    }
+
+    /// <summary>
+    /// Creates a 3-level PKI where the leaf has an AIA with an OCSP entry first (non-caIssuers),
+    /// followed by a valid caIssuers entry.
+    /// </summary>
+    private static (
+        Org.BouncyCastle.Crypto.AsymmetricCipherKeyPair caKeyPair,
+        Org.BouncyCastle.X509.X509Certificate bcRootCert,
+        Org.BouncyCastle.Crypto.AsymmetricCipherKeyPair intKeyPair,
+        Org.BouncyCastle.X509.X509Certificate bcIntCert,
+        Org.BouncyCastle.X509.X509Certificate bcLeafCert)
+        CreateThreeLevelPkiWithMixedAia(string validAiaUrl)
+    {
+        var (caKeyPair, bcRootCert) = CreateCaKeyPairAndRoot();
+
+        var intKeyPairGen = new RsaKeyPairGenerator();
+        intKeyPairGen.Init(new Org.BouncyCastle.Crypto.KeyGenerationParameters(new SecureRandom(), 2048));
+        var intKeyPair = intKeyPairGen.GenerateKeyPair();
+
+        var intCertGen = new X509V3CertificateGenerator();
+        intCertGen.SetSerialNumber(BigInteger.ProbablePrime(120, new Random()));
+        intCertGen.SetIssuerDN(new X509Name("CN=Test Root CA"));
+        intCertGen.SetSubjectDN(new X509Name("CN=Test Intermediate"));
+        intCertGen.SetNotBefore(DateTime.UtcNow.AddDays(-1));
+        intCertGen.SetNotAfter(DateTime.UtcNow.AddYears(1));
+        intCertGen.SetPublicKey(intKeyPair.Public);
+        intCertGen.AddExtension(BcX509Extensions.BasicConstraints, true, new BasicConstraints(true));
+        intCertGen.AddExtension(BcX509Extensions.SubjectKeyIdentifier, false,
+            new SubjectKeyIdentifierStructure(intKeyPair.Public));
+        intCertGen.AddExtension(BcX509Extensions.AuthorityKeyIdentifier, false,
+            new AuthorityKeyIdentifierStructure(bcRootCert));
+        var bcIntCert = intCertGen.Generate(new Asn1SignatureFactory("SHA256WithRSA", caKeyPair.Private));
+
+        var leafKeyPairGen = new RsaKeyPairGenerator();
+        leafKeyPairGen.Init(new Org.BouncyCastle.Crypto.KeyGenerationParameters(new SecureRandom(), 2048));
+        var leafKeyPair = leafKeyPairGen.GenerateKeyPair();
+
+        var leafCertGen = new X509V3CertificateGenerator();
+        leafCertGen.SetSerialNumber(BigInteger.ProbablePrime(120, new Random()));
+        leafCertGen.SetIssuerDN(new X509Name("CN=Test Intermediate"));
+        leafCertGen.SetSubjectDN(new X509Name("CN=Test Leaf MixedAIA"));
+        leafCertGen.SetNotBefore(DateTime.UtcNow.AddDays(-1));
+        leafCertGen.SetNotAfter(DateTime.UtcNow.AddYears(1));
+        leafCertGen.SetPublicKey(leafKeyPair.Public);
+        leafCertGen.AddExtension(BcX509Extensions.AuthorityKeyIdentifier, false,
+            new AuthorityKeyIdentifierStructure(bcIntCert));
+        // Two AIA entries: OCSP (skipped) + caIssuers (used)
+        var aiaEntries = new[]
+        {
+            new AccessDescription(AccessDescription.IdADOcsp,
+                new GeneralName(GeneralName.UniformResourceIdentifier, "https://ocsp.example.com")),
+            new AccessDescription(AccessDescription.IdADCAIssuers,
+                new GeneralName(GeneralName.UniformResourceIdentifier, validAiaUrl))
+        };
+        leafCertGen.AddExtension(BcX509Extensions.AuthorityInfoAccess, false,
+            new AuthorityInformationAccess(aiaEntries));
+        var bcLeafCert = leafCertGen.Generate(new Asn1SignatureFactory("SHA256WithRSA", intKeyPair.Private));
+
+        return (caKeyPair, bcRootCert, intKeyPair, bcIntCert, bcLeafCert);
+    }
+
+    /// <summary>
+    /// Creates a 3-level PKI where the leaf has an AIA with a DirectoryName (non-URI) first,
+    /// followed by a valid URI.
+    /// </summary>
+    private static (
+        Org.BouncyCastle.Crypto.AsymmetricCipherKeyPair caKeyPair,
+        Org.BouncyCastle.X509.X509Certificate bcRootCert,
+        Org.BouncyCastle.Crypto.AsymmetricCipherKeyPair intKeyPair,
+        Org.BouncyCastle.X509.X509Certificate bcIntCert,
+        Org.BouncyCastle.X509.X509Certificate bcLeafCert)
+        CreateThreeLevelPkiWithNonUriAia(string validAiaUrl)
+    {
+        var (caKeyPair, bcRootCert) = CreateCaKeyPairAndRoot();
+
+        var intKeyPairGen = new RsaKeyPairGenerator();
+        intKeyPairGen.Init(new Org.BouncyCastle.Crypto.KeyGenerationParameters(new SecureRandom(), 2048));
+        var intKeyPair = intKeyPairGen.GenerateKeyPair();
+
+        var intCertGen = new X509V3CertificateGenerator();
+        intCertGen.SetSerialNumber(BigInteger.ProbablePrime(120, new Random()));
+        intCertGen.SetIssuerDN(new X509Name("CN=Test Root CA"));
+        intCertGen.SetSubjectDN(new X509Name("CN=Test Intermediate"));
+        intCertGen.SetNotBefore(DateTime.UtcNow.AddDays(-1));
+        intCertGen.SetNotAfter(DateTime.UtcNow.AddYears(1));
+        intCertGen.SetPublicKey(intKeyPair.Public);
+        intCertGen.AddExtension(BcX509Extensions.BasicConstraints, true, new BasicConstraints(true));
+        intCertGen.AddExtension(BcX509Extensions.SubjectKeyIdentifier, false,
+            new SubjectKeyIdentifierStructure(intKeyPair.Public));
+        intCertGen.AddExtension(BcX509Extensions.AuthorityKeyIdentifier, false,
+            new AuthorityKeyIdentifierStructure(bcRootCert));
+        var bcIntCert = intCertGen.Generate(new Asn1SignatureFactory("SHA256WithRSA", caKeyPair.Private));
+
+        var leafKeyPairGen = new RsaKeyPairGenerator();
+        leafKeyPairGen.Init(new Org.BouncyCastle.Crypto.KeyGenerationParameters(new SecureRandom(), 2048));
+        var leafKeyPair = leafKeyPairGen.GenerateKeyPair();
+
+        var leafCertGen = new X509V3CertificateGenerator();
+        leafCertGen.SetSerialNumber(BigInteger.ProbablePrime(120, new Random()));
+        leafCertGen.SetIssuerDN(new X509Name("CN=Test Intermediate"));
+        leafCertGen.SetSubjectDN(new X509Name("CN=Test Leaf NonURI AIA"));
+        leafCertGen.SetNotBefore(DateTime.UtcNow.AddDays(-1));
+        leafCertGen.SetNotAfter(DateTime.UtcNow.AddYears(1));
+        leafCertGen.SetPublicKey(leafKeyPair.Public);
+        leafCertGen.AddExtension(BcX509Extensions.AuthorityKeyIdentifier, false,
+            new AuthorityKeyIdentifierStructure(bcIntCert));
+        // Two AIA entries: DirectoryName (skipped) + valid URI
+        var aiaEntries = new[]
+        {
+            new AccessDescription(AccessDescription.IdADCAIssuers,
+                new GeneralName(GeneralName.DirectoryName, new X509Name("CN=Not A URI"))),
+            new AccessDescription(AccessDescription.IdADCAIssuers,
+                new GeneralName(GeneralName.UniformResourceIdentifier, validAiaUrl))
+        };
+        leafCertGen.AddExtension(BcX509Extensions.AuthorityInfoAccess, false,
+            new AuthorityInformationAccess(aiaEntries));
+        var bcLeafCert = leafCertGen.Generate(new Asn1SignatureFactory("SHA256WithRSA", intKeyPair.Private));
+
+        return (caKeyPair, bcRootCert, intKeyPair, bcIntCert, bcLeafCert);
+    }
+
+    /// <summary>
+    /// Creates a 3-level PKI where the leaf has an AIA with an empty URL first,
+    /// followed by a valid URL.
+    /// </summary>
+    private static (
+        Org.BouncyCastle.Crypto.AsymmetricCipherKeyPair caKeyPair,
+        Org.BouncyCastle.X509.X509Certificate bcRootCert,
+        Org.BouncyCastle.Crypto.AsymmetricCipherKeyPair intKeyPair,
+        Org.BouncyCastle.X509.X509Certificate bcIntCert,
+        Org.BouncyCastle.X509.X509Certificate bcLeafCert)
+        CreateThreeLevelPkiWithEmptyAiaUrl(string validAiaUrl)
+    {
+        var (caKeyPair, bcRootCert) = CreateCaKeyPairAndRoot();
+
+        var intKeyPairGen = new RsaKeyPairGenerator();
+        intKeyPairGen.Init(new Org.BouncyCastle.Crypto.KeyGenerationParameters(new SecureRandom(), 2048));
+        var intKeyPair = intKeyPairGen.GenerateKeyPair();
+
+        var intCertGen = new X509V3CertificateGenerator();
+        intCertGen.SetSerialNumber(BigInteger.ProbablePrime(120, new Random()));
+        intCertGen.SetIssuerDN(new X509Name("CN=Test Root CA"));
+        intCertGen.SetSubjectDN(new X509Name("CN=Test Intermediate"));
+        intCertGen.SetNotBefore(DateTime.UtcNow.AddDays(-1));
+        intCertGen.SetNotAfter(DateTime.UtcNow.AddYears(1));
+        intCertGen.SetPublicKey(intKeyPair.Public);
+        intCertGen.AddExtension(BcX509Extensions.BasicConstraints, true, new BasicConstraints(true));
+        intCertGen.AddExtension(BcX509Extensions.SubjectKeyIdentifier, false,
+            new SubjectKeyIdentifierStructure(intKeyPair.Public));
+        intCertGen.AddExtension(BcX509Extensions.AuthorityKeyIdentifier, false,
+            new AuthorityKeyIdentifierStructure(bcRootCert));
+        var bcIntCert = intCertGen.Generate(new Asn1SignatureFactory("SHA256WithRSA", caKeyPair.Private));
+
+        var leafKeyPairGen = new RsaKeyPairGenerator();
+        leafKeyPairGen.Init(new Org.BouncyCastle.Crypto.KeyGenerationParameters(new SecureRandom(), 2048));
+        var leafKeyPair = leafKeyPairGen.GenerateKeyPair();
+
+        var leafCertGen = new X509V3CertificateGenerator();
+        leafCertGen.SetSerialNumber(BigInteger.ProbablePrime(120, new Random()));
+        leafCertGen.SetIssuerDN(new X509Name("CN=Test Intermediate"));
+        leafCertGen.SetSubjectDN(new X509Name("CN=Test Leaf EmptyAIA"));
+        leafCertGen.SetNotBefore(DateTime.UtcNow.AddDays(-1));
+        leafCertGen.SetNotAfter(DateTime.UtcNow.AddYears(1));
+        leafCertGen.SetPublicKey(leafKeyPair.Public);
+        leafCertGen.AddExtension(BcX509Extensions.AuthorityKeyIdentifier, false,
+            new AuthorityKeyIdentifierStructure(bcIntCert));
+        // Two AIA entries: empty URL (skipped) + valid URL
+        var aiaEntries = new[]
+        {
+            new AccessDescription(AccessDescription.IdADCAIssuers,
+                new GeneralName(GeneralName.UniformResourceIdentifier, "")),
+            new AccessDescription(AccessDescription.IdADCAIssuers,
+                new GeneralName(GeneralName.UniformResourceIdentifier, validAiaUrl))
+        };
+        leafCertGen.AddExtension(BcX509Extensions.AuthorityInfoAccess, false,
+            new AuthorityInformationAccess(aiaEntries));
+        var bcLeafCert = leafCertGen.Generate(new Asn1SignatureFactory("SHA256WithRSA", intKeyPair.Private));
+
+        return (caKeyPair, bcRootCert, intKeyPair, bcIntCert, bcLeafCert);
     }
 
     private class MockHttpHandler : HttpMessageHandler

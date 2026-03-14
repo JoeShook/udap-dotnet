@@ -201,16 +201,8 @@ namespace Udap.Common.Certificates
                             $"Certificate is not valid. NotBefore: {bcCert.NotBefore}, NotAfter: {bcCert.NotAfter}"));
                     }
 
-                    // Check signature (except for root/self-signed)
-                    if (i > 0)
-                    {
-                        var issuer = bcChain[i - 1]; // The previous cert in our reversed view...
-                        // Actually, our chain is leaf -> intermediates -> anchor
-                        // So bcChain[i] is signed by bcChain[i+1] if i < count-1
-                    }
-
                     // Signature verification is done during chain building, so we just check
-                    // for revocation and basic constraints here
+                    // for revocation and basic constraints here.
 
                     // Check basic constraints for intermediate certs (not leaf, not anchor)
                     bool isAnchor = IsAnchor(bcCert, bcAnchors);
@@ -319,9 +311,10 @@ namespace Udap.Common.Certificates
                         current.Verify(current.GetPublicKey());
                         break; // Self-signed and valid signature = root
                     }
-                    catch
+                    catch (Exception ex)
                     {
                         // Not actually self-signed (subject/issuer match but sig fails)
+                        _logger.LogDebug(ex, "Subject/Issuer DN match but self-signature verification failed for {Subject}", current.SubjectDN);
                     }
                 }
 
@@ -577,6 +570,7 @@ namespace Udap.Common.Certificates
             }
 
             var crlChecked = false;
+            var now = DateTime.UtcNow;
 
             try
             {
@@ -639,7 +633,7 @@ namespace Udap.Common.Certificates
                         }
 
                         // Check if ThisUpdate is in the future (clock skew or bad CRL)
-                        if (crl.ThisUpdate.ToUniversalTime() > DateTime.UtcNow)
+                        if (crl.ThisUpdate.ToUniversalTime() > now)
                         {
                             _logger.LogWarning("CRL from {Url} has ThisUpdate in the future ({ThisUpdate}), treating as unknown", url, crl.ThisUpdate);
                             problems.Add(new ChainProblem(
@@ -649,7 +643,7 @@ namespace Udap.Common.Certificates
                         }
 
                         // Check if the CRL has expired (NextUpdate has passed)
-                        if (crl.NextUpdate != null && crl.NextUpdate.Value.ToUniversalTime() < DateTime.UtcNow)
+                        if (crl.NextUpdate != null && crl.NextUpdate.Value.ToUniversalTime() < now)
                         {
                             _logger.LogWarning("CRL from {Url} has expired (NextUpdate: {NextUpdate})", url, crl.NextUpdate.Value);
 
@@ -695,11 +689,22 @@ namespace Udap.Common.Certificates
                     $"Error checking CRL: {ex.Message}"));
             }
 
-            if (!crlChecked && !problems.Any(p => p.Status == ChainProblemStatus.RevocationStatusUnknown))
+            if (!crlChecked)
             {
-                problems.Add(new ChainProblem(
-                    ChainProblemStatus.RevocationStatusUnknown,
-                    "Revocation status could not be determined: no CRL was successfully checked"));
+                if ((_problemFlags & ChainProblemStatus.OfflineRevocation) != 0)
+                {
+                    problems.Add(new ChainProblem(
+                        ChainProblemStatus.OfflineRevocation,
+                        "Revocation checking failed: no CRL could be retrieved or verified"));
+                }
+
+                if ((_problemFlags & ChainProblemStatus.RevocationStatusUnknown) != 0
+                    && !problems.Any(p => p.Status == ChainProblemStatus.RevocationStatusUnknown))
+                {
+                    problems.Add(new ChainProblem(
+                        ChainProblemStatus.RevocationStatusUnknown,
+                        "Revocation status could not be determined: no CRL was successfully checked"));
+                }
             }
 
             return problems;
