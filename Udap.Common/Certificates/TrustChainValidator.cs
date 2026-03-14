@@ -45,8 +45,14 @@ namespace Udap.Common.Certificates
         private readonly ICertificateDownloadCache? _downloadCache;
         private readonly HttpClient? _httpClient;
         private readonly ILogger<TrustChainValidator> _logger;
+        private readonly TimeSpan _downloadTimeout;
         private const int MaxChainDepth = 10;
         private bool _noCacheWarningLogged;
+
+        /// <summary>
+        /// Default timeout for individual CRL and AIA download requests.
+        /// </summary>
+        public static readonly TimeSpan DefaultDownloadTimeout = TimeSpan.FromSeconds(15);
 
         /// <summary>
         /// Event fired when a certificate is untrusted
@@ -110,12 +116,28 @@ namespace Udap.Common.Certificates
             ILogger<TrustChainValidator> logger,
             ICertificateDownloadCache? downloadCache,
             HttpClient? httpClient)
+            : this(problemFlags, checkRevocation, logger, downloadCache, httpClient, DefaultDownloadTimeout)
+        {
+        }
+
+        /// <summary>
+        /// Creates an instance with custom problem flags, revocation settings, an optional HttpClient,
+        /// and a per-request download timeout for CRL and AIA fetches.
+        /// </summary>
+        public TrustChainValidator(
+            ChainProblemStatus problemFlags,
+            bool checkRevocation,
+            ILogger<TrustChainValidator> logger,
+            ICertificateDownloadCache? downloadCache,
+            HttpClient? httpClient,
+            TimeSpan downloadTimeout)
         {
             _problemFlags = problemFlags;
             _checkRevocation = checkRevocation;
             _logger = logger;
             _downloadCache = downloadCache;
             _httpClient = httpClient;
+            _downloadTimeout = downloadTimeout;
         }
 
         public async Task<bool> IsTrustedCertificateAsync(
@@ -491,16 +513,19 @@ namespace Udap.Common.Certificates
         private async Task<X509Certificate2?> DownloadIntermediateCertificateAsync(
             string url, CancellationToken cancellationToken)
         {
+            using var timeoutCts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+            timeoutCts.CancelAfter(_downloadTimeout);
+
             if (_downloadCache != null)
             {
-                return await _downloadCache.GetIntermediateCertificateAsync(url, cancellationToken);
+                return await _downloadCache.GetIntermediateCertificateAsync(url, timeoutCts.Token);
             }
 
             LogNoCacheWarning();
 
             try
             {
-                var data = await _httpClient!.GetByteArrayAsync(url, cancellationToken);
+                var data = await _httpClient!.GetByteArrayAsync(url, timeoutCts.Token);
                 return new X509Certificate2(data);
             }
             catch (Exception ex)
@@ -513,9 +538,12 @@ namespace Udap.Common.Certificates
         private async Task<X509Crl?> DownloadCrlAsync(
             string url, CancellationToken cancellationToken)
         {
+            using var timeoutCts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+            timeoutCts.CancelAfter(_downloadTimeout);
+
             if (_downloadCache != null)
             {
-                return await _downloadCache.GetCrlAsync(url, cancellationToken);
+                return await _downloadCache.GetCrlAsync(url, timeoutCts.Token);
             }
 
             if (_httpClient == null)
@@ -528,7 +556,7 @@ namespace Udap.Common.Certificates
 
             try
             {
-                var data = await _httpClient.GetByteArrayAsync(url, cancellationToken);
+                var data = await _httpClient.GetByteArrayAsync(url, timeoutCts.Token);
                 return new X509CrlParser().ReadCrl(data);
             }
             catch (Exception ex)
