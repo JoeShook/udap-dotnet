@@ -192,7 +192,7 @@ public class UdapIdentityServerPipeline
         if (services.All(x => x.ServiceType != typeof(IPrivateCertificateStore)))
         {
             services.Configure<UdapFileCertStoreManifest>(
-                builder.Configuration.GetSection(Udap.Common.Constants.UDAP_FILE_STORE_MANIFEST));
+                builder.Configuration.GetSection(Udap.Common.Constants.UdapFileCertStoreManifestSectionName));
 
             services.TryAddSingleton<IPrivateCertificateStore>(sp =>
                 new IssuedCertificateStore(

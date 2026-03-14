@@ -55,7 +55,7 @@ public class UdapControllerMultiHostTest : IClassFixture<ApiForCommunityTestFixt
             logging.AddXUnit(testOutputHelper);
         });
 
-        services.Configure<UdapFileCertStoreManifest>(configuration.GetSection(Constants.UDAP_FILE_STORE_MANIFEST));
+        services.Configure<UdapFileCertStoreManifest>(configuration.GetSection(Constants.UdapFileCertStoreManifestSectionName));
         services.AddSingleton<ITrustAnchorStore>(sp =>
             new TrustAnchorFileStore(
                 sp.GetRequiredService<IOptionsMonitor<UdapFileCertStoreManifest>>(),

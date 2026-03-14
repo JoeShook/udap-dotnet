@@ -298,7 +298,7 @@ namespace Udap.Client.System.Tests
             services.TryAddSingleton<IUdapMetadataOptionsProvider, UdapMetadataOptionsProvider>();
 
             // UDAP CertStore
-            services.Configure<UdapFileCertStoreManifest>(configuration.GetSection(Common.Constants.UDAP_FILE_STORE_MANIFEST));
+            services.Configure<UdapFileCertStoreManifest>(configuration.GetSection(Common.Constants.UdapFileCertStoreManifestSectionName));
             services.AddSingleton<ITrustAnchorStore>(sp =>
                 new TrustAnchorFileStore(
                     sp.GetRequiredService<IOptionsMonitor<UdapFileCertStoreManifest>>(),
@@ -324,7 +324,7 @@ namespace Udap.Client.System.Tests
             services.TryAddSingleton<IUdapMetadataOptionsProvider, UdapMetadataOptionsProvider>();
 
             // UDAP CertStore
-            services.Configure<UdapFileCertStoreManifest>(configuration.GetSection(Common.Constants.UDAP_FILE_STORE_MANIFEST));
+            services.Configure<UdapFileCertStoreManifest>(configuration.GetSection(Common.Constants.UdapFileCertStoreManifestSectionName));
             services.AddSingleton<ITrustAnchorStore>(sp =>
                 new TrustAnchorFileStore(
                     sp.GetRequiredService<IOptionsMonitor<UdapFileCertStoreManifest>>(),

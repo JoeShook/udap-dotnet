@@ -50,7 +50,7 @@ builder.Configuration.AddJsonFile("/secret/udap.tefca.metadata.options.json", tr
 builder.Services.AddControllersWithViews();
 
 builder.Services.Configure<SmartMetadata>(builder.Configuration.GetRequiredSection("SmartMetadata"));
-builder.Services.Configure<UdapFileCertStoreManifest>(builder.Configuration.GetSection(Constants.UDAP_FILE_STORE_MANIFEST));
+builder.Services.Configure<UdapFileCertStoreManifest>(builder.Configuration.GetSection(Constants.UdapFileCertStoreManifestSectionName));
 
 builder.Services.AddSmartMetadata();
 builder.Services.AddUdapMetadataServer(builder.Configuration);

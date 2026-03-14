@@ -60,7 +60,7 @@ builder.Services.Configure<JsonOptions>(options =>
 
 builder.Services.Configure<CdsServices>(builder.Configuration.GetRequiredSection("CdsServices"));
 builder.Services.Configure<SmartMetadata>(builder.Configuration.GetRequiredSection("SmartMetadata"));
-builder.Services.Configure<UdapFileCertStoreManifest>(builder.Configuration.GetSection(Constants.UDAP_FILE_STORE_MANIFEST));
+builder.Services.Configure<UdapFileCertStoreManifest>(builder.Configuration.GetSection(Constants.UdapFileCertStoreManifestSectionName));
 
 builder.Services.AddCdsServices();
 builder.Services.AddSmartMetadata();

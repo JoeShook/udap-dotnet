@@ -79,7 +79,7 @@ internal static class HostingExtensions
             .AddPrivateFileStore();
 
         
-        builder.Services.Configure<UdapFileCertStoreManifest>(builder.Configuration.GetSection(Common.Constants.UDAP_FILE_STORE_MANIFEST));
+        builder.Services.Configure<UdapFileCertStoreManifest>(builder.Configuration.GetSection(Common.Constants.UdapFileCertStoreManifestSectionName));
         builder.Services.AddSingleton<IPrivateCertificateStore>(sp =>
             new IssuedCertificateStore(
                 sp.GetRequiredService<IOptionsMonitor<UdapFileCertStoreManifest>>(),

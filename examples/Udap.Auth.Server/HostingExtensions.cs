@@ -109,7 +109,7 @@ internal static class HostingExtensions
 
 
 
-        builder.Services.Configure<UdapFileCertStoreManifest>(builder.Configuration.GetSection(Constants.UDAP_FILE_STORE_MANIFEST));
+        builder.Services.Configure<UdapFileCertStoreManifest>(builder.Configuration.GetSection(Constants.UdapFileCertStoreManifestSectionName));
 
 
         var identityServer = builder.Services.AddIdentityServer(options =>

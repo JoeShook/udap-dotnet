@@ -113,7 +113,7 @@ builder.Services.AddAuthentication(OidcConstants.AuthenticationSchemes.Authoriza
     });
 
 
-builder.Services.Configure<UdapFileCertStoreManifest>(builder.Configuration.GetSection(Constants.UDAP_FILE_STORE_MANIFEST));
+builder.Services.Configure<UdapFileCertStoreManifest>(builder.Configuration.GetSection(Constants.UdapFileCertStoreManifestSectionName));
 
 builder.Services
     .AddUdapMetadataServer(builder.Configuration);

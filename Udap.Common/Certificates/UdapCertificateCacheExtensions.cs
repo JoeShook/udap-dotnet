@@ -15,6 +15,9 @@ using ZiggyCreatures.Caching.Fusion;
 namespace Microsoft.Extensions.DependencyInjection;
 #pragma warning restore IDE0130 // Namespace does not match folder structure
 
+/// <summary>
+/// Extension methods for registering the UDAP certificate download cache with dependency injection.
+/// </summary>
 public static class UdapCertificateCacheExtensions
 {
     /// <summary>

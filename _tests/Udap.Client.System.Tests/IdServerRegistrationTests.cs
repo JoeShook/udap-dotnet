@@ -52,7 +52,7 @@ public class TestFixture
             .AddUserSecrets<IdServerRegistrationTests>()
             .Build();
 
-        Manifest = TestConfig.GetSection(Common.Constants.UDAP_FILE_STORE_MANIFEST).Get<UdapFileCertStoreManifest>()!;
+        Manifest = TestConfig.GetSection(Common.Constants.UdapFileCertStoreManifestSectionName).Get<UdapFileCertStoreManifest>()!;
     }
 }
 

@@ -344,7 +344,7 @@ public class UdapClientTests
         // Certificate store metadata
         //
         var udapFileCertStoreManifest = new UdapFileCertStoreManifest();
-        _configuration.GetSection(Constants.UDAP_FILE_STORE_MANIFEST).Bind(udapFileCertStoreManifest);
+        _configuration.GetSection(Constants.UdapFileCertStoreManifestSectionName).Bind(udapFileCertStoreManifest);
         var udapFileCertStoreManifestOptions = Substitute.For<IOptionsMonitor<UdapFileCertStoreManifest>>();
         udapFileCertStoreManifestOptions.CurrentValue.Returns(udapFileCertStoreManifest);
 

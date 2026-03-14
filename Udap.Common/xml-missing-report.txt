@@ -1,0 +1,31 @@
+TOTAL_MISSING=30
+C:\Source\GitHub\JoeShook\udap-tools\udap-dotnet\Udap.Common\Certificates\CertificateDownloadCache.cs:37 => public CertificateDownloadCache(
+C:\Source\GitHub\JoeShook\udap-tools\udap-dotnet\Udap.Common\Certificates\ChainElementInfo.cs:85 => public enum ChainProblemStatus
+C:\Source\GitHub\JoeShook\udap-tools\udap-dotnet\Udap.Common\Certificates\FileCertificateStore.cs:20 => public class FileCertificateStore : ICertificateStore
+C:\Source\GitHub\JoeShook\udap-tools\udap-dotnet\Udap.Common\Certificates\FileCertificateStore.cs:27 => public FileCertificateStore(
+C:\Source\GitHub\JoeShook\udap-tools\udap-dotnet\Udap.Common\Certificates\FileCertificateStore.cs:40 => public Task<ICertificateStore> Resolve()
+C:\Source\GitHub\JoeShook\udap-tools\udap-dotnet\Udap.Common\Certificates\FileCertificateStore.cs:51 => public ICollection<Anchor> AnchorCertificates { get; set; } = new HashSet<Anchor>();
+C:\Source\GitHub\JoeShook\udap-tools\udap-dotnet\Udap.Common\Certificates\FileCertificateStore.cs:54 => public ICollection<IssuedCertificate> IssuedCertificates { get; set; } = new HashSet<IssuedCertificate>();
+C:\Source\GitHub\JoeShook\udap-tools\udap-dotnet\Udap.Common\Certificates\IssuedCertificateStore.cs:8 => public class IssuedCertificateStore : IPrivateCertificateStore
+C:\Source\GitHub\JoeShook\udap-tools\udap-dotnet\Udap.Common\Certificates\IssuedCertificateStore.cs:15 => public IssuedCertificateStore(
+C:\Source\GitHub\JoeShook\udap-tools\udap-dotnet\Udap.Common\Certificates\IssuedCertificateStore.cs:28 => public async Task<IPrivateCertificateStore> Resolve(CancellationToken token = default)
+C:\Source\GitHub\JoeShook\udap-tools\udap-dotnet\Udap.Common\Certificates\IssuedCertificateStore.cs:49 => public ICollection<IssuedCertificate> IssuedCertificates { get; set; } = new HashSet<IssuedCertificate>();
+C:\Source\GitHub\JoeShook\udap-tools\udap-dotnet\Udap.Common\Certificates\TrustAnchorFileStore.cs:17 => public class TrustAnchorFileStore : ITrustAnchorStore
+C:\Source\GitHub\JoeShook\udap-tools\udap-dotnet\Udap.Common\Certificates\TrustAnchorFileStore.cs:24 => public TrustAnchorFileStore(
+C:\Source\GitHub\JoeShook\udap-tools\udap-dotnet\Udap.Common\Certificates\TrustAnchorFileStore.cs:37 => public Task<ITrustAnchorStore> Resolve()
+C:\Source\GitHub\JoeShook\udap-tools\udap-dotnet\Udap.Common\Certificates\TrustAnchorFileStore.cs:48 => public ICollection<Anchor> AnchorCertificates { get; set; } = new HashSet<Anchor>();
+C:\Source\GitHub\JoeShook\udap-tools\udap-dotnet\Udap.Common\Certificates\TrustAnchorMemoryStore.cs:14 => public class TrustAnchorMemoryStore : ITrustAnchorStore
+C:\Source\GitHub\JoeShook\udap-tools\udap-dotnet\Udap.Common\Certificates\TrustAnchorMemoryStore.cs:16 => public ICollection<Anchor> AnchorCertificates { get; set; } = new HashSet<Anchor>();
+C:\Source\GitHub\JoeShook\udap-tools\udap-dotnet\Udap.Common\Certificates\TrustAnchorMemoryStore.cs:18 => public Task<ITrustAnchorStore> Resolve()
+C:\Source\GitHub\JoeShook\udap-tools\udap-dotnet\Udap.Common\Certificates\UdapCertificateCacheExtensions.cs:18 => public static class UdapCertificateCacheExtensions
+C:\Source\GitHub\JoeShook\udap-tools\udap-dotnet\Udap.Common\Constants.cs:12 => public static class Constants
+C:\Source\GitHub\JoeShook\udap-tools\udap-dotnet\Udap.Common\Extensions\StringExtensions.cs:25 => public static string EnsureTrailingSlash(this string url)
+C:\Source\GitHub\JoeShook\udap-tools\udap-dotnet\Udap.Common\Extensions\StringExtensions.cs:42 => public static string EnsureLeadingSlash(this string? url)
+C:\Source\GitHub\JoeShook\udap-tools\udap-dotnet\Udap.Common\Extensions\StringExtensions.cs:58 => public static bool IsPresent(this string? value)
+C:\Source\GitHub\JoeShook\udap-tools\udap-dotnet\Udap.Common\Extensions\StringExtensions.cs:69 => public static bool IsMissing(this string value)
+C:\Source\GitHub\JoeShook\udap-tools\udap-dotnet\Udap.Common\Extensions\StringExtensions.cs:80 => public static string RemoveTrailingSlash(this string url)
+C:\Source\GitHub\JoeShook\udap-tools\udap-dotnet\Udap.Common\Extensions\StringExtensions.cs:97 => public static string GetBaseUrlFromMetadataUrl(this string url)
+C:\Source\GitHub\JoeShook\udap-tools\udap-dotnet\Udap.Common\Extensions\StringExtensions.cs:116 => public static string? GetCommunityFromQueryParams(this string queryPath)
+C:\Source\GitHub\JoeShook\udap-tools\udap-dotnet\Udap.Common\Extensions\StringExtensions.cs:137 => public static string RemoveQueryParameters(this string url)
+C:\Source\GitHub\JoeShook\udap-tools\udap-dotnet\Udap.Common\Metadata\UdapMetaDataBuilder.cs:24 => public class UdapMetaDataBuilder<TUdapMetadataOptions, TUdapMetadata>
+C:\Source\GitHub\JoeShook\udap-tools\udap-dotnet\Udap.Common\Metadata\UdapMetaDataBuilder.cs:32 => public UdapMetaDataBuilder(

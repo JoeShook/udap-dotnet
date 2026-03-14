@@ -112,7 +112,7 @@ public class TieredOauthWithPKCETests
             // It was not intended to work with the concept of a dynamic client registration.
             services.AddSingleton(_mockAuthorServerPipeline.Clients);
 
-            services.Configure<UdapFileCertStoreManifest>(builderContext.Configuration.GetSection(Constants.UDAP_FILE_STORE_MANIFEST));
+            services.Configure<UdapFileCertStoreManifest>(builderContext.Configuration.GetSection(Constants.UdapFileCertStoreManifestSectionName));
 
             services.AddAuthentication()
                 //

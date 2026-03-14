@@ -62,7 +62,7 @@ public class TrustChainValidatorTests
         udapMetadataOptionsMock.Value.Returns(udapMetadataOptions);
         
         var udapFileCertStoreManifest = new UdapFileCertStoreManifest();
-        _configuration.GetSection(Constants.UDAP_FILE_STORE_MANIFEST).Bind(udapFileCertStoreManifest);
+        _configuration.GetSection(Constants.UdapFileCertStoreManifestSectionName).Bind(udapFileCertStoreManifest);
 
         var udapFileCertStoreManifestOptions = Substitute.For<IOptionsMonitor<UdapFileCertStoreManifest>>();
         udapFileCertStoreManifestOptions.CurrentValue.Returns(udapFileCertStoreManifest);
@@ -111,14 +111,14 @@ public class TrustChainValidatorTests
     public async Task MissingCertificateForCommunityTest()
     {
         var udapMetadataOptions = new UdapMetadataOptions();
-        _configuration.GetSection(Constants.UDAP_METADATA_OPTIONS).Bind(udapMetadataOptions);
+        _configuration.GetSection(Constants.UdapMetadataOptionsSectionName).Bind(udapMetadataOptions);
         var udapMetadataOptionsProviderMock = Substitute.For<IUdapMetadataOptionsProvider>();
         udapMetadataOptionsProviderMock.Value.Returns(udapMetadataOptions);
 
-        _configuration.GetSection(Constants.UDAP_METADATA_OPTIONS).Bind(udapMetadataOptions);
+        _configuration.GetSection(Constants.UdapMetadataOptionsSectionName).Bind(udapMetadataOptions);
 
         var udapFileCertStoreManifest = new UdapFileCertStoreManifest();
-        _configuration.GetSection(Constants.UDAP_FILE_STORE_MANIFEST).Bind(udapFileCertStoreManifest);
+        _configuration.GetSection(Constants.UdapFileCertStoreManifestSectionName).Bind(udapFileCertStoreManifest);
 
         var udapFileCertStoreManifestOptions = Substitute.For<IOptionsMonitor<UdapFileCertStoreManifest>>();
         udapFileCertStoreManifestOptions.CurrentValue.Returns(udapFileCertStoreManifest);
@@ -138,10 +138,10 @@ public class TrustChainValidatorTests
     {
         var udapMetadataOptionsProvider = Substitute.For<IUdapMetadataOptionsProvider>();
         udapMetadataOptionsProvider.Value.Returns(new UdapMetadataOptions());
-        _configuration.GetSection(Constants.UDAP_METADATA_OPTIONS).Bind(udapMetadataOptionsProvider);
+        _configuration.GetSection(Constants.UdapMetadataOptionsSectionName).Bind(udapMetadataOptionsProvider);
 
         var udapFileCertStoreManifest = new UdapFileCertStoreManifest();
-        _configuration.GetSection(Constants.UDAP_FILE_STORE_MANIFEST).Bind(udapFileCertStoreManifest);
+        _configuration.GetSection(Constants.UdapFileCertStoreManifestSectionName).Bind(udapFileCertStoreManifest);
 
         var udapFileCertStoreManifestOptions = Substitute.For<IOptionsMonitor<UdapFileCertStoreManifest>>();
         udapFileCertStoreManifestOptions.CurrentValue.Returns(udapFileCertStoreManifest);
@@ -166,7 +166,7 @@ public class TrustChainValidatorTests
         udapMetadataOptionsProviderMock.Value.Returns(udapMetadataOptions);
 
         var udapFileCertStoreManifest = new UdapFileCertStoreManifest();
-        _configuration.GetSection(Constants.UDAP_FILE_STORE_MANIFEST).Bind(udapFileCertStoreManifest);
+        _configuration.GetSection(Constants.UdapFileCertStoreManifestSectionName).Bind(udapFileCertStoreManifest);
 
         var udapFileCertStoreManifestOptions = Substitute.For<IOptionsMonitor<UdapFileCertStoreManifest>>();
         udapFileCertStoreManifestOptions.CurrentValue.Returns(udapFileCertStoreManifest);
@@ -205,7 +205,7 @@ public class TrustChainValidatorTests
         var services = new ServiceCollection();
 
         // UDAP CertStore
-        services.Configure<UdapFileCertStoreManifest>(configuration.GetSection(Constants.UDAP_FILE_STORE_MANIFEST));
+        services.Configure<UdapFileCertStoreManifest>(configuration.GetSection(Constants.UdapFileCertStoreManifestSectionName));
         services.AddSingleton<ITrustAnchorStore>(sp =>
             new TrustAnchorFileStore(
                 sp.GetRequiredService<IOptionsMonitor<UdapFileCertStoreManifest>>(),
@@ -266,7 +266,7 @@ public class TrustChainValidatorTests
         var services = new ServiceCollection();
 
         // UDAP CertStore
-        services.Configure<UdapFileCertStoreManifest>(configuration.GetSection(Constants.UDAP_FILE_STORE_MANIFEST));
+        services.Configure<UdapFileCertStoreManifest>(configuration.GetSection(Constants.UdapFileCertStoreManifestSectionName));
         services.AddSingleton<ITrustAnchorStore>(sp =>
             new TrustAnchorFileStore(
                 sp.GetRequiredService<IOptionsMonitor<UdapFileCertStoreManifest>>(),

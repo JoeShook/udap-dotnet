@@ -21,7 +21,12 @@ using Udap.Util.Extensions;
 
 namespace Udap.Common.Metadata;
 
-public class UdapMetaDataBuilder<TUdapMetadataOptions, TUdapMetadata> 
+/// <summary>
+/// Builds and signs UDAP metadata documents for the <c>.well-known/udap</c> endpoint.
+/// </summary>
+/// <typeparam name="TUdapMetadataOptions">The metadata options type, must extend <see cref="UdapMetadataOptions"/>.</typeparam>
+/// <typeparam name="TUdapMetadata">The metadata type, must extend <see cref="UdapMetadata"/>.</typeparam>
+public class UdapMetaDataBuilder<TUdapMetadataOptions, TUdapMetadata>
     where TUdapMetadataOptions : UdapMetadataOptions
     where TUdapMetadata : UdapMetadata
 {
@@ -29,6 +34,12 @@ public class UdapMetaDataBuilder<TUdapMetadataOptions, TUdapMetadata>
     private readonly IPrivateCertificateStore _certificateStore;
     private readonly ILogger<UdapMetaDataBuilder<TUdapMetadataOptions, TUdapMetadata>> _logger;
 
+    /// <summary>
+    /// Initializes a new instance of the <see cref="UdapMetaDataBuilder{TUdapMetadataOptions, TUdapMetadata}"/>.
+    /// </summary>
+    /// <param name="optionsProvider">The provider for UDAP metadata options.</param>
+    /// <param name="certificateStore">The certificate store containing signing certificates.</param>
+    /// <param name="logger">The logger instance.</param>
     public UdapMetaDataBuilder(
         IUdapMetadataOptionsProvider optionsProvider,
         IPrivateCertificateStore certificateStore,

@@ -31,7 +31,7 @@ public class FileCertificateStoreTests
     public async Task Resolve_LoadsAnchorsAndIssuedCerts()
     {
         var manifest = new UdapFileCertStoreManifest();
-        _configuration.GetSection(Constants.UDAP_FILE_STORE_MANIFEST).Bind(manifest);
+        _configuration.GetSection(Constants.UdapFileCertStoreManifestSectionName).Bind(manifest);
 
         var monitor = Substitute.For<IOptionsMonitor<UdapFileCertStoreManifest>>();
         monitor.CurrentValue.Returns(manifest);
@@ -48,7 +48,7 @@ public class FileCertificateStoreTests
     public async Task Resolve_CalledTwice_OnlyLoadsOnce()
     {
         var manifest = new UdapFileCertStoreManifest();
-        _configuration.GetSection(Constants.UDAP_FILE_STORE_MANIFEST).Bind(manifest);
+        _configuration.GetSection(Constants.UdapFileCertStoreManifestSectionName).Bind(manifest);
 
         var monitor = Substitute.For<IOptionsMonitor<UdapFileCertStoreManifest>>();
         monitor.CurrentValue.Returns(manifest);
@@ -101,7 +101,7 @@ public class FileCertificateStoreTests
 
         var store = new FileCertificateStore(monitor, Substitute.For<ILogger<FileCertificateStore>>());
 
-        await Assert.ThrowsAsync<Exception>(() => store.Resolve());
+        await Assert.ThrowsAsync<InvalidOperationException>(() => store.Resolve());
     }
 
     [Fact]

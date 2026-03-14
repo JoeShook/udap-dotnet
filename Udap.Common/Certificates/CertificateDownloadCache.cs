@@ -34,6 +34,13 @@ public class CertificateDownloadCache : ICertificateDownloadCache
     private readonly ILogger<CertificateDownloadCache> _logger;
     private readonly TimeSpan _defaultCrlTtl;
 
+    /// <summary>
+    /// Initializes a new instance of the <see cref="CertificateDownloadCache"/>.
+    /// </summary>
+    /// <param name="cacheProvider">The FusionCache provider to retrieve the named certificate cache.</param>
+    /// <param name="httpClient">The HTTP client used to download CRL and AIA resources.</param>
+    /// <param name="logger">The logger instance.</param>
+    /// <param name="defaultCrlTtl">The default time-to-live for cached CRL entries. Defaults to 1 hour.</param>
     public CertificateDownloadCache(
         IFusionCacheProvider cacheProvider,
         HttpClient httpClient,

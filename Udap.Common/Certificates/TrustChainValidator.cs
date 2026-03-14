@@ -38,6 +38,10 @@ using BcX509Extensions = Org.BouncyCastle.Asn1.X509.X509Extensions;
 
 namespace Udap.Common.Certificates
 {
+    /// <summary>
+    /// Validates X.509 certificate chains against trusted anchors using BouncyCastle.
+    /// Supports CRL revocation checking, AIA certificate chasing, and configurable problem flags.
+    /// </summary>
     public class TrustChainValidator
     {
         private readonly ChainProblemStatus _problemFlags;
@@ -140,6 +144,15 @@ namespace Udap.Common.Certificates
             _downloadTimeout = downloadTimeout;
         }
 
+        /// <summary>
+        /// Validates whether the specified certificate is trusted by building and verifying a chain
+        /// against the provided anchor certificates.
+        /// </summary>
+        /// <param name="clientName">A display name for the client, used in log messages.</param>
+        /// <param name="certificate">The end-entity certificate to validate.</param>
+        /// <param name="intermediateCertificates">Optional intermediate certificates to include in chain building.</param>
+        /// <param name="anchorCertificates">The trust anchor (root CA) certificates to validate against.</param>
+        /// <returns><c>true</c> if the certificate chain is valid and trusted; otherwise <c>false</c>.</returns>
         public async Task<bool> IsTrustedCertificateAsync(
             string clientName,
             X509Certificate2 certificate,
@@ -156,6 +169,17 @@ namespace Udap.Common.Certificates
             return result.IsValid;
         }
 
+        /// <summary>
+        /// Validates whether the specified certificate is trusted, returning detailed chain element
+        /// information and an optional community identifier from the matching anchor.
+        /// </summary>
+        /// <param name="clientName">A display name for the client, used in log messages.</param>
+        /// <param name="certificate">The end-entity certificate to validate.</param>
+        /// <param name="intermediateCertificates">Optional intermediate certificates to include in chain building.</param>
+        /// <param name="anchorCertificates">The trust anchor (root CA) certificates to validate against.</param>
+        /// <param name="anchors">Optional <see cref="Anchor"/> models to resolve a <see cref="ChainValidationResult.CommunityId"/>.</param>
+        /// <param name="cancellationToken">A token to cancel the operation.</param>
+        /// <returns>A <see cref="ChainValidationResult"/> containing the validation outcome, chain elements, and community identifier.</returns>
         public async Task<ChainValidationResult> IsTrustedCertificateAsync(
             string clientName,
             X509Certificate2 certificate,
