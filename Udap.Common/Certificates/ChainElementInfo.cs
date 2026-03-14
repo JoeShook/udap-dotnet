@@ -76,7 +76,8 @@ public enum ChainProblemStatus
     UntrustedRoot = 32,
     PartialChain = 64,
     CrlNotFound = 128,
-    CrlFetchFailed = 256
+    CrlFetchFailed = 256,
+    RevocationStatusUnknown = 512
 }
 
 /// <summary>

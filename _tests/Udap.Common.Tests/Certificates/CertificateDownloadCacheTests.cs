@@ -267,6 +267,207 @@ public class CertificateDownloadCacheTests
     }
 
     [Fact]
+    public async Task TrustChainValidator_Rejects_Revoked_Certificate()
+    {
+        // Create a CA key pair and self-signed root
+        var caKeyPairGenerator = new RsaKeyPairGenerator();
+        caKeyPairGenerator.Init(new KeyGenerationParameters(new SecureRandom(), 2048));
+        var caKeyPair = caKeyPairGenerator.GenerateKeyPair();
+
+        var caCertGenerator = new X509V3CertificateGenerator();
+        caCertGenerator.SetSerialNumber(BigInteger.ProbablePrime(120, new Random()));
+        caCertGenerator.SetIssuerDN(new X509Name("CN=Test Root CA"));
+        caCertGenerator.SetSubjectDN(new X509Name("CN=Test Root CA"));
+        caCertGenerator.SetNotBefore(DateTime.UtcNow.AddDays(-1));
+        caCertGenerator.SetNotAfter(DateTime.UtcNow.AddYears(1));
+        caCertGenerator.SetPublicKey(caKeyPair.Public);
+        caCertGenerator.AddExtension(X509Extensions.BasicConstraints, true, new BasicConstraints(true));
+        caCertGenerator.AddExtension(X509Extensions.SubjectKeyIdentifier, false,
+            new SubjectKeyIdentifierStructure(caKeyPair.Public));
+
+        var caSigner = new Asn1SignatureFactory("SHA256WithRSA", caKeyPair.Private);
+        var bcRootCert = caCertGenerator.Generate(caSigner);
+
+        // Create a leaf certificate with a CRL distribution point
+        var leafKeyPairGenerator = new RsaKeyPairGenerator();
+        leafKeyPairGenerator.Init(new KeyGenerationParameters(new SecureRandom(), 2048));
+        var leafKeyPair = leafKeyPairGenerator.GenerateKeyPair();
+
+        var leafSerialNumber = BigInteger.ProbablePrime(120, new Random());
+        const string crlUrl = "https://example.com/test.crl";
+
+        var leafCertGenerator = new X509V3CertificateGenerator();
+        leafCertGenerator.SetSerialNumber(leafSerialNumber);
+        leafCertGenerator.SetIssuerDN(new X509Name("CN=Test Root CA"));
+        leafCertGenerator.SetSubjectDN(new X509Name("CN=Test Revoked Leaf"));
+        leafCertGenerator.SetNotBefore(DateTime.UtcNow.AddDays(-1));
+        leafCertGenerator.SetNotAfter(DateTime.UtcNow.AddYears(1));
+        leafCertGenerator.SetPublicKey(leafKeyPair.Public);
+
+        var crlDp = new DistributionPoint(
+            new DistributionPointName(
+                DistributionPointName.FullName,
+                new GeneralNames(new GeneralName(GeneralName.UniformResourceIdentifier, crlUrl))),
+            null, null);
+        leafCertGenerator.AddExtension(X509Extensions.CrlDistributionPoints, false,
+            new CrlDistPoint(new[] { crlDp }));
+        leafCertGenerator.AddExtension(X509Extensions.AuthorityKeyIdentifier, false,
+            new AuthorityKeyIdentifierStructure(bcRootCert));
+
+        var leafSigner = new Asn1SignatureFactory("SHA256WithRSA", caKeyPair.Private);
+        var bcLeafCert = leafCertGenerator.Generate(leafSigner);
+
+        // Create a CRL signed by the CA with the leaf certificate REVOKED
+        var crlGenerator = new X509V2CrlGenerator();
+        crlGenerator.SetIssuerDN(new X509Name("CN=Test Root CA"));
+        crlGenerator.SetThisUpdate(DateTime.UtcNow);
+        crlGenerator.SetNextUpdate(DateTime.UtcNow.AddHours(24));
+        crlGenerator.AddCrlEntry(leafSerialNumber, DateTime.UtcNow.AddHours(-1), CrlReason.KeyCompromise);
+        var crlSigner = new Asn1SignatureFactory("SHA256WithRSA", caKeyPair.Private);
+        var crl = crlGenerator.Generate(crlSigner);
+
+        // Set up a mock HTTP handler to serve the CRL
+        var handler = new MockHttpHandler();
+        handler.SetResponse(crlUrl, crl.GetEncoded());
+        var httpClient = new HttpClient(handler);
+
+        // Create validator with revocation checking enabled
+        var services = new ServiceCollection();
+        services.AddLogging(b => b.AddXUnit(_testOutputHelper));
+        var sp = services.BuildServiceProvider();
+        var logger = sp.GetRequiredService<ILogger<TrustChainValidator>>();
+
+        var validator = new TrustChainValidator(
+            TrustChainValidator.DefaultProblemFlags,
+            true,
+            logger,
+            downloadCache: null,
+            httpClient: httpClient);
+
+        var leafDotNet = new X509Certificate2(bcLeafCert.GetEncoded());
+        var rootDotNet = new X509Certificate2(bcRootCert.GetEncoded());
+
+        var anchors = new X509Certificate2Collection(rootDotNet);
+        
+        var result = await validator.IsTrustedCertificateAsync(
+            "test_client",
+            leafDotNet,
+            intermediateCertificates: null,
+            anchors);
+
+        // CRL was downloaded and leaf IS revoked, so chain should be invalid
+        Assert.False(result);
+        Assert.Equal(1, handler.CallCount(crlUrl));
+    }
+
+    [Fact]
+    public async Task TrustChainValidator_Rejects_Revoked_Certificate_With_Cache()
+    {
+        // Create a CA key pair and self-signed root
+        var caKeyPairGenerator = new RsaKeyPairGenerator();
+        caKeyPairGenerator.Init(new KeyGenerationParameters(new SecureRandom(), 2048));
+        var caKeyPair = caKeyPairGenerator.GenerateKeyPair();
+
+        var caCertGenerator = new X509V3CertificateGenerator();
+        caCertGenerator.SetSerialNumber(BigInteger.ProbablePrime(120, new Random()));
+        caCertGenerator.SetIssuerDN(new X509Name("CN=Test Root CA"));
+        caCertGenerator.SetSubjectDN(new X509Name("CN=Test Root CA"));
+        caCertGenerator.SetNotBefore(DateTime.UtcNow.AddDays(-1));
+        caCertGenerator.SetNotAfter(DateTime.UtcNow.AddYears(1));
+        caCertGenerator.SetPublicKey(caKeyPair.Public);
+        caCertGenerator.AddExtension(X509Extensions.BasicConstraints, true, new BasicConstraints(true));
+        caCertGenerator.AddExtension(X509Extensions.SubjectKeyIdentifier, false,
+            new SubjectKeyIdentifierStructure(caKeyPair.Public));
+
+        var caSigner = new Asn1SignatureFactory("SHA256WithRSA", caKeyPair.Private);
+        var bcRootCert = caCertGenerator.Generate(caSigner);
+
+        // Create a leaf certificate with a CRL distribution point
+        var leafKeyPairGenerator = new RsaKeyPairGenerator();
+        leafKeyPairGenerator.Init(new KeyGenerationParameters(new SecureRandom(), 2048));
+        var leafKeyPair = leafKeyPairGenerator.GenerateKeyPair();
+
+        var leafSerialNumber = BigInteger.ProbablePrime(120, new Random());
+        const string crlUrl = "https://example.com/test-cached.crl";
+
+        var leafCertGenerator = new X509V3CertificateGenerator();
+        leafCertGenerator.SetSerialNumber(leafSerialNumber);
+        leafCertGenerator.SetIssuerDN(new X509Name("CN=Test Root CA"));
+        leafCertGenerator.SetSubjectDN(new X509Name("CN=Test Revoked Leaf Cached"));
+        leafCertGenerator.SetNotBefore(DateTime.UtcNow.AddDays(-1));
+        leafCertGenerator.SetNotAfter(DateTime.UtcNow.AddYears(1));
+        leafCertGenerator.SetPublicKey(leafKeyPair.Public);
+
+        var crlDp = new DistributionPoint(
+            new DistributionPointName(
+                DistributionPointName.FullName,
+                new GeneralNames(new GeneralName(GeneralName.UniformResourceIdentifier, crlUrl))),
+            null, null);
+        leafCertGenerator.AddExtension(X509Extensions.CrlDistributionPoints, false,
+            new CrlDistPoint(new[] { crlDp }));
+        leafCertGenerator.AddExtension(X509Extensions.AuthorityKeyIdentifier, false,
+            new AuthorityKeyIdentifierStructure(bcRootCert));
+
+        var leafSigner = new Asn1SignatureFactory("SHA256WithRSA", caKeyPair.Private);
+        var bcLeafCert = leafCertGenerator.Generate(leafSigner);
+
+        // Create a CRL signed by the CA with the leaf certificate REVOKED
+        var crlGenerator = new X509V2CrlGenerator();
+        crlGenerator.SetIssuerDN(new X509Name("CN=Test Root CA"));
+        crlGenerator.SetThisUpdate(DateTime.UtcNow);
+        crlGenerator.SetNextUpdate(DateTime.UtcNow.AddHours(24));
+        crlGenerator.AddCrlEntry(leafSerialNumber, DateTime.UtcNow.AddHours(-1), CrlReason.KeyCompromise);
+        var crlSigner = new Asn1SignatureFactory("SHA256WithRSA", caKeyPair.Private);
+        var crl = crlGenerator.Generate(crlSigner);
+
+        // Set up mock HTTP + FusionCache
+        var mockHandler = new MockHttpHandler();
+        mockHandler.SetResponse(crlUrl, crl.GetEncoded());
+        var httpClient = new HttpClient(mockHandler);
+
+        var services = new ServiceCollection();
+        services.AddLogging(b => b.AddXUnit(_testOutputHelper));
+        services.AddFusionCache(CertificateDownloadCache.CacheName);
+        var sp = services.BuildServiceProvider();
+
+        var cacheProvider = sp.GetRequiredService<IFusionCacheProvider>();
+        var cacheLogger = sp.GetRequiredService<ILogger<CertificateDownloadCache>>();
+        var downloadCache = new CertificateDownloadCache(cacheProvider, httpClient, cacheLogger);
+
+        var validatorLogger = sp.GetRequiredService<ILogger<TrustChainValidator>>();
+        var validator = new TrustChainValidator(
+            TrustChainValidator.DefaultProblemFlags,
+            true,
+            validatorLogger,
+            downloadCache: downloadCache);
+
+        var leafDotNet = new X509Certificate2(bcLeafCert.GetEncoded());
+        var rootDotNet = new X509Certificate2(bcRootCert.GetEncoded());
+
+        var anchors = new X509Certificate2Collection(rootDotNet);
+
+        var result = await validator.IsTrustedCertificateAsync(
+            "test_client",
+            leafDotNet,
+            intermediateCertificates: null,
+            anchors);
+
+        // CRL was downloaded via cache and leaf IS revoked, so chain should be invalid
+        Assert.False(result);
+        Assert.Equal(1, mockHandler.CallCount(crlUrl));
+
+        // Second call should use cached CRL (no additional download)
+        var result2 = await validator.IsTrustedCertificateAsync(
+            "test_client",
+            leafDotNet,
+            intermediateCertificates: null,
+            anchors);
+
+        Assert.False(result2);
+        Assert.Equal(1, mockHandler.CallCount(crlUrl)); // still only 1 download
+    }
+
+    [Fact]
     public async Task MultipleCacheEntries_RemoveOneStillServesOther()
     {
         var (cache, handler) = CreateCacheWithHandler(out _);

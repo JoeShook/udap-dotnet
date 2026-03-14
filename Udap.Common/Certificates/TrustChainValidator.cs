@@ -71,7 +71,8 @@ namespace Udap.Common.Certificates
             ChainProblemStatus.Revoked |
             ChainProblemStatus.NotSignatureValid |
             ChainProblemStatus.InvalidBasicConstraints |
-            ChainProblemStatus.OfflineRevocation;
+            ChainProblemStatus.OfflineRevocation |
+            ChainProblemStatus.RevocationStatusUnknown;
 
         /// <summary>
         /// Creates an instance with default problem flags and online revocation checking.
@@ -524,11 +525,17 @@ namespace Udap.Common.Certificates
                 return await _downloadCache.GetCrlAsync(url, cancellationToken);
             }
 
+            if (_httpClient == null)
+            {
+                _logger.LogWarning("No download cache or HttpClient available to download CRL from {Url}", url);
+                return null;
+            }
+
             LogNoCacheWarning();
 
             try
             {
-                var data = await _httpClient!.GetByteArrayAsync(url, cancellationToken);
+                var data = await _httpClient.GetByteArrayAsync(url, cancellationToken);
                 return new X509CrlParser().ReadCrl(data);
             }
             catch (Exception ex)
@@ -569,12 +576,12 @@ namespace Udap.Common.Certificates
                 return problems;
             }
 
+            var crlChecked = false;
+
             try
             {
                 var crlDistPoint = CrlDistPoint.GetInstance(
                     Asn1OctetString.GetInstance(crlDpValue).GetOctets());
-
-                bool crlChecked = false;
 
                 foreach (var dp in crlDistPoint.GetDistributionPoints())
                 {
@@ -598,15 +605,12 @@ namespace Udap.Common.Certificates
                             continue;
                         }
 
-                        if (_downloadCache == null && _httpClient == null)
+                        // Only allow http/https schemes for CRL downloads
+                        if (!Uri.TryCreate(url, UriKind.Absolute, out var crlUri) ||
+                            (crlUri.Scheme != Uri.UriSchemeHttp && crlUri.Scheme != Uri.UriSchemeHttps))
                         {
-                            if ((_problemFlags & ChainProblemStatus.OfflineRevocation) != 0)
-                            {
-                                problems.Add(new ChainProblem(
-                                    ChainProblemStatus.OfflineRevocation,
-                                    $"No download cache or HttpClient available to check CRL at {url}"));
-                            }
-                            return problems;
+                            _logger.LogDebug("Skipping CRL DP with unsupported URI scheme: {Url}", url);
+                            continue;
                         }
 
                         var crl = await DownloadCrlAsync(url, cancellationToken);
@@ -627,11 +631,38 @@ namespace Udap.Common.Certificates
                             {
                                 crl.Verify(issuer.GetPublicKey());
                             }
-                            catch
+                            catch (Exception ex)
                             {
-                                _logger.LogWarning("CRL from {Url} not signed by expected issuer", url);
+                                _logger.LogWarning(ex, "CRL from {Url} failed signature verification against expected issuer", url);
                                 continue;
                             }
+                        }
+
+                        // Check if ThisUpdate is in the future (clock skew or bad CRL)
+                        if (crl.ThisUpdate.ToUniversalTime() > DateTime.UtcNow)
+                        {
+                            _logger.LogWarning("CRL from {Url} has ThisUpdate in the future ({ThisUpdate}), treating as unknown", url, crl.ThisUpdate);
+                            problems.Add(new ChainProblem(
+                                ChainProblemStatus.RevocationStatusUnknown,
+                                $"CRL from {url} has ThisUpdate in the future ({crl.ThisUpdate:O})"));
+                            continue;
+                        }
+
+                        // Check if the CRL has expired (NextUpdate has passed)
+                        if (crl.NextUpdate != null && crl.NextUpdate.Value.ToUniversalTime() < DateTime.UtcNow)
+                        {
+                            _logger.LogWarning("CRL from {Url} has expired (NextUpdate: {NextUpdate})", url, crl.NextUpdate.Value);
+
+                            // Evict the stale CRL from cache so a fresh one is fetched next time
+                            if (_downloadCache != null)
+                            {
+                                await _downloadCache.RemoveCrlAsync(url, cancellationToken);
+                            }
+
+                            problems.Add(new ChainProblem(
+                                ChainProblemStatus.RevocationStatusUnknown,
+                                $"CRL from {url} has expired (NextUpdate: {crl.NextUpdate.Value:O})"));
+                            continue;
                         }
 
                         if (crl.IsRevoked(cert))
@@ -642,7 +673,12 @@ namespace Udap.Common.Certificates
                         }
 
                         crlChecked = true;
-                        break; // Successfully checked one CRL, that's sufficient
+
+                        // Stop after first successful CRL check. UDAP PKI does not use
+                        // partitioned CRLs, so a single DP is sufficient. If a Revoked
+                        // status was found above, it was already recorded. For PKIs with
+                        // partitioned CRLs, this would need to continue checking remaining DPs.
+                        break;
                     }
 
                     if (crlChecked)
@@ -657,6 +693,13 @@ namespace Udap.Common.Certificates
                 problems.Add(new ChainProblem(
                     ChainProblemStatus.CrlFetchFailed,
                     $"Error checking CRL: {ex.Message}"));
+            }
+
+            if (!crlChecked && !problems.Any(p => p.Status == ChainProblemStatus.RevocationStatusUnknown))
+            {
+                problems.Add(new ChainProblem(
+                    ChainProblemStatus.RevocationStatusUnknown,
+                    "Revocation status could not be determined: no CRL was successfully checked"));
             }
 
             return problems;
