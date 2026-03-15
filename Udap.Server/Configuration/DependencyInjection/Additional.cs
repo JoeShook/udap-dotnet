@@ -34,6 +34,7 @@ public static class IdentityServerBuilderExtensionsAdditional
     {
         builder.Services.TryAddTransient<IReplayCache, DefaultReplayCache>();
         builder.Services.TryAddTransient<IUdapAuthorizationExtensionValidator, DefaultUdapAuthorizationExtensionValidator>();
+        builder.Services.TryAddTransient<ICustomTokenRequestValidator, UdapCustomTokenRequestValidator>();
         builder.Services.AddTransient<ISecretParser, UdapJwtBearerClientAssertionSecretParser>();
         builder.Services.AddTransient<ISecretValidator, UdapJwtSecretValidator>();
 

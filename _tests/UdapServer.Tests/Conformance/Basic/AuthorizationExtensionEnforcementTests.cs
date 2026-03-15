@@ -103,7 +103,7 @@ public class AuthorizationExtensionEnforcementTests
 
         Assert.True(tokenResponse.IsError);
         Assert.Equal(HttpStatusCode.BadRequest, tokenResponse.HttpStatusCode);
-        Assert.Equal("invalid_client", tokenResponse.Error);
+        Assert.Equal("invalid_grant", tokenResponse.Error);
     }
 
     [Fact]
@@ -139,7 +139,7 @@ public class AuthorizationExtensionEnforcementTests
 
         Assert.True(tokenResponse.IsError);
         Assert.Equal(HttpStatusCode.BadRequest, tokenResponse.HttpStatusCode);
-        Assert.Equal("invalid_client", tokenResponse.Error);
+        Assert.Equal("invalid_grant", tokenResponse.Error);
     }
 
     [Fact]
@@ -204,7 +204,7 @@ public class AuthorizationExtensionEnforcementTests
 
         Assert.True(tokenResponse.IsError);
         Assert.Equal(HttpStatusCode.BadRequest, tokenResponse.HttpStatusCode);
-        Assert.Equal("invalid_client", tokenResponse.Error);
+        Assert.Equal("invalid_grant", tokenResponse.Error);
     }
 
     [Fact]
@@ -221,7 +221,8 @@ public class AuthorizationExtensionEnforcementTests
                 new CommunityServerSettings
                 {
                     Community = "udap://fhirlabs.net",
-                    AuthorizationExtensionsRequired = [UdapConstants.UdapAuthorizationExtensions.Hl7B2B]
+                    AuthorizationExtensionsRequired = [UdapConstants.UdapAuthorizationExtensions.Hl7B2B],
+                    AllowedPurposeOfUse = ["urn:oid:2.16.840.1.113883.5.8#TREAT"]
                 }
             ]
         });
@@ -283,7 +284,7 @@ public class AuthorizationExtensionEnforcementTests
         var tokenResponse = await pipeline.BackChannelClient.UdapRequestClientCredentialsTokenAsync(clientRequest);
 
         Assert.True(tokenResponse.IsError);
-        Assert.Equal("invalid_client", tokenResponse.Error);
+        Assert.Equal("custom_error", tokenResponse.Error);
     }
 
     #region Helpers
