@@ -9,7 +9,6 @@
 
 using System.Diagnostics;
 using Serilog;
-using Serilog.Events;
 using Serilog.Sinks.SystemConsole.Themes;
 using Udap.Auth.Server;
 
@@ -27,24 +26,13 @@ try
 
 
     builder.Host.UseSerilog((ctx, lc) => lc
+        .ReadFrom.Configuration(ctx.Configuration)
         .WriteTo.Console(
             outputTemplate:
             "[{Timestamp:HH:mm:ss} {Level}][{ThreadId:d}] {SourceContext} {Message:lj} {TraceMessage}{NewLine}{Exception}",
             theme: AnsiConsoleTheme.Code)
-        .MinimumLevel.Verbose()
-        .MinimumLevel.Override("Microsoft", LogEventLevel.Warning)
-        .MinimumLevel.Override("Microsoft.AspNetCore.HttpLogging.HttpLoggingMiddleware", LogEventLevel.Information)
-        .MinimumLevel.Override("Microsoft.Hosting.Lifetime", LogEventLevel.Information)
-        .MinimumLevel.Override("System", LogEventLevel.Warning)
-        .MinimumLevel.Override("Microsoft.AspNetCore.Authentication", LogEventLevel.Information)
         .Enrich.FromLogContext()
-        .Enrich.WithThreadId(), 
-        true);
-
-    // builder.Host.UseSerilog((ctx, lc) => lc
-    //     .WriteTo.Console(outputTemplate: "[{Timestamp:HH:mm:ss} {Level}] {SourceContext}{NewLine}{Message:lj}{NewLine}{Exception}{NewLine}")
-    //     .Enrich.FromLogContext()
-    //     .ReadFrom.Configuration(ctx.Configuration));
+        .Enrich.WithThreadId());
 
     // Mount Cloud Secrets
     builder.Configuration.AddJsonFile("/secret/udap_auth_appsettings", true, false);

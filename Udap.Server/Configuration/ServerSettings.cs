@@ -10,6 +10,7 @@
 using System.Text.Json.Serialization;
 using Microsoft.Extensions.Configuration;
 using Udap.Model;
+using Udap.Server.Validation;
 
 namespace Udap.Server.Configuration;
 public class ServerSettings
@@ -90,6 +91,39 @@ public class ServerSettings
     /// Default is false.
     /// </summary>
     public bool ForceDPoP { get; set; }
+
+    /// <summary>
+    /// Authorization extension key names required by this server in every token request
+    /// (e.g., ["hl7-b2b"]). This is the global default; per-community overrides can be
+    /// specified in <see cref="CommunitySettings"/>.
+    /// Validated by <see cref="IUdapAuthorizationExtensionValidator"/>.
+    /// </summary>
+    [JsonPropertyName("AuthorizationExtensionsRequired")]
+    public HashSet<string>? AuthorizationExtensionsRequired { get; set; }
+
+    /// <summary>
+    /// Allowed purpose_of_use codes (global default).  When set, every code
+    /// in the extension's purpose_of_use array must appear in this set.
+    /// Null means no restriction.  Per-community overrides in <see cref="CommunitySettings"/>.
+    /// </summary>
+    [JsonPropertyName("AllowedPurposeOfUse")]
+    public HashSet<string>? AllowedPurposeOfUse { get; set; }
+
+    /// <summary>
+    /// Maximum number of purpose_of_use entries allowed (global default).
+    /// Null means no limit.  TEFCA communities would set this to 1.
+    /// Per-community overrides in <see cref="CommunitySettings"/>.
+    /// </summary>
+    [JsonPropertyName("MaxPurposeOfUseCount")]
+    public int? MaxPurposeOfUseCount { get; set; }
+
+    /// <summary>
+    /// Per-community overrides for server settings. When a client belongs to a community
+    /// that has a matching entry here, the community-specific settings take precedence
+    /// over the global defaults.
+    /// </summary>
+    [JsonPropertyName("CommunitySettings")]
+    public List<CommunityServerSettings>? CommunitySettings { get; set; }
 }
 
 

@@ -23,10 +23,10 @@ using Udap.Common.Certificates;
 using Udap.Common.Extensions;
 using Udap.Model;
 using Udap.Server.Extensions;
+using Udap.Server.Storage;
 using Udap.Server.Storage.Extensions;
 using Udap.Server.Storage.Stores;
 using Udap.Util.Extensions;
-using static System.Net.WebRequestMethods;
 
 namespace Udap.Server.Validation.Default;
 
@@ -42,6 +42,7 @@ public class UdapJwtSecretValidator : ISecretValidator
     private readonly TrustChainValidator _trustChainValidator;
     private readonly IUdapClientRegistrationStore _clientStore;
     private readonly IHttpContextAccessor _httpContextAccessor;
+    private readonly IUdapAuthorizationExtensionValidator _extensionValidator;
     private readonly ILogger _logger;
 
     private const string Purpose = nameof(UdapJwtSecretValidator);
@@ -54,6 +55,7 @@ public class UdapJwtSecretValidator : ISecretValidator
         TrustChainValidator trustChainValidator,
         IUdapClientRegistrationStore clientStore,
         IHttpContextAccessor httpContextAccessor,
+        IUdapAuthorizationExtensionValidator extensionValidator,
         ILogger<UdapJwtSecretValidator> logger)
     {
         _issuerNameService = issuerNameService;
@@ -63,6 +65,7 @@ public class UdapJwtSecretValidator : ISecretValidator
         _trustChainValidator = trustChainValidator;
         _clientStore = clientStore;
         _httpContextAccessor = httpContextAccessor;
+        _extensionValidator = extensionValidator;
 
         _logger = logger;
     }
@@ -205,15 +208,55 @@ public class UdapJwtSecretValidator : ISecretValidator
         //
         // PKI chain validation, including CRL checking
         //
-        if (await _trustChainValidator.IsTrustedCertificateAsync(
+        if (!await _trustChainValidator.IsTrustedCertificateAsync(
                 parsedSecret.Id,
                 parsedSecret.ToModel().GetUdapEndCert()!,
                 new X509Certificate2Collection(certChainList.ToArray()),
                 new X509Certificate2Collection(certChainList.ToRootCertArray())))
         {
-            return success;
+            return fail;
         }
 
-        return fail;
+        //
+        // Validate authorization extension objects (e.g. hl7-b2b)
+        //
+        var extensionResult = await ValidateExtensionsAsync(jwtToken, secrets, parsedSecret.Id);
+        if (!extensionResult.IsValid)
+        {
+            _logger.LogError(
+                "Authorization extension validation failed for client_id {ClientId}: {Error}",
+                parsedSecret.Id, extensionResult.ErrorDescription);
+            return fail;
+        }
+
+        return success;
+    }
+
+    private async Task<AuthorizationExtensionValidationResult> ValidateExtensionsAsync(
+        JsonWebToken jwtToken,
+        IEnumerable<Secret> secrets,
+        string? clientId)
+    {
+        Dictionary<string, object>? extensions = null;
+
+        if (jwtToken.TryGetPayloadValue<JsonElement>(UdapConstants.JwtClaimTypes.Extensions, out var extensionsElement)
+            && extensionsElement.ValueKind == JsonValueKind.Object)
+        {
+            extensions = PayloadSerializer.Deserialize(extensionsElement);
+        }
+
+        var communityId = secrets
+            .FirstOrDefault(s => s.Type == UdapServerConstants.SecretTypes.UDAP_COMMUNITY)
+            ?.Value;
+
+        var context = new UdapAuthorizationExtensionValidationContext
+        {
+            ClientAssertionToken = jwtToken,
+            ClientId = clientId ?? string.Empty,
+            Extensions = extensions,
+            CommunityId = communityId
+        };
+
+        return await _extensionValidator.ValidateAsync(context);
     }
 }
