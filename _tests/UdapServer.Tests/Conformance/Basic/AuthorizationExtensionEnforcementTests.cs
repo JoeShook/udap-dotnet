@@ -104,6 +104,8 @@ public class AuthorizationExtensionEnforcementTests
         Assert.True(tokenResponse.IsError);
         Assert.Equal(HttpStatusCode.BadRequest, tokenResponse.HttpStatusCode);
         Assert.Equal("invalid_grant", tokenResponse.Error);
+        Assert.NotNull(tokenResponse.ErrorDescription);
+        Assert.Contains("hl7-b2b", tokenResponse.ErrorDescription);
     }
 
     [Fact]
@@ -140,6 +142,8 @@ public class AuthorizationExtensionEnforcementTests
         Assert.True(tokenResponse.IsError);
         Assert.Equal(HttpStatusCode.BadRequest, tokenResponse.HttpStatusCode);
         Assert.Equal("invalid_grant", tokenResponse.Error);
+        Assert.NotNull(tokenResponse.ErrorDescription);
+        Assert.Contains("organization_id", tokenResponse.ErrorDescription);
     }
 
     [Fact]
@@ -205,6 +209,8 @@ public class AuthorizationExtensionEnforcementTests
         Assert.True(tokenResponse.IsError);
         Assert.Equal(HttpStatusCode.BadRequest, tokenResponse.HttpStatusCode);
         Assert.Equal("invalid_grant", tokenResponse.Error);
+        Assert.NotNull(tokenResponse.ErrorDescription);
+        Assert.Contains("hl7-b2b", tokenResponse.ErrorDescription);
     }
 
     [Fact]
@@ -285,6 +291,44 @@ public class AuthorizationExtensionEnforcementTests
 
         Assert.True(tokenResponse.IsError);
         Assert.Equal("custom_error", tokenResponse.Error);
+        Assert.Equal("Custom validator rejected", tokenResponse.ErrorDescription);
+    }
+
+    [Fact]
+    public async Task TokenRequest_TamperedJwt_Returns_InvalidClient_With_ErrorDescription()
+    {
+        var pipeline = BuildPipeline(new ServerSettings
+        {
+            DefaultSystemScopes = "udap",
+            DefaultUserScopes = "udap",
+            SsraaVersion = SsraaVersion.V1_1
+        });
+
+        var clientCert = new X509Certificate2("CertStore/issued/fhirlabs.net.client.pfx", "udap-test");
+        var regResult = await RegisterClient(pipeline, clientCert);
+
+        // Build a valid token request, then tamper with the JWT signature
+        var clientRequest = AccessTokenRequestForClientCredentialsBuilder.Create(
+                regResult.ClientId,
+                IdentityServerPipeline.TokenEndpoint,
+                clientCert)
+            .WithScope("system/Patient.rs")
+            .Build("RS384");
+
+        // Tamper with the signature to trigger JWT validation failure in UdapJwtSecretValidator
+        var jwt = clientRequest.ClientAssertion.Value;
+        var parts = jwt!.Split('.');
+        var tamperedSignature = parts[2][..^2] + "XX"; // corrupt last 2 chars
+        clientRequest.ClientAssertion.Value = $"{parts[0]}.{parts[1]}.{tamperedSignature}";
+
+        var tokenResponse = await pipeline.BackChannelClient.UdapRequestClientCredentialsTokenAsync(clientRequest);
+
+        Assert.True(tokenResponse.IsError);
+        Assert.Equal(HttpStatusCode.BadRequest, tokenResponse.HttpStatusCode);
+        Assert.Equal("invalid_client", tokenResponse.Error);
+        Assert.NotNull(tokenResponse.ErrorDescription);
+        Assert.Contains("Client assertion JWT validation failed", tokenResponse.ErrorDescription);
+        _testOutputHelper.WriteLine($"error_description: {tokenResponse.ErrorDescription}");
     }
 
     #region Helpers

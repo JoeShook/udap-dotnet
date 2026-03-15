@@ -16,7 +16,7 @@ Activity.DefaultIdFormat = ActivityIdFormat.W3C;
 
 Log.Logger = new LoggerConfiguration()
     .WriteTo.Console()
-    .CreateBootstrapLogger();
+    .CreateLogger();
 
 Log.Information("Starting up");
 
