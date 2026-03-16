@@ -38,4 +38,10 @@ public class UdapAuthorizationExtensionValidationContext
     /// UDAP_COMMUNITY secret). Null if unknown.
     /// </summary>
     public string? CommunityId { get; set; }
+
+    /// <summary>
+    /// The OAuth2 grant type (e.g., "client_credentials", "authorization_code").
+    /// Used to resolve grant-type-specific extension requirements.
+    /// </summary>
+    public string? GrantType { get; set; }
 }

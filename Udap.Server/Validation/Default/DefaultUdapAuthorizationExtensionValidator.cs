@@ -40,7 +40,7 @@ public class DefaultUdapAuthorizationExtensionValidator : IUdapAuthorizationExte
     public async Task<AuthorizationExtensionValidationResult> ValidateAsync(
         UdapAuthorizationExtensionValidationContext context)
     {
-        var resolved = await ResolveCommunitySettingsAsync(context.CommunityId);
+        var resolved = await ResolveCommunitySettingsAsync(context.CommunityId, context.GrantType);
 
         var requiredExtensions = resolved.RequiredExtensions;
 
@@ -102,7 +102,7 @@ public class DefaultUdapAuthorizationExtensionValidator : IUdapAuthorizationExte
         return AuthorizationExtensionValidationResult.Success();
     }
 
-    private async Task<ResolvedSettings> ResolveCommunitySettingsAsync(string? communityId)
+    private async Task<ResolvedSettings> ResolveCommunitySettingsAsync(string? communityId, string? grantType)
     {
         var settings = _serverSettings.CurrentValue;
 
@@ -117,8 +117,12 @@ public class DefaultUdapAuthorizationExtensionValidator : IUdapAuthorizationExte
                     return new ResolvedSettings
                     {
                         IsCommunityResolved = true,
-                        RequiredExtensions = commSettings.AuthorizationExtensionsRequired
-                                             ?? settings.AuthorizationExtensionsRequired,
+                        RequiredExtensions = ResolveRequiredExtensions(
+                            grantType,
+                            commSettings.ClientCredentialsExtensionsRequired,
+                            commSettings.AuthorizationCodeExtensionsRequired,
+                            commSettings.AuthorizationExtensionsRequired
+                                ?? settings.AuthorizationExtensionsRequired),
                         AllowedPurposeOfUse = commSettings.AllowedPurposeOfUse,
                         MaxPurposeOfUseCount = commSettings.MaxPurposeOfUseCount
                     };
@@ -128,10 +132,34 @@ public class DefaultUdapAuthorizationExtensionValidator : IUdapAuthorizationExte
 
         return new ResolvedSettings
         {
-            RequiredExtensions = settings.AuthorizationExtensionsRequired,
+            RequiredExtensions = ResolveRequiredExtensions(
+                grantType,
+                settings.ClientCredentialsExtensionsRequired,
+                settings.AuthorizationCodeExtensionsRequired,
+                settings.AuthorizationExtensionsRequired),
             AllowedPurposeOfUse = settings.AllowedPurposeOfUse,
             MaxPurposeOfUseCount = settings.MaxPurposeOfUseCount
         };
+    }
+
+    /// <summary>
+    /// Resolves the required extensions for the given grant type.
+    /// Grant-type-specific settings take precedence over the general fallback.
+    /// </summary>
+    private static HashSet<string>? ResolveRequiredExtensions(
+        string? grantType,
+        HashSet<string>? clientCredentialsExtensions,
+        HashSet<string>? authorizationCodeExtensions,
+        HashSet<string>? fallback)
+    {
+        var grantSpecific = grantType switch
+        {
+            "client_credentials" => clientCredentialsExtensions,
+            "authorization_code" => authorizationCodeExtensions,
+            _ => null
+        };
+
+        return grantSpecific ?? fallback;
     }
 
     private AuthorizationExtensionValidationResult ValidatePurposeOfUse(

@@ -80,7 +80,8 @@ public class UdapCustomTokenRequestValidator : ICustomTokenRequestValidator
             ClientAssertionToken = jwtToken,
             ClientId = request.ClientId ?? string.Empty,
             Extensions = extensions,
-            CommunityId = communityId
+            CommunityId = communityId,
+            GrantType = request.GrantType
         };
 
         var result = await _extensionValidator.ValidateAsync(extensionContext);

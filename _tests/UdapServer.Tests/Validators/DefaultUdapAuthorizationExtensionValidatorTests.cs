@@ -575,6 +575,260 @@ public class DefaultUdapAuthorizationExtensionValidatorTests
 
     #endregion
 
+    #region Grant Type Specific Extensions
+
+    [Fact]
+    public async Task GrantTypeSpecific_ClientCredentials_RequiresB2B_Succeeds()
+    {
+        var settings = new ServerSettings
+        {
+            ClientCredentialsExtensionsRequired = [UdapConstants.UdapAuthorizationExtensions.Hl7B2B],
+            AuthorizationCodeExtensionsRequired = [UdapConstants.UdapAuthorizationExtensions.Hl7B2BUSER]
+        };
+        var validator = CreateValidator(settings);
+        var context = CreateContext(extensions: CreateValidB2BExtensions(), grantType: "client_credentials");
+
+        var result = await validator.ValidateAsync(context);
+
+        Assert.True(result.IsValid);
+    }
+
+    [Fact]
+    public async Task GrantTypeSpecific_ClientCredentials_MissingB2B_Fails()
+    {
+        var settings = new ServerSettings
+        {
+            ClientCredentialsExtensionsRequired = [UdapConstants.UdapAuthorizationExtensions.Hl7B2B],
+            AuthorizationCodeExtensionsRequired = [UdapConstants.UdapAuthorizationExtensions.Hl7B2BUSER]
+        };
+        var validator = CreateValidator(settings);
+        var context = CreateContext(grantType: "client_credentials");
+
+        var result = await validator.ValidateAsync(context);
+
+        Assert.False(result.IsValid);
+        Assert.Contains("hl7-b2b", result.ErrorDescription);
+    }
+
+    [Fact]
+    public async Task GrantTypeSpecific_AuthorizationCode_RequiresB2BUser_Succeeds()
+    {
+        var settings = new ServerSettings
+        {
+            ClientCredentialsExtensionsRequired = [UdapConstants.UdapAuthorizationExtensions.Hl7B2B],
+            AuthorizationCodeExtensionsRequired = [UdapConstants.UdapAuthorizationExtensions.Hl7B2BUSER]
+        };
+        var validator = CreateValidator(settings);
+
+        var b2bUser = new HL7B2BUserAuthorizationExtension();
+        b2bUser.PurposeOfUse!.Add("urn:oid:2.16.840.1.113883.5.8#TREAT");
+        b2bUser.UserPerson = JsonDocument.Parse("{}").RootElement;
+
+        var extensions = new Dictionary<string, object>
+        {
+            [UdapConstants.UdapAuthorizationExtensions.Hl7B2BUSER] = b2bUser
+        };
+        var context = CreateContext(extensions: extensions, grantType: "authorization_code");
+
+        var result = await validator.ValidateAsync(context);
+
+        Assert.True(result.IsValid);
+    }
+
+    [Fact]
+    public async Task GrantTypeSpecific_AuthorizationCode_MissingB2BUser_Fails()
+    {
+        var settings = new ServerSettings
+        {
+            ClientCredentialsExtensionsRequired = [UdapConstants.UdapAuthorizationExtensions.Hl7B2B],
+            AuthorizationCodeExtensionsRequired = [UdapConstants.UdapAuthorizationExtensions.Hl7B2BUSER]
+        };
+        var validator = CreateValidator(settings);
+        var context = CreateContext(grantType: "authorization_code");
+
+        var result = await validator.ValidateAsync(context);
+
+        Assert.False(result.IsValid);
+        Assert.Contains("hl7-b2b-user", result.ErrorDescription);
+    }
+
+    [Fact]
+    public async Task GrantTypeSpecific_AuthorizationCode_WrongExtension_Fails()
+    {
+        // Client sends hl7-b2b but authorization_code requires hl7-b2b-user
+        var settings = new ServerSettings
+        {
+            ClientCredentialsExtensionsRequired = [UdapConstants.UdapAuthorizationExtensions.Hl7B2B],
+            AuthorizationCodeExtensionsRequired = [UdapConstants.UdapAuthorizationExtensions.Hl7B2BUSER]
+        };
+        var validator = CreateValidator(settings);
+        var context = CreateContext(extensions: CreateValidB2BExtensions(), grantType: "authorization_code");
+
+        var result = await validator.ValidateAsync(context);
+
+        Assert.False(result.IsValid);
+        Assert.Contains("hl7-b2b-user", result.ErrorDescription);
+    }
+
+    [Fact]
+    public async Task GrantTypeSpecific_SSRAA_AuthorizationCode_NoExtensionRequired_Succeeds()
+    {
+        // SSRAA requires hl7-b2b for client_credentials but NOT for authorization_code
+        var settings = new ServerSettings
+        {
+            ClientCredentialsExtensionsRequired = [UdapConstants.UdapAuthorizationExtensions.Hl7B2B]
+            // AuthorizationCodeExtensionsRequired is null — no extension needed
+        };
+        var validator = CreateValidator(settings);
+        var context = CreateContext(grantType: "authorization_code"); // no extensions
+
+        var result = await validator.ValidateAsync(context);
+
+        Assert.True(result.IsValid);
+    }
+
+    [Fact]
+    public async Task GrantTypeSpecific_FallsBackToGeneral_WhenNoGrantSpecific()
+    {
+        // Only general AuthorizationExtensionsRequired set, no grant-specific
+        var settings = new ServerSettings
+        {
+            AuthorizationExtensionsRequired = [UdapConstants.UdapAuthorizationExtensions.Hl7B2B]
+        };
+        var validator = CreateValidator(settings);
+        var context = CreateContext(grantType: "client_credentials");
+
+        var result = await validator.ValidateAsync(context);
+
+        Assert.False(result.IsValid);
+        Assert.Contains("hl7-b2b", result.ErrorDescription);
+    }
+
+    [Fact]
+    public async Task GrantTypeSpecific_OverridesGeneral()
+    {
+        // General requires hl7-b2b, but grant-specific for client_credentials is empty
+        var settings = new ServerSettings
+        {
+            AuthorizationExtensionsRequired = [UdapConstants.UdapAuthorizationExtensions.Hl7B2B],
+            ClientCredentialsExtensionsRequired = []
+        };
+        var validator = CreateValidator(settings);
+        var context = CreateContext(grantType: "client_credentials");
+
+        var result = await validator.ValidateAsync(context);
+
+        // Grant-specific empty set overrides the general requirement
+        Assert.True(result.IsValid);
+    }
+
+    [Fact]
+    public async Task GrantTypeSpecific_Community_ClientCredentials_RequiresB2B()
+    {
+        var clientStore = Substitute.For<IUdapClientRegistrationStore>();
+        clientStore.GetCommunityId("urn:oid:2.16.840.1.113883.3.7204.1.5")
+            .Returns(Task.FromResult<int?>(10));
+
+        var settings = new ServerSettings
+        {
+            CommunitySettings =
+            [
+                new CommunityServerSettings
+                {
+                    Community = "urn:oid:2.16.840.1.113883.3.7204.1.5",
+                    ClientCredentialsExtensionsRequired = [UdapConstants.UdapAuthorizationExtensions.Hl7B2B],
+                    AuthorizationCodeExtensionsRequired = [UdapConstants.UdapAuthorizationExtensions.Hl7B2BUSER],
+                    AllowedPurposeOfUse =
+                    [
+                        "urn:oid:2.16.840.1.113883.3.7204.1.5.2.1#T-TREAT"
+                    ]
+                }
+            ]
+        };
+
+        var validator = CreateValidator(settings, clientStore);
+
+        var b2b = new HL7B2BAuthorizationExtension
+        {
+            OrganizationId = "Organization/1.2.3",
+            OrganizationName = "Test QHIN"
+        };
+        b2b.PurposeOfUse!.Add("urn:oid:2.16.840.1.113883.3.7204.1.5.2.1#T-TREAT");
+
+        var extensions = new Dictionary<string, object>
+        {
+            [UdapConstants.UdapAuthorizationExtensions.Hl7B2B] = b2b
+        };
+        var context = CreateContext(communityId: "10", extensions: extensions, grantType: "client_credentials");
+
+        var result = await validator.ValidateAsync(context);
+
+        Assert.True(result.IsValid);
+    }
+
+    [Fact]
+    public async Task GrantTypeSpecific_Community_AuthorizationCode_RequiresB2BUser()
+    {
+        var clientStore = Substitute.For<IUdapClientRegistrationStore>();
+        clientStore.GetCommunityId("urn:oid:2.16.840.1.113883.3.7204.1.5")
+            .Returns(Task.FromResult<int?>(10));
+
+        var settings = new ServerSettings
+        {
+            CommunitySettings =
+            [
+                new CommunityServerSettings
+                {
+                    Community = "urn:oid:2.16.840.1.113883.3.7204.1.5",
+                    ClientCredentialsExtensionsRequired = [UdapConstants.UdapAuthorizationExtensions.Hl7B2B],
+                    AuthorizationCodeExtensionsRequired = [UdapConstants.UdapAuthorizationExtensions.Hl7B2BUSER]
+                }
+            ]
+        };
+
+        var validator = CreateValidator(settings, clientStore);
+
+        // Client sends hl7-b2b (wrong for authorization_code)
+        var context = CreateContext(communityId: "10", extensions: CreateValidB2BExtensions(), grantType: "authorization_code");
+
+        var result = await validator.ValidateAsync(context);
+
+        Assert.False(result.IsValid);
+        Assert.Contains("hl7-b2b-user", result.ErrorDescription);
+    }
+
+    [Fact]
+    public async Task GrantTypeSpecific_Community_FallsBackToGeneralCommunity()
+    {
+        // Community has AuthorizationExtensionsRequired but no grant-specific
+        var clientStore = Substitute.For<IUdapClientRegistrationStore>();
+        clientStore.GetCommunityId("udap://community-a")
+            .Returns(Task.FromResult<int?>(1));
+
+        var settings = new ServerSettings
+        {
+            CommunitySettings =
+            [
+                new CommunityServerSettings
+                {
+                    Community = "udap://community-a",
+                    AuthorizationExtensionsRequired = [UdapConstants.UdapAuthorizationExtensions.Hl7B2B]
+                }
+            ]
+        };
+
+        var validator = CreateValidator(settings, clientStore);
+        var context = CreateContext(communityId: "1", grantType: "client_credentials");
+
+        var result = await validator.ValidateAsync(context);
+
+        // Falls back to community's general AuthorizationExtensionsRequired
+        Assert.False(result.IsValid);
+        Assert.Contains("hl7-b2b", result.ErrorDescription);
+    }
+
+    #endregion
+
     #region Purpose of Use Validation
 
     [Fact]
@@ -909,7 +1163,8 @@ public class DefaultUdapAuthorizationExtensionValidatorTests
     private static UdapAuthorizationExtensionValidationContext CreateContext(
         Dictionary<string, object>? extensions = null,
         string? communityId = null,
-        string clientId = "test-client")
+        string clientId = "test-client",
+        string grantType = "client_credentials")
     {
         // Create a minimal valid JWT for the context
         var handler = new JsonWebTokenHandler();
@@ -925,7 +1180,8 @@ public class DefaultUdapAuthorizationExtensionValidatorTests
             ClientAssertionToken = jwt,
             ClientId = clientId,
             Extensions = extensions,
-            CommunityId = communityId
+            CommunityId = communityId,
+            GrantType = grantType
         };
     }
 

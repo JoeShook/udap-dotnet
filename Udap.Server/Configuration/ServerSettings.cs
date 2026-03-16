@@ -94,12 +94,30 @@ public class ServerSettings
 
     /// <summary>
     /// Authorization extension key names required by this server in every token request
-    /// (e.g., ["hl7-b2b"]). This is the global default; per-community overrides can be
-    /// specified in <see cref="CommunitySettings"/>.
+    /// regardless of grant type (e.g., ["hl7-b2b"]). This is the global default;
+    /// per-community overrides can be specified in <see cref="CommunitySettings"/>.
+    /// When grant-type-specific settings (<see cref="ClientCredentialsExtensionsRequired"/>
+    /// or <see cref="AuthorizationCodeExtensionsRequired"/>) are set, they take precedence.
     /// Validated by <see cref="IUdapAuthorizationExtensionValidator"/>.
     /// </summary>
     [JsonPropertyName("AuthorizationExtensionsRequired")]
     public HashSet<string>? AuthorizationExtensionsRequired { get; set; }
+
+    /// <summary>
+    /// Authorization extension key names required for client_credentials token requests
+    /// (e.g., ["hl7-b2b"]). When set, takes precedence over <see cref="AuthorizationExtensionsRequired"/>
+    /// for client_credentials grants. Per-community overrides in <see cref="CommunitySettings"/>.
+    /// </summary>
+    [JsonPropertyName("ClientCredentialsExtensionsRequired")]
+    public HashSet<string>? ClientCredentialsExtensionsRequired { get; set; }
+
+    /// <summary>
+    /// Authorization extension key names required for authorization_code token requests
+    /// (e.g., ["hl7-b2b-user"]). When set, takes precedence over <see cref="AuthorizationExtensionsRequired"/>
+    /// for authorization_code grants. Per-community overrides in <see cref="CommunitySettings"/>.
+    /// </summary>
+    [JsonPropertyName("AuthorizationCodeExtensionsRequired")]
+    public HashSet<string>? AuthorizationCodeExtensionsRequired { get; set; }
 
     /// <summary>
     /// Allowed purpose_of_use codes (global default).  When set, every code

@@ -27,11 +27,33 @@ public class CommunityServerSettings
 
     /// <summary>
     /// Authorization extension key names required by this community in every
-    /// token request (e.g., ["hl7-b2b"]).  When null, falls back to the
-    /// global <see cref="ServerSettings.AuthorizationExtensionsRequired"/>.
+    /// token request regardless of grant type (e.g., ["hl7-b2b"]).
+    /// When null, falls back to the global <see cref="ServerSettings.AuthorizationExtensionsRequired"/>.
+    /// When grant-type-specific settings (<see cref="ClientCredentialsExtensionsRequired"/>
+    /// or <see cref="AuthorizationCodeExtensionsRequired"/>) are set, they take precedence.
     /// </summary>
     [JsonPropertyName("AuthorizationExtensionsRequired")]
     public HashSet<string>? AuthorizationExtensionsRequired { get; set; }
+
+    /// <summary>
+    /// Authorization extension key names required for client_credentials token requests
+    /// in this community (e.g., ["hl7-b2b"]).  When set, takes precedence over
+    /// <see cref="AuthorizationExtensionsRequired"/> for client_credentials grants.
+    /// When null, falls back to <see cref="AuthorizationExtensionsRequired"/>,
+    /// then to the global <see cref="ServerSettings.ClientCredentialsExtensionsRequired"/>.
+    /// </summary>
+    [JsonPropertyName("ClientCredentialsExtensionsRequired")]
+    public HashSet<string>? ClientCredentialsExtensionsRequired { get; set; }
+
+    /// <summary>
+    /// Authorization extension key names required for authorization_code token requests
+    /// in this community (e.g., ["hl7-b2b-user"]).  When set, takes precedence over
+    /// <see cref="AuthorizationExtensionsRequired"/> for authorization_code grants.
+    /// When null, falls back to <see cref="AuthorizationExtensionsRequired"/>,
+    /// then to the global <see cref="ServerSettings.AuthorizationCodeExtensionsRequired"/>.
+    /// </summary>
+    [JsonPropertyName("AuthorizationCodeExtensionsRequired")]
+    public HashSet<string>? AuthorizationCodeExtensionsRequired { get; set; }
 
     /// <summary>
     /// Allowed purpose_of_use codes for this community.  When set, every code
