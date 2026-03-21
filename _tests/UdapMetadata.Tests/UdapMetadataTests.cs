@@ -7,8 +7,8 @@
 // */
 #endregion
 
-using FluentAssertions;
 using System.Text.Json;
+using Xunit;
 
 namespace UdapMetadata.Tests;
 
@@ -46,17 +46,17 @@ public class UdapMetadataTests
         );
 
         // Assert
-        udapMetadata.UdapVersionsSupported.Should().BeEquivalentTo(udapVersionsSupported);
-        udapMetadata.UdapProfilesSupported.Should().BeEquivalentTo(udapProfilesSupported);
-        udapMetadata.UdapAuthorizationExtensionsSupported.Should().BeEquivalentTo(udapAuthorizationExtensionsSupported);
-        udapMetadata.UdapAuthorizationExtensionsRequired.Should().BeEquivalentTo(udapAuthorizationExtensionsRequired);
-        udapMetadata.UdapCertificationsSupported.Should().BeEquivalentTo(udapCertificationsSupported);
-        udapMetadata.UdapCertificationsRequired.Should().BeEquivalentTo(udapCertificationsRequired);
-        udapMetadata.GrantTypesSupported.Should().BeEquivalentTo(grantTypesSupported);
-        udapMetadata.ScopesSupported.Should().BeEquivalentTo(scopesSupported);
-        udapMetadata.TokenEndpointAuthMethodsSupported.Should().BeEquivalentTo(tokenEndpointAuthMethodsSupported);
-        udapMetadata.TokenEndpointAuthSigningAlgValuesSupported.Should().BeEquivalentTo(tokenEndpointAuthSigningAlgValuesSupported);
-        udapMetadata.RegistrationEndpointJwtSigningAlgValuesSupported.Should().BeEquivalentTo(registrationEndpointJwtSigningAlgValuesSupported);
+        Assert.Equal(udapVersionsSupported, udapMetadata.UdapVersionsSupported);
+        Assert.Equal(udapProfilesSupported, udapMetadata.UdapProfilesSupported);
+        Assert.Equal(udapAuthorizationExtensionsSupported, udapMetadata.UdapAuthorizationExtensionsSupported);
+        Assert.Equal(udapAuthorizationExtensionsRequired, udapMetadata.UdapAuthorizationExtensionsRequired);
+        Assert.Equal(udapCertificationsSupported, udapMetadata.UdapCertificationsSupported);
+        Assert.Equal(udapCertificationsRequired, udapMetadata.UdapCertificationsRequired);
+        Assert.Equal(grantTypesSupported, udapMetadata.GrantTypesSupported);
+        Assert.Equal(scopesSupported, udapMetadata.ScopesSupported);
+        Assert.Equal(tokenEndpointAuthMethodsSupported, udapMetadata.TokenEndpointAuthMethodsSupported);
+        Assert.Equal(tokenEndpointAuthSigningAlgValuesSupported, udapMetadata.TokenEndpointAuthSigningAlgValuesSupported);
+        Assert.Equal(registrationEndpointJwtSigningAlgValuesSupported, udapMetadata.RegistrationEndpointJwtSigningAlgValuesSupported);
     }
 
     [Fact]
@@ -95,19 +95,19 @@ public class UdapMetadataTests
         udapMetadata.TokenEndpoint = tokenEndpoint;
 
         // Assert
-        udapMetadata.UdapVersionsSupported.Should().BeEquivalentTo(udapVersionsSupported);
-        udapMetadata.UdapProfilesSupported.Should().BeEquivalentTo(udapProfilesSupported);
-        udapMetadata.UdapAuthorizationExtensionsSupported.Should().BeEquivalentTo(udapAuthorizationExtensionsSupported);
-        udapMetadata.UdapAuthorizationExtensionsRequired.Should().BeEquivalentTo(udapAuthorizationExtensionsRequired);
-        udapMetadata.UdapCertificationsSupported.Should().BeEquivalentTo(udapCertificationsSupported);
-        udapMetadata.UdapCertificationsRequired.Should().BeEquivalentTo(udapCertificationsRequired);
-        udapMetadata.GrantTypesSupported.Should().BeEquivalentTo(grantTypesSupported);
-        udapMetadata.ScopesSupported.Should().BeEquivalentTo(scopesSupported);
-        udapMetadata.TokenEndpointAuthMethodsSupported.Should().BeEquivalentTo(tokenEndpointAuthMethodsSupported);
-        udapMetadata.TokenEndpointAuthSigningAlgValuesSupported.Should().BeEquivalentTo(tokenEndpointAuthSigningAlgValuesSupported);
-        udapMetadata.RegistrationEndpointJwtSigningAlgValuesSupported.Should().BeEquivalentTo(registrationEndpointJwtSigningAlgValuesSupported);
-        udapMetadata.AuthorizationEndpoint.Should().Be(authorizationEndpoint);
-        udapMetadata.TokenEndpoint.Should().Be(tokenEndpoint);
+        Assert.Equal(udapVersionsSupported, udapMetadata.UdapVersionsSupported);
+        Assert.Equal(udapProfilesSupported, udapMetadata.UdapProfilesSupported);
+        Assert.Equal(udapAuthorizationExtensionsSupported, udapMetadata.UdapAuthorizationExtensionsSupported);
+        Assert.Equal(udapAuthorizationExtensionsRequired, udapMetadata.UdapAuthorizationExtensionsRequired);
+        Assert.Equal(udapCertificationsSupported, udapMetadata.UdapCertificationsSupported);
+        Assert.Equal(udapCertificationsRequired, udapMetadata.UdapCertificationsRequired);
+        Assert.Equal(grantTypesSupported, udapMetadata.GrantTypesSupported);
+        Assert.Equal(scopesSupported, udapMetadata.ScopesSupported);
+        Assert.Equal(tokenEndpointAuthMethodsSupported, udapMetadata.TokenEndpointAuthMethodsSupported);
+        Assert.Equal(tokenEndpointAuthSigningAlgValuesSupported, udapMetadata.TokenEndpointAuthSigningAlgValuesSupported);
+        Assert.Equal(registrationEndpointJwtSigningAlgValuesSupported, udapMetadata.RegistrationEndpointJwtSigningAlgValuesSupported);
+        Assert.Equal(authorizationEndpoint, udapMetadata.AuthorizationEndpoint);
+        Assert.Equal(tokenEndpoint, udapMetadata.TokenEndpoint);
     }
 
     [Fact]
@@ -124,15 +124,15 @@ public class UdapMetadataTests
         var options = JsonSerializer.Deserialize<Udap.Model.UdapMetadataOptions>(json);
 
         // Assert: ExtensionData contains the extra property
-        options.Should().NotBeNull();
-        options!.ExtensionData.Should().NotBeNull();
-        options.ExtensionData.Should().ContainKey("extra_property");
-        options.ExtensionData["extra_property"].GetString().Should().Be("extra_value");
+        Assert.NotNull(options);
+        Assert.NotNull(options!.ExtensionData);
+        Assert.True(options.ExtensionData.ContainsKey("extra_property"));
+        Assert.Equal("extra_value", options.ExtensionData["extra_property"].GetString());
 
         var customExtensions = options.ExtensionData["custom_extensions"];
-        customExtensions.ValueKind.Should().Be(JsonValueKind.Array);
+        Assert.Equal(JsonValueKind.Array, customExtensions.ValueKind);
         var urls = customExtensions.EnumerateArray().Select(e => e.GetString()).ToList();
-        urls.Should().BeEquivalentTo(new[] { "https://fhirlabs.net/extension_1", "https://fhirlabs.net/extension_2" });
+        Assert.Equal(new[] { "https://fhirlabs.net/extension_1", "https://fhirlabs.net/extension_2" }, urls);
 
         // Act: Transfer to UdapMetadata and serialize
         var metadata = new Udap.Model.UdapMetadata(options);
@@ -144,8 +144,8 @@ public class UdapMetadataTests
         var serialized = JsonSerializer.Serialize(metadata, serializerOptions);
 
         // Assert: Serialized JSON contains the extra property in snake_case
-        serialized.Should().Contain(@"""extra_property"":""extra_value""");
+        Assert.Contains(@"""extra_property"":""extra_value""", serialized);
 
-        serialized.Should().Contain(@"""custom_extensions"":[""https://fhirlabs.net/extension_1"",""https://fhirlabs.net/extension_2""]");
+        Assert.Contains(@"""custom_extensions"":[""https://fhirlabs.net/extension_1"",""https://fhirlabs.net/extension_2""]", serialized);
     }
 }

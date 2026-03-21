@@ -23,10 +23,10 @@ using Udap.Common.Certificates;
 using Udap.Common.Extensions;
 using Udap.Model;
 using Udap.Server.Extensions;
+using Udap.Server.Storage;
 using Udap.Server.Storage.Extensions;
 using Udap.Server.Storage.Stores;
 using Udap.Util.Extensions;
-using static System.Net.WebRequestMethods;
 
 namespace Udap.Server.Validation.Default;
 
@@ -134,6 +134,7 @@ public class UdapJwtSecretValidator : ISecretValidator
                 _logger.LogError("Missing jwt x5c claim in header for client_id: {ClientId}", parsedSecret.Id);
             }
 
+            SetErrorDescription("Client assertion JWT validation failed");
             return fail;
         }
 
@@ -142,6 +143,7 @@ public class UdapJwtSecretValidator : ISecretValidator
         if (jwtToken.Subject != jwtToken.Issuer)
         {
             _logger.LogError("Both 'sub' and 'iss' in the client assertion token must have a value of client_id.");
+            SetErrorDescription("Both 'sub' and 'iss' in the client assertion token must have a value of client_id");
             return fail;
         }
 
@@ -149,6 +151,7 @@ public class UdapJwtSecretValidator : ISecretValidator
         if (exp == DateTime.MinValue)
         {
             _logger.LogError("exp is missing.");
+            SetErrorDescription("exp claim is missing from client assertion");
             return fail;
         }
 
@@ -156,12 +159,14 @@ public class UdapJwtSecretValidator : ISecretValidator
         if (jti.IsMissing())
         {
             _logger.LogError("jti is missing.");
+            SetErrorDescription("jti claim is missing from client assertion");
             return fail;
         }
 
         if (await _replayCache.ExistsAsync(Purpose, jti))
         {
             _logger.LogError("jti is found in replay cache. Possible replay attack.");
+            SetErrorDescription("jti is found in replay cache. Possible replay attack");
             return fail;
         }
         else
@@ -198,24 +203,32 @@ public class UdapJwtSecretValidator : ISecretValidator
         if (certChainList == null || !certChainList.Any())
         {
             _logger.LogError("There are no anchors available to validate client assertion for client_id: {ClientId}", parsedSecret.Id);
-
+            SetErrorDescription("No trust anchors available to validate client assertion");
             return fail;
         }
 
         //
         // PKI chain validation, including CRL checking
         //
-        if (_trustChainValidator.IsTrustedCertificate(
+        if (!await _trustChainValidator.IsTrustedCertificateAsync(
                 parsedSecret.Id,
                 parsedSecret.ToModel().GetUdapEndCert()!,
                 new X509Certificate2Collection(certChainList.ToArray()),
-                new X509Certificate2Collection(certChainList.ToRootCertArray()),
-                out X509ChainElementCollection? _,
-                out _))
+                new X509Certificate2Collection(certChainList.ToRootCertArray())))
         {
-            return success;
+            SetErrorDescription("Certificate chain validation failed");
+            return fail;
         }
 
-        return fail;
+        return success;
+    }
+
+    private void SetErrorDescription(string description)
+    {
+        var httpContext = _httpContextAccessor.HttpContext;
+        if (httpContext != null)
+        {
+            httpContext.Items[UdapServerConstants.HttpContextItems.UdapErrorDescription] = description;
+        }
     }
 }

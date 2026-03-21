@@ -13,19 +13,22 @@ using Hl7.Fhir.Model;
 using Hl7.Fhir.Serialization;
 using Hl7.Fhir.Specification.Source;
 using Hl7.Fhir.Specification.Terminology;
+using Microsoft.AspNetCore.HttpOverrides;
 using Microsoft.AspNetCore.ResponseCompression;
 using Microsoft.IdentityModel.Tokens;
 using Serilog;
-using System.IdentityModel.Tokens.Jwt;
 using System.Net.Http.Headers;
 using System.Text;
 using System.Text.Json.Serialization;
+using Duende.AspNetCore.Authentication.JwtBearer.DPoP;
 using Firely.Fhir.Validation;
 using Microsoft.AspNetCore.Http.Json;
 using Udap.CdsHooks.Model;
 using Udap.Common;
+using Udap.Common.Certificates;
 using Udap.Proxy.Server;
 using Udap.Proxy.Server.IDIPatientMatch;
+using Udap.Metadata.Server.Security;
 using Udap.Proxy.Server.Services;
 using Udap.Smart.Model;
 using Udap.Util.Extensions;
@@ -57,12 +60,12 @@ builder.Services.Configure<JsonOptions>(options =>
 
 builder.Services.Configure<CdsServices>(builder.Configuration.GetRequiredSection("CdsServices"));
 builder.Services.Configure<SmartMetadata>(builder.Configuration.GetRequiredSection("SmartMetadata"));
-builder.Services.Configure<UdapFileCertStoreManifest>(builder.Configuration.GetSection(Constants.UDAP_FILE_STORE_MANIFEST));
+builder.Services.Configure<UdapFileCertStoreManifest>(builder.Configuration.GetSection(Constants.UdapFileCertStoreManifestSectionName));
 
 builder.Services.AddCdsServices();
 builder.Services.AddSmartMetadata();
 builder.Services.AddUdapMetadataServer(builder.Configuration);
-builder.Services.AddFusionCache()
+builder.Services.AddFusionCache("FhirMetadata")
     .WithDefaultEntryOptions(new FusionCacheEntryOptions
     {
         Duration = TimeSpan.FromMinutes(10),
@@ -71,9 +74,27 @@ builder.Services.AddFusionCache()
         FailSafeMaxDuration = TimeSpan.FromHours(12)
     });
 
-builder.Services.AddAuthentication(OidcConstants.AuthenticationSchemes.AuthorizationHeaderBearer)
+builder.Services.AddUdapCertificateCache()
+    .WithDefaultEntryOptions(new FusionCacheEntryOptions
+    {
+        Duration = TimeSpan.FromHours(12),
+        FailSafeMaxDuration = TimeSpan.FromHours(48)
+    });
+builder.Services.AddHttpClient<CertificateDownloadCache>();
+builder.Services.AddSingleton<ICertificateDownloadCache, CertificateDownloadCache>();
 
-    .AddJwtBearer(OidcConstants.AuthenticationSchemes.AuthorizationHeaderBearer, options =>
+builder.Services.Configure<ForwardedHeadersOptions>(options =>
+{
+    options.ForwardedHeaders = ForwardedHeaders.XForwardedFor | ForwardedHeaders.XForwardedProto;
+    options.KnownNetworks.Clear();
+    options.KnownProxies.Clear();
+});
+
+// builder.Services.AddAuthentication(OidcConstants.AuthenticationSchemes.AuthorizationHeaderBearer)
+builder.Services.AddAuthentication("token")
+
+    // .AddJwtBearer(OidcConstants.AuthenticationSchemes.AuthorizationHeaderBearer, options =>
+    .AddJwtBearer("token", OidcConstants.AuthenticationSchemes.AuthorizationHeaderBearer, options =>
     {
         options.Authority = builder.Configuration["Jwt:Authority"];
         options.RequireHttpsMetadata = bool.Parse(builder.Configuration["Jwt:RequireHttpsMetadata"] ?? "true");
@@ -83,6 +104,25 @@ builder.Services.AddAuthentication(OidcConstants.AuthenticationSchemes.Authoriza
             ValidateAudience = false
         };
     });
+
+// layer on dpop validation if a DPoP token is presented
+// the authz header will be {dpop accessToken} rather than {bearer accessToken}.
+// in addition, a DPoP header must be presented as the proof-of-possession.
+builder.Services.ConfigureDPoPTokensForScheme("token", configure =>
+{
+    // Chose a validation mode: either Nonce or IssuedAt. With nonce validation,
+    // the api supplies a nonce that must be used to prove that the token was
+    // not pre-generated. With IssuedAt validation, the client includes the
+    // current time in the proof token, which is compared to the clock. Nonce
+    // validation provides protection against some attacks that are possible
+    // with IssuedAt validation, at the cost of an additional HTTP request being
+    // required each time the API is invoked.
+    //
+    // See RFC 9449 for more details.
+    configure.ValidationMode = ExpirationValidationMode.IssuedAt;
+    configure.TokenMode = DPoPMode.DPoPAndBearer; // Some clients are issued without DPoP capability
+});
+
 
 builder.Services.AddCors(options =>
 {
@@ -116,7 +156,6 @@ builder.Services.AddReverseProxy()
             return ValueTask.CompletedTask;
         });
 
-
         builderContext.AddRequestTransform(async context =>
         {
             var accessTokenService = context.HttpContext.RequestServices.GetRequiredService<IAccessTokenService>();
@@ -132,12 +171,23 @@ builder.Services.AddReverseProxy()
             if (responseContext.HttpContext.Request.Path == "/fhir/r4/metadata")
             {
                 responseContext.SuppressResponseBody = true;
-                var cache = responseContext.HttpContext.RequestServices.GetRequiredService<IFusionCache>();
+
+                // If the backend returned an error, pass through the status and body
+                if (responseContext.ProxyResponse != null && !responseContext.ProxyResponse.IsSuccessStatusCode)
+                {
+                    var errorBytes = await responseContext.ProxyResponse.Content.ReadAsByteArrayAsync();
+                    responseContext.HttpContext.Response.StatusCode = (int)responseContext.ProxyResponse.StatusCode;
+                    responseContext.HttpContext.Response.ContentLength = errorBytes.Length;
+                    await responseContext.HttpContext.Response.Body.WriteAsync(errorBytes);
+                    return;
+                }
+
+                var cache = responseContext.HttpContext.RequestServices.GetRequiredService<IFusionCacheProvider>().GetCache("FhirMetadata");
                 var bytes = await cache.GetOrSetAsync("metadata", _ => GetFhirMetadata(responseContext, builder));
-                
+
                 // Change Content-Length to match the modified body, or remove it.
                 responseContext.HttpContext.Response.ContentLength = bytes?.Length;
-                
+
                 // Response headers are copied before transforms are invoked, update any needed headers on the HttpContext.Response.
                 await responseContext.HttpContext.Response.Body.WriteAsync(bytes);
             }
@@ -145,11 +195,12 @@ builder.Services.AddReverseProxy()
             //
             // Rewrite resource URLs
             //
-            else if (responseContext.HttpContext.Request.Path.HasValue && 
+            else if (responseContext.ProxyResponse != null &&
+                     responseContext.HttpContext.Request.Path.HasValue &&
                      responseContext.HttpContext.Request.Path.Value.StartsWith("/fhir/r4/", StringComparison.OrdinalIgnoreCase))
             {
                 responseContext.SuppressResponseBody = true;
-                var stream = await responseContext.ProxyResponse!.Content.ReadAsStreamAsync();
+                var stream = await responseContext.ProxyResponse.Content.ReadAsStreamAsync();
 
                 Console.WriteLine($"RESPONSE CODE: {responseContext.ProxyResponse.StatusCode}");
                 
@@ -236,6 +287,32 @@ using (var scope = app.Services.CreateScope())
 }
 
 // Configure the HTTP request pipeline.
+app.UseForwardedHeaders();
+
+// Rewrite community-prefixed paths (e.g., /community-a/fhir/r4/Patient/123)
+// to /fhir/r4/Patient/123 so existing YARP routes match.
+// Must run before UseRouting() so the correct YARP route is selected.
+app.Use(async (context, next) =>
+{
+    var path = context.Request.Path.Value;
+    if (path != null)
+    {
+        var fhirIndex = path.IndexOf("/fhir/r4", StringComparison.OrdinalIgnoreCase);
+        if (fhirIndex > 0)
+        {
+            var communityPrefix = path[..fhirIndex];
+            context.Items["OriginalPath"] = path;
+            context.Items["CommunityPrefix"] = communityPrefix;
+            context.Request.PathBase = context.Request.PathBase.Add(communityPrefix);
+            context.Request.Path = path[fhirIndex..];
+        }
+    }
+
+    await next();
+});
+
+// Explicit UseRouting() so the path rewrite above runs before route matching.
+app.UseRouting();
 app.UseCors("DefaultPolicy");
 
 if (!string.Equals(disableCompression, "true", StringComparison.OrdinalIgnoreCase))
@@ -250,8 +327,11 @@ app.UseStaticFiles();
 // To use the default framework request logging instead, remove this line and set the "Microsoft"
 // level in appsettings.json to "Information".
 app.UseSerilogRequestLogging();
-    
+
+app.UseUdapMetadataServer();
+
 app.UseAuthentication();
+app.UseSecurityEventLogging();
 app.UseAuthorization();
 
 //
@@ -265,7 +345,6 @@ app.MapReverseProxy();
 
 app.UseCdsServices("fhir/r4");
 app.UseSmartMetadata("fhir/r4");
-app.UseUdapMetadataServer("fhir/r4"); // Ensure metadata can only be called from this base URL.
 
 app.Run();
 
@@ -313,42 +392,27 @@ async Task<byte[]?> GetFhirMetadata(ResponseTransformContext responseTransformCo
 
 void SetProxyHeaders(RequestTransformContext requestTransformContext)
 {
-    if (requestTransformContext.HttpContext.Request.Headers.Authorization.Count == 0)
+    var principal = requestTransformContext.HttpContext.User;
+
+    if (principal.Identity is not { IsAuthenticated: true })
     {
         return;
     }
 
-    var bearerToken = requestTransformContext.HttpContext.Request.Headers.Authorization.First();
-    
-    if (bearerToken == null)
-    {
-        return;
-    }
-
-    foreach (var requestHeader in requestTransformContext.HttpContext.Request.Headers)
-    {
-        Console.WriteLine(requestHeader.Value);
-    }
-
-    var tokenHandler = new JwtSecurityTokenHandler();
-    var jsonToken = tokenHandler.ReadJwtToken(requestTransformContext.HttpContext.Request.Headers.Authorization.First()?.Replace("Bearer", "").Trim());
-    var scopes = jsonToken.Claims.Where(c => c.Type == "scope");
-    var iss = jsonToken.Claims.Where(c => c.Type == "iss");
-    // var sub = jsonToken.Claims.Where(c => c.Type == "sub"); // figure out what subject should be for GCP
-
-    //TODO:  This should be capable of introspection calls, because the token may not be a jwt.
     // Never let the requester set this header.
     requestTransformContext.ProxyRequest.Headers.Remove("X-Authorization-Scope");
     requestTransformContext.ProxyRequest.Headers.Remove("X-Authorization-Issuer");
- 
+
+    var scopes = principal.FindAll("scope");
+    var iss = principal.FindFirst("iss");
+
     // Google Cloud way of passing scopes to the Fhir Server
     var spaceSeparatedString = scopes.Select(s => s.Value)
         .Where(s => s != "udap") //gcp doesn't know udap  Need better filter to block unknown scopes
         .ToSpaceSeparatedString();
-    
+
     requestTransformContext.ProxyRequest.Headers.Add("X-Authorization-Scope", spaceSeparatedString);
-    requestTransformContext.ProxyRequest.Headers.Add("X-Authorization-Issuer", iss.SingleOrDefault()?.Value);
-    // context.ProxyRequest.Headers.Add("X-Authorization-Subject", sub.SingleOrDefault().Value);
+    requestTransformContext.ProxyRequest.Headers.Add("X-Authorization-Issuer", iss?.Value);
 }
 
 void ForwardEncodingHeaders(HttpContext httpContext, HttpRequestMessage proxyRequest)

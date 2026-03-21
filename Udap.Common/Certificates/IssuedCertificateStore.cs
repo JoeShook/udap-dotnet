@@ -5,13 +5,23 @@ using Udap.Common.Models;
 
 namespace Udap.Common.Certificates;
 
+/// <summary>
+/// File-based implementation of <see cref="IPrivateCertificateStore"/> that loads issued
+/// end-entity certificates from PFX files specified in the <see cref="UdapFileCertStoreManifest"/>.
+/// Supports hot-reload via <see cref="IOptionsMonitor{T}"/> and thread-safe resolution.
+/// </summary>
 public class IssuedCertificateStore : IPrivateCertificateStore
 {
     private readonly IOptionsMonitor<UdapFileCertStoreManifest> _manifest;
     private readonly ILogger<IssuedCertificateStore> _logger;
     private bool _resolved;
     private readonly SemaphoreSlim _resolveSemaphore = new SemaphoreSlim(1, 1);
-    
+
+    /// <summary>
+    /// Initializes a new instance of the <see cref="IssuedCertificateStore"/>.
+    /// </summary>
+    /// <param name="manifest">The monitored certificate store manifest configuration.</param>
+    /// <param name="logger">The logger instance.</param>
     public IssuedCertificateStore(
         IOptionsMonitor<UdapFileCertStoreManifest> manifest,
         ILogger<IssuedCertificateStore> logger)
@@ -25,6 +35,7 @@ public class IssuedCertificateStore : IPrivateCertificateStore
         });
     }
 
+    /// <inheritdoc />
     public async Task<IPrivateCertificateStore> Resolve(CancellationToken token = default)
     {
         token.ThrowIfCancellationRequested();
@@ -46,6 +57,7 @@ public class IssuedCertificateStore : IPrivateCertificateStore
         return this;
     }
 
+    /// <inheritdoc />
     public ICollection<IssuedCertificate> IssuedCertificates { get; set; } = new HashSet<IssuedCertificate>();
 
     private void LoadCertificates(UdapFileCertStoreManifest manifestCurrentValue)

@@ -7,7 +7,6 @@
 // */
 #endregion
 
-using FluentAssertions;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
@@ -48,7 +47,7 @@ namespace Udap.Client.System.Tests
             var client = new HttpClient();
             var response = await client.GetAsync("https://test.udap.org/fhir/r4/stage/metadata");
             var metadata = await response.Content.ReadAsStringAsync();
-            metadata.Should().NotBeNullOrEmpty();
+            Assert.False(string.IsNullOrEmpty(metadata));
             // _testOutputHelper.WriteLine(metadata);
             //
             // Example
@@ -165,7 +164,7 @@ namespace Udap.Client.System.Tests
             }
 
             var registrationEndpoint = disco.RegistrationEndpoint;
-            registrationEndpoint.Should().BeEquivalentTo("https://securedcontrols.net/connect/register");
+            Assert.Equal("https://securedcontrols.net/connect/register", registrationEndpoint, StringComparer.OrdinalIgnoreCase);
         }
 
         [Fact]
@@ -206,16 +205,14 @@ namespace Udap.Client.System.Tests
 
             }, out _);
 
-            var problemFlags = X509ChainStatusFlags.NotTimeValid |
-                               X509ChainStatusFlags.Revoked |
-                               X509ChainStatusFlags.NotSignatureValid |
-                               X509ChainStatusFlags.InvalidBasicConstraints |
-                               X509ChainStatusFlags.CtlNotTimeValid |
-                               X509ChainStatusFlags.OfflineRevocation |
-                               X509ChainStatusFlags.CtlNotSignatureValid;
+            var problemFlags = ChainProblemStatus.NotTimeValid |
+                               ChainProblemStatus.Revoked |
+                               ChainProblemStatus.NotSignatureValid |
+                               ChainProblemStatus.InvalidBasicConstraints |
+                               ChainProblemStatus.OfflineRevocation;
 
-            (await ValidateCertificateChain(cert, problemFlags, "udap://fhirlabs.net/")).Should().BeTrue();
-            _diagnosticsChainValidator.Called.Should().BeFalse();
+            Assert.True(await ValidateCertificateChain(cert, problemFlags, "udap://fhirlabs.net/"));
+            Assert.False(_diagnosticsChainValidator.Called);
         }
 
         [Fact]
@@ -228,10 +225,10 @@ namespace Udap.Client.System.Tests
             };
             
             var result = await udapClient.ValidateResource("https://dev-mtx-interop.meditech.com", "urn:oid:4.5.6");
-            result.IsError.Should().BeFalse(result.Error);
-            
+            Assert.False(result.IsError, result.Error);
+
             var metaData = udapClient.UdapServerMetaData;
-            metaData.Should().NotBeNull();
+            Assert.NotNull(metaData);
         }
 
         [Fact]
@@ -272,16 +269,14 @@ namespace Udap.Client.System.Tests
             
             }, out _);
             
-            var problemFlags = X509ChainStatusFlags.NotTimeValid |
-                                      X509ChainStatusFlags.Revoked |
-                                      X509ChainStatusFlags.NotSignatureValid |
-                                      X509ChainStatusFlags.InvalidBasicConstraints |
-                                      X509ChainStatusFlags.CtlNotTimeValid |
-                                      X509ChainStatusFlags.OfflineRevocation |
-                                      X509ChainStatusFlags.CtlNotSignatureValid;
+            var problemFlags = ChainProblemStatus.NotTimeValid |
+                               ChainProblemStatus.Revoked |
+                               ChainProblemStatus.NotSignatureValid |
+                               ChainProblemStatus.InvalidBasicConstraints |
+                               ChainProblemStatus.OfflineRevocation;
             
-            (await ValidateCertificateChain(cert, problemFlags, "https://stage.healthtogo.me:8181")).Should().BeTrue();
-            _diagnosticsChainValidator.Called.Should().BeFalse();
+            Assert.True(await ValidateCertificateChain(cert, problemFlags, "https://stage.healthtogo.me:8181"));
+            Assert.False(_diagnosticsChainValidator.Called);
         }
 
 
@@ -303,7 +298,7 @@ namespace Udap.Client.System.Tests
             services.TryAddSingleton<IUdapMetadataOptionsProvider, UdapMetadataOptionsProvider>();
 
             // UDAP CertStore
-            services.Configure<UdapFileCertStoreManifest>(configuration.GetSection(Common.Constants.UDAP_FILE_STORE_MANIFEST));
+            services.Configure<UdapFileCertStoreManifest>(configuration.GetSection(Common.Constants.UdapFileCertStoreManifestSectionName));
             services.AddSingleton<ITrustAnchorStore>(sp =>
                 new TrustAnchorFileStore(
                     sp.GetRequiredService<IOptionsMonitor<UdapFileCertStoreManifest>>(),
@@ -315,8 +310,8 @@ namespace Udap.Client.System.Tests
         }
 
         public async Task<bool> ValidateCertificateChain(
-            X509Certificate2 issuedCertificate2, 
-            X509ChainStatusFlags problemFlags,
+            X509Certificate2 issuedCertificate2,
+            ChainProblemStatus problemFlags,
             string communityName)
         {
             var configuration = new ConfigurationBuilder()
@@ -329,7 +324,7 @@ namespace Udap.Client.System.Tests
             services.TryAddSingleton<IUdapMetadataOptionsProvider, UdapMetadataOptionsProvider>();
 
             // UDAP CertStore
-            services.Configure<UdapFileCertStoreManifest>(configuration.GetSection(Common.Constants.UDAP_FILE_STORE_MANIFEST));
+            services.Configure<UdapFileCertStoreManifest>(configuration.GetSection(Common.Constants.UdapFileCertStoreManifestSectionName));
             services.AddSingleton<ITrustAnchorStore>(sp =>
                 new TrustAnchorFileStore(
                     sp.GetRequiredService<IOptionsMonitor<UdapFileCertStoreManifest>>(),
@@ -352,22 +347,23 @@ namespace Udap.Client.System.Tests
                 .OrderBy(certificate => certificate.NotBefore)
                 .ToArray()
                 .ToX509Collection();
-            
-            var validator = new TrustChainValidator(new X509ChainPolicy(), problemFlags, _testOutputHelper.ToLogger<TrustChainValidator>());
+
+            var validator = new TrustChainValidator(
+                problemFlags,
+                false, // no revocation checking in tests
+                _testOutputHelper.ToLogger<TrustChainValidator>());
             validator.Problem += _diagnosticsChainValidator.OnChainProblem;
-            
+
             // Help while writing tests to see problems summarized.
             validator.Error += (_, exception) => _testOutputHelper.WriteLine("Error: " + exception.Message);
-            validator.Problem += element => _testOutputHelper.WriteLine("Problem: " + element.ChainElementStatus.Summarize(problemFlags));
+            validator.Problem += element => _testOutputHelper.WriteLine("Problem: " + element.Problems.Summarize(problemFlags));
             validator.Untrusted += certificate2 => _testOutputHelper.WriteLine("Untrusted: " + certificate2.Subject);
-            
-            return validator.IsTrustedCertificate(
+
+            return await validator.IsTrustedCertificateAsync(
                 "client_name",
                 issuedCertificate2,
                 intermediates,
-                anchorCertificates!, 
-                out _, 
-                out _);
+                anchorCertificates!);
         }
 
         public class FakeChainValidatorDiagnostics
@@ -380,13 +376,13 @@ namespace Udap.Client.System.Tests
                 get { return _actualErrorMessages; }
             }
 
-            public void OnChainProblem(X509ChainElement chainElement)
+            public void OnChainProblem(ChainElementInfo chainElement)
             {
-                foreach (var chainElementStatus in chainElement.ChainElementStatus
-                             .Where(s => (s.Status & TrustChainValidator.DefaultProblemFlags) != 0))
+                foreach (var problem in chainElement.Problems
+                             .Where(p => (p.Status & TrustChainValidator.DefaultProblemFlags) != 0))
                 {
-                    var problem = $"Trust ERROR ({chainElementStatus.Status}){chainElementStatus.StatusInformation}, {chainElement.Certificate}";
-                    _actualErrorMessages.Add(problem);
+                    var msg = $"Trust ERROR ({problem.Status}){problem.StatusInformation}, {chainElement.Certificate}";
+                    _actualErrorMessages.Add(msg);
                     Called = true;
                 }
             }

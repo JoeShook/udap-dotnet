@@ -7,7 +7,6 @@
 // */
 #endregion
 
-using FluentAssertions;
 using MartinCostello.Logging.XUnit;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
@@ -36,13 +35,11 @@ public class UdapClientTests
     private readonly IConfigurationRoot _configuration;
     private readonly ServiceProvider _serviceProvider;
 
-    readonly X509ChainStatusFlags _problemFlags = X509ChainStatusFlags.NotTimeValid |
-                                        X509ChainStatusFlags.Revoked |
-                                        X509ChainStatusFlags.NotSignatureValid |
-                                        X509ChainStatusFlags.InvalidBasicConstraints |
-                                        X509ChainStatusFlags.CtlNotTimeValid |
-                                        // X509ChainStatusFlags.OfflineRevocation | Do not test revocation in unit tests
-                                        X509ChainStatusFlags.CtlNotSignatureValid;
+    readonly ChainProblemStatus _problemFlags = ChainProblemStatus.NotTimeValid |
+                                        ChainProblemStatus.Revoked |
+                                        ChainProblemStatus.NotSignatureValid |
+                                        ChainProblemStatus.InvalidBasicConstraints;
+                                        // ChainProblemStatus.OfflineRevocation; Do not test revocation in unit tests
 
     public UdapClientTests(ITestOutputHelper testOutputHelper)
     {
@@ -82,8 +79,8 @@ public class UdapClientTests
 
         var disco = await udapClient.ValidateResource("https://fhirlabs.net/fhir/r4", null);
 
-        disco.IsError.Should().BeFalse($"\nError: {disco.Error} \nError Type: {disco.ErrorType}\n{disco.Raw}");
-        disco.HttpStatusCode.Should().Be(HttpStatusCode.OK);
+        Assert.False(disco.IsError, $"\nError: {disco.Error} \nError Type: {disco.ErrorType}\n{disco.Raw}");
+        Assert.Equal(HttpStatusCode.OK, disco.HttpStatusCode);
         Assert.NotNull(udapClient.UdapServerMetaData);
 
 
@@ -94,92 +91,92 @@ public class UdapClientTests
         // ensuring we get good coverage
         //
         var verSupported = disco.UdapVersionsSupported!.ToList();
-        verSupported.Should().NotBeNullOrEmpty();
-        verSupported.Single().Should().Be("1");
+        Assert.NotEmpty(verSupported);
+        Assert.Equal("1", verSupported.Single());
 
 
         var extensions = disco.UdapAuthorizationExtensionsSupported!.ToList();
-        extensions.Should().NotBeNullOrEmpty();
+        Assert.NotEmpty(extensions);
         var hl7B2B = extensions.SingleOrDefault(c => c == "hl7-b2b");
-        hl7B2B.Should().NotBeNullOrEmpty();
+        Assert.False(string.IsNullOrEmpty(hl7B2B));
 
 
-        disco.UdapAuthorizationExtensionsRequired.Should().Contain("hl7-b2b");
+        Assert.Contains("hl7-b2b", disco.UdapAuthorizationExtensionsRequired);
 
 
         var certificationsSupported = disco.UdapCertificationsSupported!.SingleOrDefault(c => c == "http://MyUdapCertification");
-        certificationsSupported.Should().NotBeNullOrEmpty();
+        Assert.False(string.IsNullOrEmpty(certificationsSupported));
         var uriCertificationsSupported = new Uri(certificationsSupported!);
-        uriCertificationsSupported.Should().Be("http://MyUdapCertification");
+        Assert.Equal(new Uri("http://MyUdapCertification"), uriCertificationsSupported);
 
 
         certificationsSupported = disco.UdapCertificationsSupported!.SingleOrDefault(c => c == "http://MyUdapCertification2");
-        certificationsSupported.Should().NotBeNullOrEmpty();
+        Assert.False(string.IsNullOrEmpty(certificationsSupported));
         uriCertificationsSupported = new Uri(certificationsSupported!);
-        uriCertificationsSupported.Should().Be("http://MyUdapCertification2");
+        Assert.Equal(new Uri("http://MyUdapCertification2"), uriCertificationsSupported);
 
 
         var certificationsRequired = disco.UdapCertificationsRequired!.SingleOrDefault();
-        certificationsRequired.Should().NotBeNullOrEmpty();
+        Assert.False(string.IsNullOrEmpty(certificationsRequired));
         var uriCertificationsRequired = new Uri(certificationsRequired!);
-        uriCertificationsRequired.Should().Be("http://MyUdapCertification");
+        Assert.Equal(new Uri("http://MyUdapCertification"), uriCertificationsRequired);
 
 
         var grantTypes = disco.GrantTypesSupported!.ToList();
-        grantTypes.Should().NotBeNullOrEmpty();
-        grantTypes.Count.Should().Be(3);
-        grantTypes.Should().Contain("authorization_code");
-        grantTypes.Should().Contain("refresh_token");
-        grantTypes.Should().Contain("client_credentials");
+        Assert.NotEmpty(grantTypes);
+        Assert.Equal(3, grantTypes.Count);
+        Assert.Contains("authorization_code", grantTypes);
+        Assert.Contains("refresh_token", grantTypes);
+        Assert.Contains("client_credentials", grantTypes);
 
 
         var scopesSupported = disco.ScopesSupported!.ToList();
-        scopesSupported.Should().Contain("openid");
-        scopesSupported.Should().Contain("system/*.read");
-        scopesSupported.Should().Contain("user/*.read");
-        scopesSupported.Should().Contain("patient/*.read");
+        Assert.Contains("openid", scopesSupported);
+        Assert.Contains("system/*.read", scopesSupported);
+        Assert.Contains("user/*.read", scopesSupported);
+        Assert.Contains("patient/*.read", scopesSupported);
 
 
         var authorizationEndpoint = disco.AuthorizeEndpoint;
-        authorizationEndpoint.Should().Be("https://securedcontrols.net:5001/connect/authorize");
+        Assert.Equal("https://securedcontrols.net:5001/connect/authorize", authorizationEndpoint);
 
 
         var tokenEndpoint = disco.TokenEndpoint;
-        tokenEndpoint.Should().Be("https://securedcontrols.net:5001/connect/token");
+        Assert.Equal("https://securedcontrols.net:5001/connect/token", tokenEndpoint);
 
 
         var registrationEndpoint = disco.RegistrationEndpoint;
-        registrationEndpoint.Should().Be("https://securedcontrols.net:5001/connect/register");
+        Assert.Equal("https://securedcontrols.net:5001/connect/register", registrationEndpoint);
 
 
         var tokenEndpointAuthMethodSupported = disco.TokenEndpointAuthMethodsSupported!.SingleOrDefault();
-        tokenEndpointAuthMethodSupported.Should().NotBeNullOrEmpty();
-        tokenEndpointAuthMethodSupported.Should().Be("private_key_jwt");
+        Assert.False(string.IsNullOrEmpty(tokenEndpointAuthMethodSupported));
+        Assert.Equal("private_key_jwt", tokenEndpointAuthMethodSupported);
 
 
         var registrationSigningAlgValuesSupported = disco.RegistrationEndpointJwtSigningAlgValuesSupported!.ToList();
-        registrationSigningAlgValuesSupported.Should().NotBeNullOrEmpty();
-        registrationSigningAlgValuesSupported.Should().Contain(UdapConstants.SupportedAlgorithm.RS256);
-        registrationSigningAlgValuesSupported.Should().Contain(UdapConstants.SupportedAlgorithm.RS384);
-        registrationSigningAlgValuesSupported.Should().Contain(UdapConstants.SupportedAlgorithm.ES256);
-        registrationSigningAlgValuesSupported.Should().Contain(UdapConstants.SupportedAlgorithm.ES384);
-        registrationSigningAlgValuesSupported.Count.Should().Be(4);
+        Assert.NotEmpty(registrationSigningAlgValuesSupported);
+        Assert.Contains(UdapConstants.SupportedAlgorithm.RS256, registrationSigningAlgValuesSupported);
+        Assert.Contains(UdapConstants.SupportedAlgorithm.RS384, registrationSigningAlgValuesSupported);
+        Assert.Contains(UdapConstants.SupportedAlgorithm.ES256, registrationSigningAlgValuesSupported);
+        Assert.Contains(UdapConstants.SupportedAlgorithm.ES384, registrationSigningAlgValuesSupported);
+        Assert.Equal(4, registrationSigningAlgValuesSupported.Count);
 
 
 
         var tokenSigningAlgValuesSupported = disco.TokenEndpointAuthSigningAlgValuesSupported!.ToList();
-        tokenSigningAlgValuesSupported.Should().NotBeNullOrEmpty();
-        tokenSigningAlgValuesSupported.Should().Contain(UdapConstants.SupportedAlgorithm.RS256);
-        tokenSigningAlgValuesSupported.Should().Contain(UdapConstants.SupportedAlgorithm.RS384);
-        tokenSigningAlgValuesSupported.Should().Contain(UdapConstants.SupportedAlgorithm.ES256);
-        tokenSigningAlgValuesSupported.Should().Contain(UdapConstants.SupportedAlgorithm.ES384);
-        tokenSigningAlgValuesSupported.Count.Should().Be(4);
+        Assert.NotEmpty(tokenSigningAlgValuesSupported);
+        Assert.Contains(UdapConstants.SupportedAlgorithm.RS256, tokenSigningAlgValuesSupported);
+        Assert.Contains(UdapConstants.SupportedAlgorithm.RS384, tokenSigningAlgValuesSupported);
+        Assert.Contains(UdapConstants.SupportedAlgorithm.ES256, tokenSigningAlgValuesSupported);
+        Assert.Contains(UdapConstants.SupportedAlgorithm.ES384, tokenSigningAlgValuesSupported);
+        Assert.Equal(4, tokenSigningAlgValuesSupported.Count);
 
         var profilesSupported = disco.UdapProfilesSupported!.ToList();
-        profilesSupported.Should().NotBeNullOrEmpty();
-        profilesSupported.Should().Contain(UdapConstants.UdapProfilesSupportedValues.UdapDcr);
-        profilesSupported.Should().Contain(UdapConstants.UdapProfilesSupportedValues.UdapAuthn);
-        profilesSupported.Should().Contain(UdapConstants.UdapProfilesSupportedValues.UdapAuthz);
+        Assert.NotEmpty(profilesSupported);
+        Assert.Contains(UdapConstants.UdapProfilesSupportedValues.UdapDcr, profilesSupported);
+        Assert.Contains(UdapConstants.UdapProfilesSupportedValues.UdapAuthn, profilesSupported);
+        Assert.Contains(UdapConstants.UdapProfilesSupportedValues.UdapAuthz, profilesSupported);
 
         //
         // Checking the SignedMetadata
@@ -205,8 +202,8 @@ public class UdapClientTests
 
         var disco = await udapClient.ValidateResource("https://fhirlabs.net/fhir/r4", trustAnchorStore);
 
-        disco.IsError.Should().BeFalse($"\nError: {disco.Error} \nError Type: {disco.ErrorType}\n{disco.Raw}");
-        disco.HttpStatusCode.Should().Be(HttpStatusCode.OK);
+        Assert.False(disco.IsError, $"\nError: {disco.Error} \nError Type: {disco.ErrorType}\n{disco.Raw}");
+        Assert.Equal(HttpStatusCode.OK, disco.HttpStatusCode);
         Assert.NotNull(udapClient.UdapServerMetaData);
     }
 
@@ -223,8 +220,8 @@ public class UdapClientTests
 
         var disco = await udapClient.ValidateResource("https://fhirlabs.net/fhir/r4/.well-known/udap", trustAnchorStore);
 
-        disco.IsError.Should().BeFalse($"\nError: {disco.Error} \nError Type: {disco.ErrorType}\n{disco.Raw}");
-        disco.HttpStatusCode.Should().Be(HttpStatusCode.OK);
+        Assert.False(disco.IsError, $"\nError: {disco.Error} \nError Type: {disco.ErrorType}\n{disco.Raw}");
+        Assert.Equal(HttpStatusCode.OK, disco.HttpStatusCode);
         Assert.NotNull(udapClient.UdapServerMetaData);
     }
 
@@ -250,8 +247,8 @@ public class UdapClientTests
         udapClient.Error += _diagnosticsValidator.OnError;
         var disco = await udapClient.ValidateResource("https://fhirlabs.net/fhir/r4", trustAnchorStore);
 
-        disco.IsError.Should().BeTrue();
-        disco.Error.Should().Be("Missing UDAP Metadata");
+        Assert.True(disco.IsError);
+        Assert.Equal("Missing UDAP Metadata", disco.Error);
     }
 
     [Fact]
@@ -268,12 +265,12 @@ public class UdapClientTests
         udapClient.TokenError += _diagnosticsValidator.OnTokenError;
         var disco = await udapClient.ValidateResource("https://fhirlabs.net/fhir/r4", trustAnchorStore, "udap://Iss.Mismatch.To.SubjAltName/");
 
-        disco.IsError.Should().BeTrue(disco.Raw);
+        Assert.True(disco.IsError, disco.Raw);
         Assert.NotNull(udapClient.UdapServerMetaData);
-        _diagnosticsValidator.TokenErrorCalled.Should().BeTrue();
-        _diagnosticsValidator.ActualErrorMessages.Any(m => m.Contains("Failed JWT Validation")).Should().BeTrue();
+        Assert.True(_diagnosticsValidator.TokenErrorCalled);
+        Assert.True(_diagnosticsValidator.ActualErrorMessages.Any(m => m.Contains("Failed JWT Validation")));
         // https://san.mismatch.fhirlabs.net/fhir/r4 is the subject alt used to sign software statement
-        _diagnosticsValidator.ActualErrorMessages.Any(m => m.Contains("https://san.mismatch.fhirlabs.net/fhir/r4")).Should().BeTrue();
+        Assert.True(_diagnosticsValidator.ActualErrorMessages.Any(m => m.Contains("https://san.mismatch.fhirlabs.net/fhir/r4")));
     }
 
     [Fact]
@@ -290,10 +287,10 @@ public class UdapClientTests
         udapClient.TokenError += _diagnosticsValidator.OnTokenError;
         var disco = await udapClient.ValidateResource("https://fhirlabs.net/fhir/r4", trustAnchorStore, "udap://Iss.Mismatch.To.BaseUrl/");
 
-        disco.IsError.Should().BeTrue(disco.Raw);
+        Assert.True(disco.IsError, disco.Raw);
         Assert.NotNull(udapClient.UdapServerMetaData);
-        _diagnosticsValidator.TokenErrorCalled.Should().BeTrue();
-        _diagnosticsValidator.ActualErrorMessages.Any(m => m.Contains("JWT iss does not match baseUrl.")).Should().BeTrue();
+        Assert.True(_diagnosticsValidator.TokenErrorCalled);
+        Assert.True(_diagnosticsValidator.ActualErrorMessages.Any(m => m.Contains("JWT iss does not match baseUrl.")));
     }
 
     // [Fact]
@@ -347,7 +344,7 @@ public class UdapClientTests
         // Certificate store metadata
         //
         var udapFileCertStoreManifest = new UdapFileCertStoreManifest();
-        _configuration.GetSection(Constants.UDAP_FILE_STORE_MANIFEST).Bind(udapFileCertStoreManifest);
+        _configuration.GetSection(Constants.UdapFileCertStoreManifestSectionName).Bind(udapFileCertStoreManifest);
         var udapFileCertStoreManifestOptions = Substitute.For<IOptionsMonitor<UdapFileCertStoreManifest>>();
         udapFileCertStoreManifestOptions.CurrentValue.Returns(udapFileCertStoreManifest);
 
@@ -378,7 +375,7 @@ public class UdapClientTests
         //
         // TrustChainValidator handle the x509 chain building, policy and validation
         //
-        var validator = new TrustChainValidator(new X509ChainPolicy() { RevocationMode = X509RevocationMode.NoCheck }, _problemFlags, _serviceProvider.GetRequiredService<ILogger<TrustChainValidator>>())!;
+        var validator = new TrustChainValidator(_problemFlags, false, _serviceProvider.GetRequiredService<ILogger<TrustChainValidator>>())!;
 
         //
         // TrustAnchorStore is using an ITrustAnchorStore implemented as a file store.
@@ -401,5 +398,75 @@ public class UdapClientTests
         udapClientIOptions.CurrentValue.Returns(udapClientOptions);
 
         return (httpClientMock, udapClientDiscoveryValidator, udapClientIOptions, trustAnchorStore);
+    }
+
+    [Fact]
+    public async Task RemoveCachedIntermediateAsync_WithCache_DelegatesToCache()
+    {
+        var (httpClientMock, udapClientDiscoveryValidator, udapClientIOptions, _) = await BuildClientSupport();
+
+        var cache = Substitute.For<ICertificateDownloadCache>();
+        var udapClient = new UdapClient(
+            httpClientMock,
+            udapClientDiscoveryValidator,
+            udapClientIOptions,
+            _serviceProvider.GetRequiredService<ILogger<UdapClient>>(),
+            certificateDownloadCache: cache);
+
+        await udapClient.RemoveCachedIntermediateAsync("https://example.com/intermediate.cer");
+
+        await cache.Received(1).RemoveIntermediateAsync("https://example.com/intermediate.cer", Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task RemoveCachedCrlAsync_WithCache_DelegatesToCache()
+    {
+        var (httpClientMock, udapClientDiscoveryValidator, udapClientIOptions, _) = await BuildClientSupport();
+
+        var cache = Substitute.For<ICertificateDownloadCache>();
+        var udapClient = new UdapClient(
+            httpClientMock,
+            udapClientDiscoveryValidator,
+            udapClientIOptions,
+            _serviceProvider.GetRequiredService<ILogger<UdapClient>>(),
+            certificateDownloadCache: cache);
+
+        await udapClient.RemoveCachedCrlAsync("https://example.com/crl.crl");
+
+        await cache.Received(1).RemoveCrlAsync("https://example.com/crl.crl", Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task RemoveCachedIntermediateAsync_WithoutCache_ThrowsInvalidOperationException()
+    {
+        var (httpClientMock, udapClientDiscoveryValidator, udapClientIOptions, _) = await BuildClientSupport();
+
+        var udapClient = new UdapClient(
+            httpClientMock,
+            udapClientDiscoveryValidator,
+            udapClientIOptions,
+            _serviceProvider.GetRequiredService<ILogger<UdapClient>>());
+
+        var ex = await Assert.ThrowsAsync<InvalidOperationException>(
+            () => udapClient.RemoveCachedIntermediateAsync("https://example.com/intermediate.cer"));
+
+        Assert.Contains(nameof(ICertificateDownloadCache), ex.Message);
+    }
+
+    [Fact]
+    public async Task RemoveCachedCrlAsync_WithoutCache_ThrowsInvalidOperationException()
+    {
+        var (httpClientMock, udapClientDiscoveryValidator, udapClientIOptions, _) = await BuildClientSupport();
+
+        var udapClient = new UdapClient(
+            httpClientMock,
+            udapClientDiscoveryValidator,
+            udapClientIOptions,
+            _serviceProvider.GetRequiredService<ILogger<UdapClient>>());
+
+        var ex = await Assert.ThrowsAsync<InvalidOperationException>(
+            () => udapClient.RemoveCachedCrlAsync("https://example.com/crl.crl"));
+
+        Assert.Contains(nameof(ICertificateDownloadCache), ex.Message);
     }
 }

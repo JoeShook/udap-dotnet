@@ -73,7 +73,7 @@ public class OperationIdiMatchTests : IClassFixture<OperationIdiMatchFixture>
             catch (Exception)
             {
                 _output.WriteLine("Result (unexpected OperationOutcome):");
-                _output.WriteLine(await new FhirJsonSerializer().SerializeToStringAsync(result, pretty: true));
+                _output.WriteLine(await new FhirJsonSerializer(new SerializerSettings { Pretty = true }).SerializeToStringAsync(result));
                 throw;
             }
         }
@@ -94,7 +94,7 @@ public class OperationIdiMatchTests : IClassFixture<OperationIdiMatchFixture>
             catch (Exception)
             {
                 _output.WriteLine("Result (expected OperationOutcome, but got):");
-                _output.WriteLine(await new FhirJsonSerializer().SerializeToStringAsync(result, pretty: true));
+                _output.WriteLine(await new FhirJsonSerializer(new SerializerSettings { Pretty = true }).SerializeToStringAsync(result));
                 throw;
             }
         }
@@ -129,7 +129,7 @@ public class OperationIdiMatchTests : IClassFixture<OperationIdiMatchFixture>
             catch (Exception)
             {
                 _output.WriteLine("Result (unexpected OperationOutcome):");
-                _output.WriteLine(await new FhirJsonSerializer().SerializeToStringAsync(result, pretty: true));
+                _output.WriteLine(await new FhirJsonSerializer(new SerializerSettings { Pretty = true }).SerializeToStringAsync(result));
                 throw;
             }
         }
@@ -150,7 +150,7 @@ public class OperationIdiMatchTests : IClassFixture<OperationIdiMatchFixture>
             catch (Exception)
             {
                 _output.WriteLine("Result (expected OperationOutcome, but got):");
-                _output.WriteLine(await new FhirJsonSerializer().SerializeToStringAsync(result, pretty: true));
+                _output.WriteLine(await new FhirJsonSerializer(new SerializerSettings { Pretty = true }).SerializeToStringAsync(result));
                 throw;
             }
         }
@@ -400,7 +400,7 @@ public class OperationIdiMatchTests : IClassFixture<OperationIdiMatchFixture>
                 Parameter = new List<Parameters.ParameterComponent>()
             },
             false, // expectedSuccess
-            "Missing required member: 'parameter'", // expectedErrorSubstring
+            "Instance count is 0, which is not within", // expectedErrorSubstring
             null  // expectedDiagnostics
         };
 
@@ -758,7 +758,7 @@ public class OperationIdiMatchTests : IClassFixture<OperationIdiMatchFixture>
                 Parameter = new List<Parameters.ParameterComponent>()
             },
             false, // expectedSuccess
-            "Missing required member: 'parameter'", // expectedErrorSubstring
+            "Instance count is 0, which is not within", // expectedErrorSubstring
             null  // expectedDiagnostics
         };
 

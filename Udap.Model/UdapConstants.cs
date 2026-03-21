@@ -85,6 +85,7 @@ public static class UdapConstants
         public const string TokenEndpointAuthMethod = "token_endpoint_auth_method";
         public const string Scope = "scope"; // IdentityModel.JwtClaimTypes.Scope;
         public const string Extensions = "extensions";
+        public const string DPoPEnabled = "dpop_enabled";
     }
 
     /// <summary>

@@ -1,32 +1,19 @@
-﻿#region (c) 2022-2025 Joseph Shook. All rights reserved.
+#region (c) 2022-2025 Joseph Shook. All rights reserved.
 // /*
 //  Authors:
 //     Joseph Shook   Joseph.Shook@Surescripts.com
-// 
+//
 //  See LICENSE in the project root for license information.
 // */
 #endregion
 
 using System.Security.Cryptography.X509Certificates;
-using AutoMapper;
 using Udap.Server.Storage.Entities;
 
 namespace Udap.Server.Storage.Mappers;
 
 public static class AnchorMapper
 {
-    static AnchorMapper()
-    {
-        Mapper = new MapperConfiguration(cfg =>
-            {
-                cfg.AddProfile<AnchorMapperProfile>();
-                cfg.AddProfile<IntermediateCertificateMapperProfile>();
-            })
-            .CreateMapper();
-    }
-
-    internal static IMapper Mapper { get; }
-
     /// <summary>
     /// Maps an entity to a model.
     /// </summary>
@@ -34,7 +21,22 @@ public static class AnchorMapper
     /// <returns></returns>
     public static Udap.Common.Models.Anchor ToModel(this Anchor entity)
     {
-        return Mapper.Map<Udap.Common.Models.Anchor>(entity);
+        var certBase64 = entity.X509Certificate
+            .Replace("-----BEGIN CERTIFICATE-----", "")
+            .Replace("-----END CERTIFICATE-----", "")
+            .Trim();
+
+        return new Udap.Common.Models.Anchor(
+            new X509Certificate2(Convert.FromBase64String(certBase64)),
+            entity.Community == null ? null : entity.Community.Name,
+            entity.Name)
+        {
+            Id = entity.Id,
+            Enabled = entity.Enabled,
+            CommunityId = entity.CommunityId,
+            Certificate = entity.X509Certificate,
+            Intermediates = entity.Intermediates?.Select(i => i.ToModel()).ToList()
+        };
     }
 
     /// <summary>
@@ -44,40 +46,17 @@ public static class AnchorMapper
     /// <returns></returns>
     public static Anchor ToEntity(this Udap.Common.Models.Anchor model)
     {
-        return Mapper.Map<Anchor>(model);
+        return new Anchor
+        {
+            Id = (int)model.Id,
+            Enabled = model.Enabled,
+            Name = model.Name,
+            X509Certificate = model.Certificate,
+            Thumbprint = model.Thumbprint,
+            BeginDate = model.BeginDate,
+            EndDate = model.EndDate,
+            CommunityId = (int)model.CommunityId,
+            Intermediates = model.Intermediates?.Select(i => i.ToEntity()).ToList() ?? new List<Intermediate>()
+        };
     }
 }
-
-public class AnchorMapperProfile : Profile
-{
-    public AnchorMapperProfile()
-    {
-        CreateMap<Anchor, Udap.Common.Models.Anchor>(MemberList.Destination)
-            .ConstructUsing(src => new Udap.Common.Models.Anchor(
-                    new X509Certificate2(Convert.FromBase64String(
-                            src.X509Certificate
-                                .Replace("-----BEGIN CERTIFICATE-----", "")
-                                .Replace("-----END CERTIFICATE-----", "")
-                                .Trim()
-                            )),
-                    src.Community == null ? null : src.Community.Name,
-                    src.Name))
-
-            // .ForMember(model => model.Community, opts =>
-            //     opts.MapFrom(entity => entity.Community.Name))
-
-            .ForMember(model => model.CommunityId, opts =>
-                opts.MapFrom(entity => entity.CommunityId))
-
-            .ForMember(model => model.Certificate, opts =>
-                opts.MapFrom(entity => entity.X509Certificate))
-
-            .ReverseMap()
-            
-            .ForMember(entity => entity.X509Certificate, opts =>
-                opts.MapFrom(model => model.Certificate))
-
-            .ForMember(entity => entity.Community, opts => opts.Ignore());
-    }
-}
-

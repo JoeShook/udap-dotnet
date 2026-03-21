@@ -24,7 +24,7 @@ using Duende.IdentityServer.Configuration;
 using Duende.IdentityServer.Models;
 using Duende.IdentityServer.Services;
 using Duende.IdentityServer.Test;
-using FluentAssertions;
+using Xunit;
 using Duende.IdentityModel.Client;
 using Microsoft.AspNetCore.Authentication;
 using Microsoft.AspNetCore.Builder;
@@ -192,7 +192,7 @@ public class UdapIdentityServerPipeline
         if (services.All(x => x.ServiceType != typeof(IPrivateCertificateStore)))
         {
             services.Configure<UdapFileCertStoreManifest>(
-                builder.Configuration.GetSection(Udap.Common.Constants.UDAP_FILE_STORE_MANIFEST));
+                builder.Configuration.GetSection(Udap.Common.Constants.UdapFileCertStoreManifestSectionName));
 
             services.TryAddSingleton<IPrivateCertificateStore>(sp =>
                 new IssuedCertificateStore(
@@ -240,12 +240,9 @@ public class UdapIdentityServerPipeline
         // https://stackoverflow.com/questions/55653143/is-there-a-way-to-check-and-clean-certificate-revocation-list-cache-for-asp-net
 
         services.AddSingleton(sp => new TrustChainValidator(
-            new X509ChainPolicy
-            {
-                VerificationFlags = X509VerificationFlags.IgnoreWrongUsage,
-                RevocationFlag = X509RevocationFlag.ExcludeRoot,
-                RevocationMode = X509RevocationMode.NoCheck // This is the change unit testing with no revocation endpoint to host the revocation list.
-            }, sp.GetRequiredService<ILogger<TrustChainValidator>>()));
+            TrustChainValidator.DefaultProblemFlags,
+            false, // no revocation checking in test environment
+            sp.GetRequiredService<ILogger<TrustChainValidator>>()));
 
         OnPostConfigureServices(services);
     }
@@ -593,7 +590,7 @@ public class UdapIdentityServerPipeline
 
         var url = CreateAuthorizeUrl(clientId, responseType, scope, redirectUri, state, nonce, loginHint, acrValues, responseMode, codeChallenge, codeChallengeMethod, extra);
         var result = await BrowserClient.GetAsync(url);
-        result.StatusCode.Should().Be(HttpStatusCode.Found);
+        Assert.Equal(HttpStatusCode.Found, result.StatusCode);
 
         BrowserClient.AllowAutoRedirect = old;
 

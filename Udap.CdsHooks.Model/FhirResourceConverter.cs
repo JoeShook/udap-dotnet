@@ -54,13 +54,19 @@ public class FhirResourceConverter : JsonConverter<Dictionary<string, Resource>>
 
     public override void Write(Utf8JsonWriter writer, Dictionary<string, Resource> value, JsonSerializerOptions options)
     {
+        var serializerSettings = new SerializerSettings();
+        if (options.WriteIndented)
+        {
+            serializerSettings.Pretty = true;
+        }
+
         writer.WriteStartObject();
 
         foreach (var kvp in value)
         {
             writer.WritePropertyName(kvp.Key);
-            var resourceJson = new FhirJsonSerializer().SerializeToString(kvp.Value, pretty: options.WriteIndented);
-            
+            var resourceJson = new FhirJsonSerializer(serializerSettings).SerializeToString(kvp.Value);
+
             // Console.WriteLine(resourceJson);
             var indentedResourceJson = IndentJson(resourceJson, 2);
             writer.WriteRawValue(indentedResourceJson);

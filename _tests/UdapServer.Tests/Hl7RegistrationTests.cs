@@ -1,4 +1,4 @@
-﻿#region (c) 2022-2025 Joseph Shook. All rights reserved.
+#region (c) 2022-2025 Joseph Shook. All rights reserved.
 // /*
 //  Authors:
 //     Joseph Shook   Joseph.Shook@Surescripts.com
@@ -11,7 +11,6 @@ using System.Net;
 using System.Net.Http.Json;
 using System.Security.Cryptography.X509Certificates;
 using System.Text.Json;
-using FluentAssertions;
 using Duende.IdentityModel;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Mvc.Testing;
@@ -76,13 +75,8 @@ public class Hl7ApiTestFixture : WebApplicationFactory<Udap.Auth.Server.Program>
             }
 
             services.AddSingleton(new TrustChainValidator(
-                new X509ChainPolicy
-                {
-                    VerificationFlags = X509VerificationFlags.IgnoreWrongUsage,
-                    RevocationFlag = X509RevocationFlag.ExcludeRoot,
-                    DisableCertificateDownloads = true,
-                    RevocationMode = X509RevocationMode.NoCheck // This is the change unit testing with no revocation endpoint to host the revocation list.
-                },
+                TrustChainValidator.DefaultProblemFlags,
+                false, // no revocation checking in test environment
                 Output.ToLogger<TrustChainValidator>()));
 
             // Override ServerSettings to support both V1 and V2 for backward compatibility
@@ -170,8 +164,8 @@ public class Hl7RegistrationTests : IClassFixture<Hl7ApiTestFixture>
 
         var disco = await client.GetUdapDiscoveryDocument();
 
-        disco.HttpResponse?.StatusCode.Should().Be(HttpStatusCode.OK);
-        disco.IsError.Should().BeFalse($"{disco.Error} :: {disco.HttpErrorReason}");
+        Assert.Equal(HttpStatusCode.OK, disco.HttpResponse?.StatusCode);
+        Assert.False(disco.IsError, $"{disco.Error} :: {disco.HttpErrorReason}");
         // var discoJsonFormatted =
         //     JsonSerializer.Serialize(disco.Json, IndentedJsonOptions);
         // _testOutputHelper.WriteLine(discoJsonFormatted);
@@ -232,29 +226,29 @@ public class Hl7RegistrationTests : IClassFixture<Hl7ApiTestFixture>
             _testOutputHelper.WriteLine(await response.Content.ReadAsStringAsync());
         }
 
-        response.StatusCode.Should().Be(HttpStatusCode.Created);
+        Assert.Equal(HttpStatusCode.Created, response.StatusCode);
 
         // var documentAsJson = JsonSerializer.Serialize(document);
         // var result = await response.Content.ReadAsStringAsync();
         // _testOutputHelper.WriteLine(result);
-        // result.Should().BeEquivalentTo(documentAsJson);
+        // Assert.Equal(documentAsJson, result, StringComparer.OrdinalIgnoreCase);
 
         var responseUdapDocument =
             await response.Content.ReadFromJsonAsync<UdapDynamicClientRegistrationDocument>();
 
-        responseUdapDocument.Should().NotBeNull();
-        responseUdapDocument!.ClientId.Should().NotBeNullOrEmpty();
+        Assert.NotNull(responseUdapDocument);
+        Assert.False(string.IsNullOrEmpty(responseUdapDocument!.ClientId));
         _testOutputHelper.WriteLine(JsonSerializer.Serialize(responseUdapDocument, IndentedJsonOptions));
 
         //
         // Assertions according to
         // https://datatracker.ietf.org/doc/html/rfc7591#section-3.2.1
         //
-        responseUdapDocument.SoftwareStatement.Should().Be(signedSoftwareStatement);
-        responseUdapDocument.ClientName.Should().Be(document.ClientName);
-        responseUdapDocument.Issuer.Should().Be(document.Issuer);
+        Assert.Equal(signedSoftwareStatement, responseUdapDocument.SoftwareStatement);
+        Assert.Equal(document.ClientName, responseUdapDocument.ClientName);
+        Assert.Equal(document.Issuer, responseUdapDocument.Issuer);
 
-        ((JsonElement)responseUdapDocument["Extra"]).GetString().Should().Be(document["Extra"].ToString());
+        Assert.Equal(document["Extra"].ToString(), ((JsonElement)responseUdapDocument["Extra"]).GetString());
 
 
         using var scope = _fixture.Services.GetRequiredService<IServiceScopeFactory>().CreateScope();
@@ -263,10 +257,10 @@ public class Hl7RegistrationTests : IClassFixture<Hl7ApiTestFixture>
         var clientEntity = udapContext.Clients
             .Include(c => c.RedirectUris)
             .Single(c => c.ClientId == responseUdapDocument.ClientId);
-        clientEntity.RequirePkce.Should().BeFalse();
+        Assert.False(clientEntity.RequirePkce);
 
-        clientEntity.RedirectUris.Single().RedirectUri.Should().Be("http://localhost/signin-oidc");
-        clientEntity.AllowOfflineAccess.Should().BeTrue();
+        Assert.Equal("http://localhost/signin-oidc", clientEntity.RedirectUris.Single().RedirectUri);
+        Assert.True(clientEntity.AllowOfflineAccess);
     }
 
     [Fact]
@@ -277,8 +271,8 @@ public class Hl7RegistrationTests : IClassFixture<Hl7ApiTestFixture>
 
         var disco = await client.GetUdapDiscoveryDocument();
 
-        disco.HttpResponse?.StatusCode.Should().Be(HttpStatusCode.OK);
-        disco.IsError.Should().BeFalse($"{disco.Error} :: {disco.HttpErrorReason}");
+        Assert.Equal(HttpStatusCode.OK, disco.HttpResponse?.StatusCode);
+        Assert.False(disco.IsError, $"{disco.Error} :: {disco.HttpErrorReason}");
         // var discoJsonFormatted =
         //     JsonSerializer.Serialize(disco.Json, IndentedJsonOptions);
         // _testOutputHelper.WriteLine(discoJsonFormatted);
@@ -333,18 +327,18 @@ public class Hl7RegistrationTests : IClassFixture<Hl7ApiTestFixture>
             _testOutputHelper.WriteLine(await response.Content.ReadAsStringAsync());
         }
 
-        response.StatusCode.Should().Be(HttpStatusCode.Created);
+        Assert.Equal(HttpStatusCode.Created, response.StatusCode);
 
         // var documentAsJson = JsonSerializer.Serialize(document);
         // var result = await response.Content.ReadAsStringAsync();
         // _testOutputHelper.WriteLine(result);
-        // result.Should().BeEquivalentTo(documentAsJson);
+        // Assert.Equal(documentAsJson, result, StringComparer.OrdinalIgnoreCase);
 
         var responseUdapDocument =
             await response.Content.ReadFromJsonAsync<UdapDynamicClientRegistrationDocument>();
 
-        responseUdapDocument.Should().NotBeNull();
-        responseUdapDocument!.ClientId.Should().NotBeNullOrEmpty();
+        Assert.NotNull(responseUdapDocument);
+        Assert.False(string.IsNullOrEmpty(responseUdapDocument!.ClientId));
         _testOutputHelper.WriteLine(JsonSerializer.Serialize(responseUdapDocument,
             IndentedJsonOptions));
 
@@ -352,11 +346,11 @@ public class Hl7RegistrationTests : IClassFixture<Hl7ApiTestFixture>
         // Assertions according to
         // https://datatracker.ietf.org/doc/html/rfc7591#section-3.2.1
         //
-        responseUdapDocument.SoftwareStatement.Should().Be(signedSoftwareStatement);
-        responseUdapDocument.ClientName.Should().Be(document.ClientName);
-        responseUdapDocument.Issuer.Should().Be(document.Issuer);
+        Assert.Equal(signedSoftwareStatement, responseUdapDocument.SoftwareStatement);
+        Assert.Equal(document.ClientName, responseUdapDocument.ClientName);
+        Assert.Equal(document.Issuer, responseUdapDocument.Issuer);
 
-        ((JsonElement)responseUdapDocument["Extra"]).GetString().Should().Be(document["Extra"].ToString());
+        Assert.Equal(document["Extra"].ToString(), ((JsonElement)responseUdapDocument["Extra"]).GetString());
 
 
         using var scope = _fixture.Services.GetRequiredService<IServiceScopeFactory>().CreateScope();
@@ -364,8 +358,8 @@ public class Hl7RegistrationTests : IClassFixture<Hl7ApiTestFixture>
 
         var clientEntity = udapContext.Clients
             .Single(c => c.ClientId == responseUdapDocument.ClientId);
-        clientEntity.RequirePkce.Should().BeFalse();
-        clientEntity.AllowOfflineAccess.Should().BeFalse();
+        Assert.False(clientEntity.RequirePkce);
+        Assert.False(clientEntity.AllowOfflineAccess);
     }
 
     [Fact]
@@ -377,8 +371,8 @@ public class Hl7RegistrationTests : IClassFixture<Hl7ApiTestFixture>
         using var client = _fixture.CreateClient();
         var disco = await client.GetUdapDiscoveryDocument();
 
-        disco.HttpResponse?.StatusCode.Should().Be(HttpStatusCode.OK);
-        disco.IsError.Should().BeFalse($"{disco.Error} :: {disco.HttpErrorReason}");
+        Assert.Equal(HttpStatusCode.OK, disco.HttpResponse?.StatusCode);
+        Assert.False(disco.IsError, $"{disco.Error} :: {disco.HttpErrorReason}");
         // var discoJsonFormatted =
         //     JsonSerializer.Serialize(disco.Json, IndentedJsonOptions);
         // _testOutputHelper.WriteLine(discoJsonFormatted);
@@ -429,13 +423,13 @@ public class Hl7RegistrationTests : IClassFixture<Hl7ApiTestFixture>
             _testOutputHelper.WriteLine(await response.Content.ReadAsStringAsync());
         }
 
-        response.StatusCode.Should().Be(HttpStatusCode.BadRequest);
+        Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
         
         var errorResponse =
             await response.Content.ReadFromJsonAsync<UdapDynamicClientRegistrationErrorResponse>();
         
-        errorResponse.Should().NotBeNull();
-        errorResponse!.Error.Should().Be(UdapDynamicClientRegistrationErrors.InvalidSoftwareStatement);
+        Assert.NotNull(errorResponse);
+        Assert.Equal(UdapDynamicClientRegistrationErrors.InvalidSoftwareStatement, errorResponse!.Error);
     }
 
     //invalid_software_statement
@@ -445,8 +439,8 @@ public class Hl7RegistrationTests : IClassFixture<Hl7ApiTestFixture>
         using var client = _fixture.CreateClient();
         var disco = await client.GetUdapDiscoveryDocument();
 
-        disco.HttpResponse?.StatusCode.Should().Be(HttpStatusCode.OK);
-        disco.IsError.Should().BeFalse($"{disco.Error} :: {disco.HttpErrorReason}");
+        Assert.Equal(HttpStatusCode.OK, disco.HttpResponse?.StatusCode);
+        Assert.False(disco.IsError, $"{disco.Error} :: {disco.HttpErrorReason}");
        
         var regEndpoint = disco.RegistrationEndpoint;
         var reg = new Uri(regEndpoint!);
@@ -495,13 +489,13 @@ public class Hl7RegistrationTests : IClassFixture<Hl7ApiTestFixture>
             _testOutputHelper.WriteLine(await response.Content.ReadAsStringAsync());
         }
 
-        response.StatusCode.Should().Be(HttpStatusCode.BadRequest);
+        Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
 
         var errorResponse =
             await response.Content.ReadFromJsonAsync<UdapDynamicClientRegistrationErrorResponse>();
 
-        errorResponse.Should().NotBeNull();
-        errorResponse!.Error.Should().Be(UdapDynamicClientRegistrationErrors.InvalidSoftwareStatement);
+        Assert.NotNull(errorResponse);
+        Assert.Equal(UdapDynamicClientRegistrationErrors.InvalidSoftwareStatement, errorResponse!.Error);
     }
 
     //invalid_software_statement
@@ -511,8 +505,8 @@ public class Hl7RegistrationTests : IClassFixture<Hl7ApiTestFixture>
         using var client = _fixture.CreateClient();
         var disco = await client.GetUdapDiscoveryDocument();
 
-        disco.HttpResponse?.StatusCode.Should().Be(HttpStatusCode.OK);
-        disco.IsError.Should().BeFalse($"{disco.Error} :: {disco.HttpErrorReason}");
+        Assert.Equal(HttpStatusCode.OK, disco.HttpResponse?.StatusCode);
+        Assert.False(disco.IsError, $"{disco.Error} :: {disco.HttpErrorReason}");
 
         var regEndpoint = disco.RegistrationEndpoint;
         var reg = new Uri(regEndpoint!);
@@ -562,13 +556,13 @@ public class Hl7RegistrationTests : IClassFixture<Hl7ApiTestFixture>
             _testOutputHelper.WriteLine(await response.Content.ReadAsStringAsync());
         }
 
-        response.StatusCode.Should().Be(HttpStatusCode.BadRequest);
+        Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
 
         var errorResponse =
             await response.Content.ReadFromJsonAsync<UdapDynamicClientRegistrationErrorResponse>();
 
-        errorResponse.Should().NotBeNull();
-        errorResponse!.Error.Should().Be(UdapDynamicClientRegistrationErrors.InvalidSoftwareStatement);
+        Assert.NotNull(errorResponse);
+        Assert.Equal(UdapDynamicClientRegistrationErrors.InvalidSoftwareStatement, errorResponse!.Error);
     }
 
     //invalid_software_statement
@@ -578,8 +572,8 @@ public class Hl7RegistrationTests : IClassFixture<Hl7ApiTestFixture>
         using var client = _fixture.CreateClient();
         var disco = await client.GetUdapDiscoveryDocument();
 
-        disco.HttpResponse?.StatusCode.Should().Be(HttpStatusCode.OK);
-        disco.IsError.Should().BeFalse($"{disco.Error} :: {disco.HttpErrorReason}");
+        Assert.Equal(HttpStatusCode.OK, disco.HttpResponse?.StatusCode);
+        Assert.False(disco.IsError, $"{disco.Error} :: {disco.HttpErrorReason}");
 
         var regEndpoint = disco.RegistrationEndpoint;
         var reg = new Uri(regEndpoint!);
@@ -626,13 +620,13 @@ public class Hl7RegistrationTests : IClassFixture<Hl7ApiTestFixture>
             _testOutputHelper.WriteLine(await response.Content.ReadAsStringAsync());
         }
 
-        response.StatusCode.Should().Be(HttpStatusCode.BadRequest);
+        Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
 
         var errorResponse =
             await response.Content.ReadFromJsonAsync<UdapDynamicClientRegistrationErrorResponse>();
 
-        errorResponse.Should().NotBeNull();
-        errorResponse!.Error.Should().Be(UdapDynamicClientRegistrationErrors.InvalidSoftwareStatement);
+        Assert.NotNull(errorResponse);
+        Assert.Equal(UdapDynamicClientRegistrationErrors.InvalidSoftwareStatement, errorResponse!.Error);
     }
 
     //invalid_software_statement
@@ -642,8 +636,8 @@ public class Hl7RegistrationTests : IClassFixture<Hl7ApiTestFixture>
         using var client = _fixture.CreateClient();
         var disco = await client.GetUdapDiscoveryDocument();
 
-        disco.HttpResponse?.StatusCode.Should().Be(HttpStatusCode.OK);
-        disco.IsError.Should().BeFalse($"{disco.Error} :: {disco.HttpErrorReason}");
+        Assert.Equal(HttpStatusCode.OK, disco.HttpResponse?.StatusCode);
+        Assert.False(disco.IsError, $"{disco.Error} :: {disco.HttpErrorReason}");
 
         var regEndpoint = disco.RegistrationEndpoint;
         var reg = new Uri(regEndpoint!);
@@ -690,14 +684,14 @@ public class Hl7RegistrationTests : IClassFixture<Hl7ApiTestFixture>
             _testOutputHelper.WriteLine(await response.Content.ReadAsStringAsync());
         }
 
-        response.StatusCode.Should().Be(HttpStatusCode.BadRequest);
+        Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
 
         var errorResponse =
             await response.Content.ReadFromJsonAsync<UdapDynamicClientRegistrationErrorResponse>();
 
-        errorResponse.Should().NotBeNull();
-        errorResponse!.Error.Should().Be(UdapDynamicClientRegistrationErrors.InvalidSoftwareStatement);
-        errorResponse.ErrorDescription.Should().Be(UdapDynamicClientRegistrationErrorDescriptions.SubIsMissing);
+        Assert.NotNull(errorResponse);
+        Assert.Equal(UdapDynamicClientRegistrationErrors.InvalidSoftwareStatement, errorResponse!.Error);
+        Assert.Equal(UdapDynamicClientRegistrationErrorDescriptions.SubIsMissing, errorResponse.ErrorDescription);
     }
 
 
@@ -708,8 +702,8 @@ public class Hl7RegistrationTests : IClassFixture<Hl7ApiTestFixture>
         using var client = _fixture.CreateClient();
         var disco = await client.GetUdapDiscoveryDocument();
 
-        disco.HttpResponse?.StatusCode.Should().Be(HttpStatusCode.OK);
-        disco.IsError.Should().BeFalse($"{disco.Error} :: {disco.HttpErrorReason}");
+        Assert.Equal(HttpStatusCode.OK, disco.HttpResponse?.StatusCode);
+        Assert.False(disco.IsError, $"{disco.Error} :: {disco.HttpErrorReason}");
 
         var regEndpoint = disco.RegistrationEndpoint;
         var reg = new Uri(regEndpoint!);
@@ -756,14 +750,14 @@ public class Hl7RegistrationTests : IClassFixture<Hl7ApiTestFixture>
             _testOutputHelper.WriteLine(await response.Content.ReadAsStringAsync());
         }
 
-        response.StatusCode.Should().Be(HttpStatusCode.BadRequest);
+        Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
 
         var errorResponse =
             await response.Content.ReadFromJsonAsync<UdapDynamicClientRegistrationErrorResponse>();
 
-        errorResponse.Should().NotBeNull();
-        errorResponse!.Error.Should().Be(UdapDynamicClientRegistrationErrors.InvalidSoftwareStatement);
-        errorResponse.ErrorDescription.Should().Be(UdapDynamicClientRegistrationErrorDescriptions.SubNotEqualToIss);
+        Assert.NotNull(errorResponse);
+        Assert.Equal(UdapDynamicClientRegistrationErrors.InvalidSoftwareStatement, errorResponse!.Error);
+        Assert.Equal(UdapDynamicClientRegistrationErrorDescriptions.SubNotEqualToIss, errorResponse.ErrorDescription);
     }
 
     //invalid_software_statement
@@ -773,8 +767,8 @@ public class Hl7RegistrationTests : IClassFixture<Hl7ApiTestFixture>
         using var client = _fixture.CreateClient();
         var disco = await client.GetUdapDiscoveryDocument();
 
-        disco.HttpResponse?.StatusCode.Should().Be(HttpStatusCode.OK);
-        disco.IsError.Should().BeFalse($"{disco.Error} :: {disco.HttpErrorReason}");
+        Assert.Equal(HttpStatusCode.OK, disco.HttpResponse?.StatusCode);
+        Assert.False(disco.IsError, $"{disco.Error} :: {disco.HttpErrorReason}");
 
         var regEndpoint = disco.RegistrationEndpoint;
         var reg = new Uri(regEndpoint!);
@@ -821,14 +815,14 @@ public class Hl7RegistrationTests : IClassFixture<Hl7ApiTestFixture>
             _testOutputHelper.WriteLine(await response.Content.ReadAsStringAsync());
         }
 
-        response.StatusCode.Should().Be(HttpStatusCode.BadRequest);
+        Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
 
         var errorResponse =
             await response.Content.ReadFromJsonAsync<UdapDynamicClientRegistrationErrorResponse>();
 
-        errorResponse.Should().NotBeNull();
-        errorResponse!.Error.Should().Be(UdapDynamicClientRegistrationErrors.InvalidSoftwareStatement);
-        errorResponse.ErrorDescription.Should().Be($"{UdapDynamicClientRegistrationErrorDescriptions.InvalidAud}: ");
+        Assert.NotNull(errorResponse);
+        Assert.Equal(UdapDynamicClientRegistrationErrors.InvalidSoftwareStatement, errorResponse!.Error);
+        Assert.Equal($"{UdapDynamicClientRegistrationErrorDescriptions.InvalidAud}: ", errorResponse.ErrorDescription);
     }
 
     //invalid_software_statement
@@ -838,8 +832,8 @@ public class Hl7RegistrationTests : IClassFixture<Hl7ApiTestFixture>
         using var client = _fixture.CreateClient();
         var disco = await client.GetUdapDiscoveryDocument();
 
-        disco.HttpResponse?.StatusCode.Should().Be(HttpStatusCode.OK);
-        disco.IsError.Should().BeFalse($"{disco.Error} :: {disco.HttpErrorReason}");
+        Assert.Equal(HttpStatusCode.OK, disco.HttpResponse?.StatusCode);
+        Assert.False(disco.IsError, $"{disco.Error} :: {disco.HttpErrorReason}");
 
         var regEndpoint = disco.RegistrationEndpoint;
         var reg = new Uri(regEndpoint!);
@@ -886,14 +880,14 @@ public class Hl7RegistrationTests : IClassFixture<Hl7ApiTestFixture>
             _testOutputHelper.WriteLine(await response.Content.ReadAsStringAsync());
         }
 
-        response.StatusCode.Should().Be(HttpStatusCode.BadRequest);
+        Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
 
         var errorResponse =
             await response.Content.ReadFromJsonAsync<UdapDynamicClientRegistrationErrorResponse>();
 
-        errorResponse.Should().NotBeNull();
-        errorResponse!.Error.Should().Be(UdapDynamicClientRegistrationErrors.InvalidSoftwareStatement);
-        errorResponse.ErrorDescription.Should().Be($"{UdapDynamicClientRegistrationErrorDescriptions.InvalidMatchAud}");
+        Assert.NotNull(errorResponse);
+        Assert.Equal(UdapDynamicClientRegistrationErrors.InvalidSoftwareStatement, errorResponse!.Error);
+        Assert.Equal($"{UdapDynamicClientRegistrationErrorDescriptions.InvalidMatchAud}", errorResponse.ErrorDescription);
     }
 
     //invalid_software_statement
@@ -903,8 +897,8 @@ public class Hl7RegistrationTests : IClassFixture<Hl7ApiTestFixture>
         using var client = _fixture.CreateClient();
         var disco = await client.GetUdapDiscoveryDocument();
 
-        disco.HttpResponse?.StatusCode.Should().Be(HttpStatusCode.OK);
-        disco.IsError.Should().BeFalse($"{disco.Error} :: {disco.HttpErrorReason}");
+        Assert.Equal(HttpStatusCode.OK, disco.HttpResponse?.StatusCode);
+        Assert.False(disco.IsError, $"{disco.Error} :: {disco.HttpErrorReason}");
 
         var regEndpoint = disco.RegistrationEndpoint;
         var reg = new Uri(regEndpoint!);
@@ -951,14 +945,14 @@ public class Hl7RegistrationTests : IClassFixture<Hl7ApiTestFixture>
             _testOutputHelper.WriteLine(await response.Content.ReadAsStringAsync());
         }
 
-        response.StatusCode.Should().Be(HttpStatusCode.BadRequest);
+        Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
 
         var errorResponse =
             await response.Content.ReadFromJsonAsync<UdapDynamicClientRegistrationErrorResponse>();
 
-        errorResponse.Should().NotBeNull();
-        errorResponse!.Error.Should().Be(UdapDynamicClientRegistrationErrors.InvalidSoftwareStatement);
-        errorResponse.ErrorDescription.Should().Be($"{UdapDynamicClientRegistrationErrorDescriptions.ExpMissing}");
+        Assert.NotNull(errorResponse);
+        Assert.Equal(UdapDynamicClientRegistrationErrors.InvalidSoftwareStatement, errorResponse!.Error);
+        Assert.Equal($"{UdapDynamicClientRegistrationErrorDescriptions.ExpMissing}", errorResponse.ErrorDescription);
     }
 
     //invalid_software_statement
@@ -968,8 +962,8 @@ public class Hl7RegistrationTests : IClassFixture<Hl7ApiTestFixture>
         using var client = _fixture.CreateClient();
         var disco = await client.GetUdapDiscoveryDocument();
 
-        disco.HttpResponse?.StatusCode.Should().Be(HttpStatusCode.OK);
-        disco.IsError.Should().BeFalse($"{disco.Error} :: {disco.HttpErrorReason}");
+        Assert.Equal(HttpStatusCode.OK, disco.HttpResponse?.StatusCode);
+        Assert.False(disco.IsError, $"{disco.Error} :: {disco.HttpErrorReason}");
 
         var regEndpoint = disco.RegistrationEndpoint;
         var reg = new Uri(regEndpoint!);
@@ -1016,14 +1010,14 @@ public class Hl7RegistrationTests : IClassFixture<Hl7ApiTestFixture>
             _testOutputHelper.WriteLine(await response.Content.ReadAsStringAsync());
         }
 
-        response.StatusCode.Should().Be(HttpStatusCode.BadRequest);
+        Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
 
         var errorResponse =
             await response.Content.ReadFromJsonAsync<UdapDynamicClientRegistrationErrorResponse>();
 
-        errorResponse.Should().NotBeNull();
-        errorResponse!.Error.Should().Be(UdapDynamicClientRegistrationErrors.InvalidSoftwareStatement);
-        errorResponse.ErrorDescription.Should().Contain($"{UdapDynamicClientRegistrationErrorDescriptions.ExpExpired}");
+        Assert.NotNull(errorResponse);
+        Assert.Equal(UdapDynamicClientRegistrationErrors.InvalidSoftwareStatement, errorResponse!.Error);
+        Assert.Contains($"{UdapDynamicClientRegistrationErrorDescriptions.ExpExpired}", errorResponse.ErrorDescription);
     }
 
     //invalid_software_statement
@@ -1033,8 +1027,8 @@ public class Hl7RegistrationTests : IClassFixture<Hl7ApiTestFixture>
         using var client = _fixture.CreateClient();
         var disco = await client.GetUdapDiscoveryDocument();
 
-        disco.HttpResponse?.StatusCode.Should().Be(HttpStatusCode.OK);
-        disco.IsError.Should().BeFalse($"{disco.Error} :: {disco.HttpErrorReason}");
+        Assert.Equal(HttpStatusCode.OK, disco.HttpResponse?.StatusCode);
+        Assert.False(disco.IsError, $"{disco.Error} :: {disco.HttpErrorReason}");
 
         var regEndpoint = disco.RegistrationEndpoint;
         var reg = new Uri(regEndpoint!);
@@ -1081,14 +1075,14 @@ public class Hl7RegistrationTests : IClassFixture<Hl7ApiTestFixture>
             _testOutputHelper.WriteLine(await response.Content.ReadAsStringAsync());
         }
 
-        response.StatusCode.Should().Be(HttpStatusCode.BadRequest);
+        Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
 
         var errorResponse =
             await response.Content.ReadFromJsonAsync<UdapDynamicClientRegistrationErrorResponse>();
 
-        errorResponse.Should().NotBeNull();
-        errorResponse!.Error.Should().Be(UdapDynamicClientRegistrationErrors.InvalidSoftwareStatement);
-        errorResponse.ErrorDescription.Should().Be($"{UdapDynamicClientRegistrationErrorDescriptions.IssuedAtMissing}");
+        Assert.NotNull(errorResponse);
+        Assert.Equal(UdapDynamicClientRegistrationErrors.InvalidSoftwareStatement, errorResponse!.Error);
+        Assert.Equal($"{UdapDynamicClientRegistrationErrorDescriptions.IssuedAtMissing}", errorResponse.ErrorDescription);
     }
 
     //invalid_client_metadata
@@ -1098,8 +1092,8 @@ public class Hl7RegistrationTests : IClassFixture<Hl7ApiTestFixture>
         using var client = _fixture.CreateClient();
         var disco = await client.GetUdapDiscoveryDocument();
 
-        disco.HttpResponse?.StatusCode.Should().Be(HttpStatusCode.OK);
-        disco.IsError.Should().BeFalse($"{disco.Error} :: {disco.HttpErrorReason}");
+        Assert.Equal(HttpStatusCode.OK, disco.HttpResponse?.StatusCode);
+        Assert.False(disco.IsError, $"{disco.Error} :: {disco.HttpErrorReason}");
 
         var regEndpoint = disco.RegistrationEndpoint;
         var reg = new Uri(regEndpoint!);
@@ -1146,14 +1140,14 @@ public class Hl7RegistrationTests : IClassFixture<Hl7ApiTestFixture>
             _testOutputHelper.WriteLine(await response.Content.ReadAsStringAsync());
         }
 
-        response.StatusCode.Should().Be(HttpStatusCode.BadRequest);
+        Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
 
         var errorResponse =
             await response.Content.ReadFromJsonAsync<UdapDynamicClientRegistrationErrorResponse>();
 
-        errorResponse.Should().NotBeNull();
-        errorResponse!.Error.Should().Be(UdapDynamicClientRegistrationErrors.InvalidClientMetadata);
-        errorResponse.ErrorDescription.Should().Be($"{UdapDynamicClientRegistrationErrorDescriptions.ClientNameMissing}");
+        Assert.NotNull(errorResponse);
+        Assert.Equal(UdapDynamicClientRegistrationErrors.InvalidClientMetadata, errorResponse!.Error);
+        Assert.Equal($"{UdapDynamicClientRegistrationErrorDescriptions.ClientNameMissing}", errorResponse.ErrorDescription);
     }
 
     //invalid_client_metadata
@@ -1163,8 +1157,8 @@ public class Hl7RegistrationTests : IClassFixture<Hl7ApiTestFixture>
         using var client = _fixture.CreateClient();
         var disco = await client.GetUdapDiscoveryDocument();
 
-        disco.HttpResponse?.StatusCode.Should().Be(HttpStatusCode.OK);
-        disco.IsError.Should().BeFalse($"{disco.Error} :: {disco.HttpErrorReason}");
+        Assert.Equal(HttpStatusCode.OK, disco.HttpResponse?.StatusCode);
+        Assert.False(disco.IsError, $"{disco.Error} :: {disco.HttpErrorReason}");
 
         var regEndpoint = disco.RegistrationEndpoint;
         var reg = new Uri(regEndpoint!);
@@ -1212,14 +1206,14 @@ public class Hl7RegistrationTests : IClassFixture<Hl7ApiTestFixture>
             _testOutputHelper.WriteLine(await response.Content.ReadAsStringAsync());
         }
 
-        response.StatusCode.Should().Be(HttpStatusCode.BadRequest);
+        Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
 
         var errorResponse =
             await response.Content.ReadFromJsonAsync<UdapDynamicClientRegistrationErrorResponse>();
 
-        errorResponse.Should().NotBeNull();
-        errorResponse!.Error.Should().Be(UdapDynamicClientRegistrationErrors.InvalidClientMetadata);
-        errorResponse.ErrorDescription.Should().Be($"{UdapDynamicClientRegistrationErrorDescriptions.LogoMissing}");
+        Assert.NotNull(errorResponse);
+        Assert.Equal(UdapDynamicClientRegistrationErrors.InvalidClientMetadata, errorResponse!.Error);
+        Assert.Equal($"{UdapDynamicClientRegistrationErrorDescriptions.LogoMissing}", errorResponse.ErrorDescription);
     }
 
     //invalid_client_metadata
@@ -1229,8 +1223,8 @@ public class Hl7RegistrationTests : IClassFixture<Hl7ApiTestFixture>
         using var client = _fixture.CreateClient();
         var disco = await client.GetUdapDiscoveryDocument();
 
-        disco.HttpResponse?.StatusCode.Should().Be(HttpStatusCode.OK);
-        disco.IsError.Should().BeFalse($"{disco.Error} :: {disco.HttpErrorReason}");
+        Assert.Equal(HttpStatusCode.OK, disco.HttpResponse?.StatusCode);
+        Assert.False(disco.IsError, $"{disco.Error} :: {disco.HttpErrorReason}");
 
         var regEndpoint = disco.RegistrationEndpoint;
         var reg = new Uri(regEndpoint!);
@@ -1283,7 +1277,7 @@ public class Hl7RegistrationTests : IClassFixture<Hl7ApiTestFixture>
             _testOutputHelper.WriteLine(await response.Content.ReadAsStringAsync());
         }
 
-        response.StatusCode.Should().Be(HttpStatusCode.OK);
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
 
         //
         // No accepted grant types
@@ -1326,7 +1320,7 @@ public class Hl7RegistrationTests : IClassFixture<Hl7ApiTestFixture>
             _testOutputHelper.WriteLine(await response.Content.ReadAsStringAsync());
         }
 
-        response.StatusCode.Should().Be(HttpStatusCode.BadRequest);
+        Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
     }
 
     //invalid_client_metadata
@@ -1336,8 +1330,8 @@ public class Hl7RegistrationTests : IClassFixture<Hl7ApiTestFixture>
         using var client = _fixture.CreateClient();
         var disco = await client.GetUdapDiscoveryDocument();
 
-        disco.HttpResponse?.StatusCode.Should().Be(HttpStatusCode.OK);
-        disco.IsError.Should().BeFalse($"{disco.Error} :: {disco.HttpErrorReason}");
+        Assert.Equal(HttpStatusCode.OK, disco.HttpResponse?.StatusCode);
+        Assert.False(disco.IsError, $"{disco.Error} :: {disco.HttpErrorReason}");
 
         var regEndpoint = disco.RegistrationEndpoint;
         var reg = new Uri(regEndpoint!);
@@ -1386,14 +1380,14 @@ public class Hl7RegistrationTests : IClassFixture<Hl7ApiTestFixture>
             _testOutputHelper.WriteLine(await response.Content.ReadAsStringAsync());
         }
 
-        response.StatusCode.Should().Be(HttpStatusCode.BadRequest);
+        Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
 
         var errorResponse =
             await response.Content.ReadFromJsonAsync<UdapDynamicClientRegistrationErrorResponse>();
 
-        errorResponse.Should().NotBeNull();
-        errorResponse!.Error.Should().Be(UdapDynamicClientRegistrationErrors.InvalidClientMetadata);
-        errorResponse.ErrorDescription.Should().Be($"{UdapDynamicClientRegistrationErrorDescriptions.ResponseTypesMissing}");
+        Assert.NotNull(errorResponse);
+        Assert.Equal(UdapDynamicClientRegistrationErrors.InvalidClientMetadata, errorResponse!.Error);
+        Assert.Equal($"{UdapDynamicClientRegistrationErrorDescriptions.ResponseTypesMissing}", errorResponse.ErrorDescription);
 
 
     }
@@ -1405,8 +1399,8 @@ public class Hl7RegistrationTests : IClassFixture<Hl7ApiTestFixture>
         using var client = _fixture.CreateClient();
         var disco = await client.GetUdapDiscoveryDocument();
 
-        disco.HttpResponse?.StatusCode.Should().Be(HttpStatusCode.OK);
-        disco.IsError.Should().BeFalse($"{disco.Error} :: {disco.HttpErrorReason}");
+        Assert.Equal(HttpStatusCode.OK, disco.HttpResponse?.StatusCode);
+        Assert.False(disco.IsError, $"{disco.Error} :: {disco.HttpErrorReason}");
 
         var regEndpoint = disco.RegistrationEndpoint;
         var reg = new Uri(regEndpoint!);
@@ -1453,14 +1447,14 @@ public class Hl7RegistrationTests : IClassFixture<Hl7ApiTestFixture>
             _testOutputHelper.WriteLine(await response.Content.ReadAsStringAsync());
         }
 
-        response.StatusCode.Should().Be(HttpStatusCode.BadRequest);
+        Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
 
         var errorResponse =
             await response.Content.ReadFromJsonAsync<UdapDynamicClientRegistrationErrorResponse>();
 
-        errorResponse.Should().NotBeNull();
-        errorResponse!.Error.Should().Be(UdapDynamicClientRegistrationErrors.InvalidClientMetadata);
-        errorResponse.ErrorDescription.Should().Be($"{UdapDynamicClientRegistrationErrorDescriptions.TokenEndpointAuthMethodMissing}");
+        Assert.NotNull(errorResponse);
+        Assert.Equal(UdapDynamicClientRegistrationErrors.InvalidClientMetadata, errorResponse!.Error);
+        Assert.Equal($"{UdapDynamicClientRegistrationErrorDescriptions.TokenEndpointAuthMethodMissing}", errorResponse.ErrorDescription);
     }
 
     private async Task ResetClientInDatabase()

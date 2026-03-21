@@ -28,10 +28,10 @@ namespace Udap.Support.Tests.Chain
         //
         //     // Help while writing tests to see problems summarized.
         //     validator.Error += (certificate2, exception) => _testOutputHelper.WriteLine("Error: " + exception.Message);
-        //     validator.Problem += element => _testOutputHelper.WriteLine("Problem: " + element.ChainElementStatus.Summarize(problemFlags));
+        //     validator.Problem += element => _testOutputHelper.WriteLine("Problem: " + element.Problems.Summarize(problemFlags));
         //     validator.Untrusted += certificate2 => _testOutputHelper.WriteLine("Untrusted: " + certificate2.Subject);
         //
-        //     return validator.IsTrustedCertificate(issuedCertificate2, anchors.ToArray().ToX509Collection());
+        //     return await validator.IsTrustedCertificateAsync(clientName, issuedCertificate2, intermediates, anchors.ToArray().ToX509Collection());
         // }
     }
 }

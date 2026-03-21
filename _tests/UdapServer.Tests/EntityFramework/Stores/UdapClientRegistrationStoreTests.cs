@@ -8,7 +8,7 @@
 #endregion
 
 using Duende.IdentityServer.Models;
-using FluentAssertions;
+using Xunit;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
 using NSubstitute;
@@ -58,23 +58,23 @@ public class UdapClientRegistrationStoreTests : StorageFixture<UdapClientRegistr
         await using var context = new UdapDbContext(options);
         var store = new UdapClientRegistrationStore(context, Substitute.For<ILogger<UdapClientRegistrationStore>>());
         var result = await store.UpsertClient(testClient);
-        result.Should().BeFalse();
+        Assert.False(result);
 
         var client = await store.GetClient(testClient);
-        client.Should().NotBeNull();
-        client.ClientId.Should().Be(testClient.ClientId);
-        client.RedirectUris.Single().Should().Be("http://localhost");
+        Assert.NotNull(client);
+        Assert.Equal(testClient.ClientId, client.ClientId);
+        Assert.Equal("http://localhost", client.RedirectUris.Single());
 
         //
         // Re-register with different RedirectUrl
         //
         testClient.RedirectUris = ["http://localhost2"];
         result = await store.UpsertClient(testClient);
-        result.Should().BeTrue();
+        Assert.True(result);
         client = await store.GetClient(testClient);
-        client.Should().NotBeNull();
-        client.ClientId.Should().Be(testClient.ClientId);
-        client.RedirectUris.Single().Should().Be("http://localhost2");
+        Assert.NotNull(client);
+        Assert.Equal(testClient.ClientId, client.ClientId);
+        Assert.Equal("http://localhost2", client.RedirectUris.Single());
     }
 
     [Theory]
@@ -129,12 +129,12 @@ public class UdapClientRegistrationStoreTests : StorageFixture<UdapClientRegistr
             var store = new UdapClientRegistrationStore(context,
                 Substitute.For<ILogger<UdapClientRegistrationStore>>());
             var result = await store.UpsertClient(testClient_community1);
-            result.Should().BeFalse();
+            Assert.False(result);
 
             var client = await store.GetClient(testClient_community1);
-            client.Should().NotBeNull();
-            client.ClientId.Should().Be(testClient_community1.ClientId);
-            client.RedirectUris.Single().Should().Be("http://localhost");
+            Assert.NotNull(client);
+            Assert.Equal(testClient_community1.ClientId, client.ClientId);
+            Assert.Equal("http://localhost", client.RedirectUris.Single());
         }
 
         // Second Register
@@ -142,12 +142,12 @@ public class UdapClientRegistrationStoreTests : StorageFixture<UdapClientRegistr
         {
             var store = new UdapClientRegistrationStore(context, Substitute.For<ILogger<UdapClientRegistrationStore>>());
             var result = await store.UpsertClient(testClient_community2);
-            result.Should().BeFalse();
+            Assert.False(result);
 
             var client = await store.GetClient(testClient_community2);
-            client.Should().NotBeNull();
-            client.ClientId.Should().Be(testClient_community2.ClientId);
-            client.RedirectUris.Single().Should().Be("http://localhost2");
+            Assert.NotNull(client);
+            Assert.Equal(testClient_community2.ClientId, client.ClientId);
+            Assert.Equal("http://localhost2", client.RedirectUris.Single());
         }
 
 
@@ -159,15 +159,15 @@ public class UdapClientRegistrationStoreTests : StorageFixture<UdapClientRegistr
             var store = new UdapClientRegistrationStore(context,
                 Substitute.For<ILogger<UdapClientRegistrationStore>>());
             var result = await store.CancelRegistration(testClient_community1);
-            result.Should().Be(1);
+            Assert.Equal(1, result);
 
             // Client 1 is deleted
             var client = await store.GetClient(testClient_community1);
-            client.Should().BeNull();
+            Assert.Null(client);
 
             // Client 2 still exists
             client = await store.GetClient(testClient_community2);
-            client.Should().NotBeNull();
+            Assert.NotNull(client);
         }
     }
 }

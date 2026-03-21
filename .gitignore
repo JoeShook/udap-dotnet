@@ -224,3 +224,5 @@ examples/clients/UdapEd/Client/wwwroot/temp/MudBlazor.min.css
 .tye/docker_store
 /examples/Udap.Proxy.Server/CertStore/issued/fhirLabsApiClientLocalhostCert.pfx
 /examples/Udap.Proxy.Server/CertStore/issued/gfhirlabs.healthcare.client.pfx
+/coverage-results
+/.claude

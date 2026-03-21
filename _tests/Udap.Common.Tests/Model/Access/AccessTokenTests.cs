@@ -10,7 +10,6 @@
 using System.IdentityModel.Tokens.Jwt;
 using System.Security.Cryptography.X509Certificates;
 using System.Text.Json;
-using FluentAssertions;
 using Hl7.Fhir.Model;
 using Hl7.Fhir.Serialization;
 using Udap.Model;
@@ -82,10 +81,10 @@ public class AccessTokenTests
         var userPersonJson = File.ReadAllText("Model/Person-FASTIDUDAPPerson-Example.json");
         var parser = new FhirJsonParser();
         var personResource = parser.Parse<Person>(userPersonJson);
-        personResource.Should().NotBeNull();
+        Assert.NotNull(personResource);
         var serializer = new FhirJsonSerializer();
         var userPerson = serializer.SerializeToString(personResource);
-        userPerson.Should().NotBeNullOrEmpty();
+        Assert.False(string.IsNullOrEmpty(userPerson));
         // _testOutputHelper.WriteLine(userPerson);
         
 
@@ -126,29 +125,29 @@ public class AccessTokenTests
 
          //_testOutputHelper.WriteLine(payloadJson);
 
-        payloadJson.Should().Contain("urn:oid:2.16.840.1.113883.5.8#TREAT");
-        payloadJson.Should().NotContain("urn:oid:2.16.840.1.113883.5.9#TREATX");
-        payloadJson.Should().Contain("https://udaped.fhirlabs.net/Policy/Consent/99");
-        payloadJson.Should().Contain("https://fhirlabs.net/fhir/r4/Consent/99");
+        Assert.Contains("urn:oid:2.16.840.1.113883.5.8#TREAT", payloadJson);
+        Assert.DoesNotContain("urn:oid:2.16.840.1.113883.5.9#TREATX", payloadJson);
+        Assert.Contains("https://udaped.fhirlabs.net/Policy/Consent/99", payloadJson);
+        Assert.Contains("https://fhirlabs.net/fhir/r4/Consent/99", payloadJson);
 
 
-        payloadJson.Should().Contain("1.3.6.1.2.1.1.3.0#UPTIME");
-        payloadJson.Should().Contain("https://udaped.fhirlabs.net/Policy/Consent/199");
-        payloadJson.Should().Contain("https://fhirlabs.net/fhir/r4/Consent/199");
+        Assert.Contains("1.3.6.1.2.1.1.3.0#UPTIME", payloadJson);
+        Assert.Contains("https://udaped.fhirlabs.net/Policy/Consent/199", payloadJson);
+        Assert.Contains("https://fhirlabs.net/fhir/r4/Consent/199", payloadJson);
 
 
         var extensions = PayloadSerializer.Deserialize((JsonElement)payload["extensions"]);
         var b2BUserResult =
             extensions[UdapConstants.UdapAuthorizationExtensions.Hl7B2BUSER] as HL7B2BUserAuthorizationExtension;
-        b2BUserResult!.UserPerson.Should().NotBeNull();
+        Assert.NotNull(b2BUserResult!.UserPerson);
         var roundtrippedPerson = new FhirJsonParser().Parse<Person>(b2BUserResult.UserPerson!.Value.GetRawText());
-        new FhirJsonSerializer().SerializeToString(roundtrippedPerson).Should().Be(userPerson);
-        
+        Assert.Equal(userPerson, new FhirJsonSerializer().SerializeToString(roundtrippedPerson));
 
-        b2BHl7.PurposeOfUse!.Remove("urn:oid:2.16.840.1.113883.5.8#TREAT").Should().BeTrue();
-        b2BHl7.PurposeOfUse.Count.Should().Be(0);
+
+        Assert.True(b2BHl7.PurposeOfUse!.Remove("urn:oid:2.16.840.1.113883.5.8#TREAT"));
+        Assert.Equal(0, b2BHl7.PurposeOfUse.Count);
 
         b2BHl7 = JsonSerializer.Deserialize<HL7B2BAuthorizationExtension>(b2BHl7.SerializeToJson());
-        b2BHl7!.PurposeOfUse!.Count.Should().Be(0);
+        Assert.Equal(0, b2BHl7!.PurposeOfUse!.Count);
     }
 }

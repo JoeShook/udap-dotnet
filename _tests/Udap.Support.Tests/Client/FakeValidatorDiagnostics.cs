@@ -29,13 +29,13 @@ public class FakeValidatorDiagnostics
         get { return _actualErrorMessages; }
     }
 
-    public void OnChainProblem(X509ChainElement chainElement)
+    public void OnChainProblem(ChainElementInfo chainElement)
     {
-        foreach (var chainElementStatus in chainElement.ChainElementStatus
-                     .Where(s => (s.Status & TrustChainValidator.DefaultProblemFlags) != 0))
+        foreach (var problem in chainElement.Problems
+                     .Where(p => (p.Status & TrustChainValidator.DefaultProblemFlags) != 0))
         {
-            var problem = $"Trust ERROR ({chainElementStatus.Status}){chainElementStatus.StatusInformation}, {chainElement.Certificate}";
-            _actualErrorMessages.Add(problem);
+            var msg = $"Trust ERROR ({problem.Status}){problem.StatusInformation}, {chainElement.Certificate}";
+            _actualErrorMessages.Add(msg);
             ProblemCalled = true;
         }
     }

@@ -1,6 +1,7 @@
 <Project>
   <PropertyGroup>
     <ManagePackageVersionsCentrally>true</ManagePackageVersionsCentrally>
+    <CentralPackageTransitivePinningEnabled>true</CentralPackageTransitivePinningEnabled>
   </PropertyGroup>
 
   <!-- Framework-independent packages -->
@@ -11,11 +12,11 @@
     <PackageVersion Include="Google.Apis.Auth" Version="1.73.0" />
     <PackageVersion Include="Google.Cloud.Storage.Control.V2" Version="1.7.0" />
     <PackageVersion Include="Google.Cloud.Storage.V1" Version="4.14.0" />
-    <PackageVersion Include="Hl7.Fhir.Base" Version="6.0.2" />
-    <PackageVersion Include="Hl7.Fhir.R4B" Version="6.0.2" />
+    <PackageVersion Include="Hl7.Fhir.Base" Version="5.13.2" />
+    <PackageVersion Include="Hl7.Fhir.R4B" Version="5.13.2" />
     <PackageVersion Include="LazyCache" Version="2.4.0" />
     <PackageVersion Include="AspNetCoreRateLimit" Version="5.0.0" />
-    <PackageVersion Include="Hl7.Fhir.Specification.R4B" Version="6.0.2" />
+    <PackageVersion Include="Hl7.Fhir.Specification.R4B" Version="5.13.2" />
     <PackageVersion Include="Microsoft.AspNetCore.Mvc" Version="2.2.0" />
     <PackageVersion Include="Microsoft.IdentityModel.JsonWebTokens" Version="8.16.0" />
     <PackageVersion Include="Microsoft.SourceLink.GitHub" Version="10.0.103" />
@@ -23,7 +24,6 @@
     <PackageVersion Include="MSTest.TestAdapter" Version="4.1.0" />
     <PackageVersion Include="MSTest.TestFramework" Version="4.1.0" />
     <PackageVersion Include="Duende.IdentityModel" Version="8.0.0" />
-    <PackageVersion Include="AutoMapper" Version="14.0.0" />
     <PackageVersion Include="Duende.IdentityServer" Version="7.4.6" />
     <PackageVersion Include="Duende.IdentityServer.AspNetIdentity" Version="7.4.6" />
     <PackageVersion Include="Duende.IdentityServer.EntityFramework.Storage" Version="7.4.6" />
@@ -34,11 +34,14 @@
     <PackageVersion Include="OpenTelemetry.Instrumentation.AspNetCore" Version="1.15.0" />
     <PackageVersion Include="OpenTelemetry.Instrumentation.Http" Version="1.15.0" />
     <PackageVersion Include="OpenTelemetry.Instrumentation.SqlClient" Version="1.15.0" />
+    <PackageVersion Include="Serilog.AspNetCore" Version="10.0.0" />
+    <PackageVersion Include="Serilog.Enrichers.Thread" Version="4.0.0" />
     <PackageVersion Include="Spectre.Console" Version="0.54.0" />
     <PackageVersion Include="Spectre.Console.Cli" Version="0.53.1" />
     <PackageVersion Include="System.IdentityModel.Tokens.Jwt" Version="8.16.0" />
     <PackageVersion Include="Udap.Metadata.Server" Version="0.3.24" />
     <PackageVersion Include="Yarp.ReverseProxy" Version="2.3.0" />
+    <PackageVersion Include="ZiggyCreatures.FusionCache" Version="2.5.0" />
 
     <!-- Unconditional: Hl7.Fhir 6.x requires Extensions.Caching.Memory 10.x which cascades to require
          these at >= 10.0.1 for all TFMs. Duende.IdentityServer.Storage 7.4.6 requires
@@ -53,6 +56,7 @@
     <PackageVersion Include="Microsoft.Extensions.Logging.Abstractions" Version="10.0.3" />
     <PackageVersion Include="Microsoft.Extensions.Options" Version="10.0.3" />
     <PackageVersion Include="Microsoft.Extensions.Options.ConfigurationExtensions" Version="10.0.3" />
+    <PackageVersion Include="Microsoft.Bcl.Memory" Version="10.0.5" />
   </ItemGroup>
 
   <!-- net8.0 ASP.NET Core framework-versioned packages -->

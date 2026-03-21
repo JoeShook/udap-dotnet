@@ -1,4 +1,4 @@
-﻿#region (c) 2023 Joseph Shook. All rights reserved.
+#region (c) 2023 Joseph Shook. All rights reserved.
 // /*
 //  Authors:
 //     Joseph Shook   Joseph.Shook@Surescripts.com
@@ -9,8 +9,6 @@
 
 
 using Duende.IdentityServer.Models;
-using FluentAssertions;
-using FluentAssertions.Common;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Options;
 using System.Net;
@@ -175,14 +173,14 @@ public class RegistrationAndChangeRegistrationTests
             UdapAuthServerPipeline.RegistrationEndpoint,
             new StringContent(JsonSerializer.Serialize(requestBody), new MediaTypeHeaderValue("application/json")));
 
-        regResponse.StatusCode.Should().Be(HttpStatusCode.Created);
+        Assert.Equal(HttpStatusCode.Created, regResponse.StatusCode);
         var regDocumentResult = await regResponse.Content.ReadFromJsonAsync<UdapDynamicClientRegistrationDocument>();
-        regDocumentResult!.Scope.Should().Be("system/Patient.rs");
+        Assert.Equal("system/Patient.rs", regDocumentResult!.Scope);
         var clientId = regDocumentResult.ClientId;
         
-        _mockPipeline.Clients.Single().AllowedGrantTypes.Should().Contain(OidcConstants.GrantTypes.ClientCredentials);
-        _mockPipeline.Clients.Single().AllowOfflineAccess.Should().BeFalse();
-        _mockPipeline.Clients.Single().RequirePkce.Should().BeTrue(); // new client is always true by default.  Don't care for ClientCredentials
+        Assert.Contains(OidcConstants.GrantTypes.ClientCredentials, _mockPipeline.Clients.Single().AllowedGrantTypes);
+        Assert.False(_mockPipeline.Clients.Single().AllowOfflineAccess);
+        Assert.True(_mockPipeline.Clients.Single().RequirePkce); // new client is always true by default.  Don't care for ClientCredentials
 
         //
         // Second Registration as Authorization Code Flow should be a change registration, replacing the grant type
@@ -217,15 +215,15 @@ public class RegistrationAndChangeRegistrationTests
             UdapAuthServerPipeline.RegistrationEndpoint,
             new StringContent(JsonSerializer.Serialize(requestBody), new MediaTypeHeaderValue("application/json")));
 
-        regResponse.StatusCode.Should().Be(HttpStatusCode.OK, await regResponse.Content.ReadAsStringAsync());
+        Assert.Equal(HttpStatusCode.OK, regResponse.StatusCode);
         regDocumentResult = await regResponse.Content.ReadFromJsonAsync<UdapDynamicClientRegistrationDocument>();
-        regDocumentResult!.Scope.Should().Be("system/Appointment.rs system/Patient.rs");
-        regDocumentResult!.ClientId.Should().Be(clientId);
+        Assert.Equal("system/Appointment.rs system/Patient.rs", regDocumentResult!.Scope);
+        Assert.Equal(clientId, regDocumentResult!.ClientId);
 
-        _mockPipeline.Clients.Single().AllowedGrantTypes.Should().NotContain(OidcConstants.GrantTypes.ClientCredentials);
-        _mockPipeline.Clients.Single().AllowedGrantTypes.Should().Contain(OidcConstants.GrantTypes.AuthorizationCode);
-        _mockPipeline.Clients.Single().AllowOfflineAccess.Should().BeTrue();
-        _mockPipeline.Clients.Single().RequirePkce.Should().BeTrue();
+        Assert.DoesNotContain(OidcConstants.GrantTypes.ClientCredentials, _mockPipeline.Clients.Single().AllowedGrantTypes);
+        Assert.Contains(OidcConstants.GrantTypes.AuthorizationCode, _mockPipeline.Clients.Single().AllowedGrantTypes);
+        Assert.True(_mockPipeline.Clients.Single().AllowOfflineAccess);
+        Assert.True(_mockPipeline.Clients.Single().RequirePkce);
     }
 
     /// <summary>
@@ -269,15 +267,15 @@ public class RegistrationAndChangeRegistrationTests
             UdapAuthServerPipeline.RegistrationEndpoint,
             new StringContent(JsonSerializer.Serialize(requestBody), new MediaTypeHeaderValue("application/json")));
 
-        regResponse.StatusCode.Should().Be(HttpStatusCode.Created, await regResponse.Content.ReadAsStringAsync());
+        Assert.Equal(HttpStatusCode.Created, regResponse.StatusCode);
         var regDocumentResult = await regResponse.Content.ReadFromJsonAsync<UdapDynamicClientRegistrationDocument>();
-        regDocumentResult!.Scope.Should().Be("system/Appointment.rs system/Patient.rs");
+        Assert.Equal("system/Appointment.rs system/Patient.rs", regDocumentResult!.Scope);
         var clientId = regDocumentResult.ClientId;
 
-        _mockPipeline.Clients.Single().AllowedGrantTypes.Should().NotContain(OidcConstants.GrantTypes.ClientCredentials);
-        _mockPipeline.Clients.Single().AllowedGrantTypes.Should().Contain(OidcConstants.GrantTypes.AuthorizationCode);
-        _mockPipeline.Clients.Single().AllowOfflineAccess.Should().BeTrue();
-        _mockPipeline.Clients.Single().RequirePkce.Should().BeTrue();
+        Assert.DoesNotContain(OidcConstants.GrantTypes.ClientCredentials, _mockPipeline.Clients.Single().AllowedGrantTypes);
+        Assert.Contains(OidcConstants.GrantTypes.AuthorizationCode, _mockPipeline.Clients.Single().AllowedGrantTypes);
+        Assert.True(_mockPipeline.Clients.Single().AllowOfflineAccess);
+        Assert.True(_mockPipeline.Clients.Single().RequirePkce);
 
         //
         // Cancel Registration and leave scope empty
@@ -318,14 +316,14 @@ public class RegistrationAndChangeRegistrationTests
             UdapAuthServerPipeline.RegistrationEndpoint,
             new StringContent(JsonSerializer.Serialize(requestBody), new MediaTypeHeaderValue("application/json")));
 
-        regResponse.StatusCode.Should().Be(HttpStatusCode.OK); // Deleted finished so returns a 200 status code according to udap.org specifications
+        Assert.Equal(HttpStatusCode.OK, regResponse.StatusCode); // Deleted finished so returns a 200 status code according to udap.org specifications
 
         //
         // Even during a cancel registration it is expected that he SoftwareStatement returned is the same.
         //
         regDocumentResult = await regResponse.Content.ReadFromJsonAsync<UdapDynamicClientRegistrationDocument>();
-        regDocumentResult!.SoftwareStatement.Should().Be(signedSoftwareStatement);
-        regDocumentResult.ClientId.Should().Be("removed");
+        Assert.Equal(signedSoftwareStatement, regDocumentResult!.SoftwareStatement);
+        Assert.Equal("removed", regDocumentResult.ClientId);
 
         //
         // Repeated un-register should be 400 rather than not found (404).
@@ -335,6 +333,6 @@ public class RegistrationAndChangeRegistrationTests
             UdapAuthServerPipeline.RegistrationEndpoint,
             new StringContent(JsonSerializer.Serialize(requestBody), new MediaTypeHeaderValue("application/json")));
 
-        regResponse.StatusCode.Should().Be(HttpStatusCode.BadRequest);
+        Assert.Equal(HttpStatusCode.BadRequest, regResponse.StatusCode);
     }
 }

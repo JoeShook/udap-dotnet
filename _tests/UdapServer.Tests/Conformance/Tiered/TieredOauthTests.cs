@@ -1,4 +1,4 @@
-﻿#region (c) 2023 Joseph Shook. All rights reserved.
+#region (c) 2023 Joseph Shook. All rights reserved.
 // /*
 //  Authors:
 //     Joseph Shook   Joseph.Shook@Surescripts.com
@@ -18,7 +18,6 @@ using System.Web;
 using Duende.IdentityServer;
 using Duende.IdentityServer.Models;
 using Duende.IdentityServer.Test;
-using FluentAssertions;
 using Microsoft.AspNetCore.Authentication;
 using Microsoft.AspNetCore.Authentication.OpenIdConnect;
 using Microsoft.AspNetCore.WebUtilities;
@@ -115,7 +114,7 @@ public class TieredOauthTests
             // It was not intended to work with the concept of a dynamic client registration.
             services.AddSingleton(_mockAuthorServerPipeline.Clients);
 
-            services.Configure<UdapFileCertStoreManifest>(builderContext.Configuration.GetSection(Constants.UDAP_FILE_STORE_MANIFEST));
+            services.Configure<UdapFileCertStoreManifest>(builderContext.Configuration.GetSection(Constants.UdapFileCertStoreManifestSectionName));
 
             services.AddAuthentication()
                 //
@@ -415,8 +414,8 @@ public class TieredOauthTests
         var resultDocument = await RegisterClientWithAuthServer();
         _mockAuthorServerPipeline.RemoveSessionCookie();
         _mockAuthorServerPipeline.RemoveLoginCookie();
-        resultDocument.Should().NotBeNull();
-        resultDocument!.ClientId.Should().NotBeNull();
+        Assert.NotNull(resultDocument);
+        Assert.NotNull(resultDocument!.ClientId);
 
         var clientId = resultDocument.ClientId!;
 
@@ -448,23 +447,23 @@ public class TieredOauthTests
         // We want to skip that and get a redirect to the login page
         _mockAuthorServerPipeline.BrowserClient.AllowCookies = false;
         var response = await _mockAuthorServerPipeline.BrowserClient.GetAsync(clientAuthorizeUrl);
-        response.StatusCode.Should().Be(HttpStatusCode.Redirect, await response.Content.ReadAsStringAsync());
-        response.Headers.Location.Should().NotBeNull();
-        response.Headers.Location!.AbsoluteUri.Should().Contain("https://server/Account/Login");
+        Assert.Equal(HttpStatusCode.Redirect, response.StatusCode);
+        Assert.NotNull(response.Headers.Location);
+        Assert.Contains("https://server/Account/Login", response.Headers.Location!.AbsoluteUri);
         // _testOutputHelper.WriteLine(response.Headers.Location!.AbsoluteUri);
         var queryParams = QueryHelpers.ParseQuery(response.Headers.Location.Query);
-        queryParams.Should().Contain(p => p.Key == "ReturnUrl");
-        queryParams.Should().NotContain(p => p.Key == "code");
-        queryParams.Should().NotContain(p => p.Key == "state");
+        Assert.Contains(queryParams, p => p.Key == "ReturnUrl");
+        Assert.DoesNotContain(queryParams, p => p.Key == "code");
+        Assert.DoesNotContain(queryParams, p => p.Key == "state");
 
         
         // Pull the inner query params from the ReturnUrl
         var returnUrl = queryParams.Single(p => p.Key == "ReturnUrl").Value.ToString();
-        returnUrl.Should().StartWith("/connect/authorize/callback?");
+        Assert.StartsWith("/connect/authorize/callback?", returnUrl);
         queryParams = QueryHelpers.ParseQuery(returnUrl);
-        queryParams.Single(q => q.Key == "scope").Value.ToString().Should().Contain("udap openid user/*.read");
-        queryParams.Single(q => q.Key == "state").Value.Should().BeEquivalentTo(clientState);
-        queryParams.Single(q => q.Key == "idp").Value.Should().BeEquivalentTo("https://idpserver");
+        Assert.Contains("udap openid user/*.read", queryParams.Single(q => q.Key == "scope").Value.ToString());
+        Assert.Equal(clientState, queryParams.Single(q => q.Key == "state").Value.ToString(), StringComparer.OrdinalIgnoreCase);
+        Assert.Equal("https://idpserver", queryParams.Single(q => q.Key == "idp").Value.ToString(), StringComparer.OrdinalIgnoreCase);
         
         var schemes = await _mockAuthorServerPipeline.Resolve<IAuthenticationSchemeProvider>().GetAllSchemesAsync();
    
@@ -508,59 +507,59 @@ public class TieredOauthTests
         // response after discovery and registration
         _mockAuthorServerPipeline.BrowserClient.AllowCookies = true; // Need to set the idsrv cookie so calls to /authorize will succeed
 
-        _mockAuthorServerPipeline.BrowserClient.GetXsrfCookie("https://server/federation/udap-tiered/signin", new TieredOAuthAuthenticationOptions().CorrelationCookie.Name!).Should().BeNull();
+        Assert.Null(_mockAuthorServerPipeline.BrowserClient.GetXsrfCookie("https://server/federation/udap-tiered/signin", new TieredOAuthAuthenticationOptions().CorrelationCookie.Name!));
         var backChannelChallengeResponse = await _mockAuthorServerPipeline.BrowserClient.GetAsync(clientAuthorizeUrl);
-        _mockAuthorServerPipeline.BrowserClient.GetXsrfCookie("https://server/federation/udap-tiered/signin", new TieredOAuthAuthenticationOptions().CorrelationCookie.Name!).Should().NotBeNull();
+        Assert.NotNull(_mockAuthorServerPipeline.BrowserClient.GetXsrfCookie("https://server/federation/udap-tiered/signin", new TieredOAuthAuthenticationOptions().CorrelationCookie.Name!));
         
-        backChannelChallengeResponse.StatusCode.Should().Be(HttpStatusCode.Redirect, await backChannelChallengeResponse.Content.ReadAsStringAsync());
-        backChannelChallengeResponse.Headers.Location.Should().NotBeNull();
-        backChannelChallengeResponse.Headers.Location!.AbsoluteUri.Should().StartWith("https://idpserver/connect/authorize");
+        Assert.Equal(HttpStatusCode.Redirect, backChannelChallengeResponse.StatusCode);
+        Assert.NotNull(backChannelChallengeResponse.Headers.Location);
+        Assert.StartsWith("https://idpserver/connect/authorize", backChannelChallengeResponse.Headers.Location!.AbsoluteUri);
         
         // _testOutputHelper.WriteLine(backChannelChallengeResponse.Headers.Location!.AbsoluteUri);
-        QueryHelpers.ParseQuery(backChannelChallengeResponse.Headers.Location.Query).Single(p => p.Key == "client_id").Value.Should().NotBeEmpty();
+        Assert.NotEmpty(QueryHelpers.ParseQuery(backChannelChallengeResponse.Headers.Location.Query).Single(p => p.Key == "client_id").Value);
         var backChannelState = QueryHelpers.ParseQuery(backChannelChallengeResponse.Headers.Location.Query).Single(p => p.Key == "state").Value.ToString();
-        backChannelState.Should().NotBeNullOrEmpty();
+        Assert.False(string.IsNullOrEmpty(backChannelState));
         
         var idpClient = _mockIdPPipeline.Clients.Single(c => c.ClientName == "AuthServer Client");
-        idpClient.AlwaysIncludeUserClaimsInIdToken.Should().BeTrue();
+        Assert.True(idpClient.AlwaysIncludeUserClaimsInIdToken);
 
 
         Debug.Assert(_mockIdPPipeline.BrowserClient != null, "_mockIdPPipeline.BrowserClient != null");
         var backChannelAuthResult = await _mockIdPPipeline.BrowserClient.GetAsync(backChannelChallengeResponse.Headers.Location);
 
         
-        backChannelAuthResult.StatusCode.Should().Be(HttpStatusCode.Redirect, await backChannelAuthResult.Content.ReadAsStringAsync());
+        Assert.Equal(HttpStatusCode.Redirect, backChannelAuthResult.StatusCode);
         // _testOutputHelper.WriteLine(backChannelAuthResult.Headers.Location!.AbsoluteUri);
-        backChannelAuthResult.Headers.Location!.AbsoluteUri.Should().StartWith("https://idpserver/Account/Login");
+        Assert.StartsWith("https://idpserver/Account/Login", backChannelAuthResult.Headers.Location!.AbsoluteUri);
 
         // Run IdP /Account/Login
         var loginCallbackResult = await _mockIdPPipeline.BrowserClient.GetAsync(backChannelAuthResult.Headers.Location!.AbsoluteUri);
-        loginCallbackResult.StatusCode.Should().Be(HttpStatusCode.Redirect, await backChannelAuthResult.Content.ReadAsStringAsync());
+        Assert.Equal(HttpStatusCode.Redirect, loginCallbackResult.StatusCode);
         // _testOutputHelper.WriteLine(loginCallbackResult.Headers.Location!.OriginalString);
-        loginCallbackResult.Headers.Location!.OriginalString.Should().StartWith("/connect/authorize/callback?");
+        Assert.StartsWith("/connect/authorize/callback?", loginCallbackResult.Headers.Location!.OriginalString);
 
         // Run IdP /connect/authorize/callback
         var authorizeCallbackResult = await _mockIdPPipeline.BrowserClient.GetAsync(
             $"https://idpserver{loginCallbackResult.Headers.Location!.OriginalString}");
         // _testOutputHelper.WriteLine(authorizeCallbackResult.Headers.Location!.OriginalString);
-        authorizeCallbackResult.StatusCode.Should().Be(HttpStatusCode.Redirect, await authorizeCallbackResult.Content.ReadAsStringAsync());
-        authorizeCallbackResult.Headers.Location.Should().NotBeNull();
-        authorizeCallbackResult.Headers.Location!.AbsoluteUri.Should().StartWith("https://server/federation/udap-tiered/signin?");
+        Assert.Equal(HttpStatusCode.Redirect, authorizeCallbackResult.StatusCode);
+        Assert.NotNull(authorizeCallbackResult.Headers.Location);
+        Assert.StartsWith("https://server/federation/udap-tiered/signin?", authorizeCallbackResult.Headers.Location!.AbsoluteUri);
 
-        QueryHelpers.ParseQuery(authorizeCallbackResult.Headers.Location.Query).Single(p => p.Key == "code").Value.Should().NotBeEmpty();
+        Assert.NotEmpty(QueryHelpers.ParseQuery(authorizeCallbackResult.Headers.Location.Query).Single(p => p.Key == "code").Value);
 
         //
         // Validate backchannel state is the same
         //
-        backChannelState.Should().BeEquivalentTo(_mockAuthorServerPipeline.GetClientState(authorizeCallbackResult));
+        Assert.Equal(_mockAuthorServerPipeline.GetClientState(authorizeCallbackResult), backChannelState, StringComparer.OrdinalIgnoreCase);
 
         //
         // Ensure client state and back channel state never become the same.
         //
-        clientState.Should().NotBeEquivalentTo(backChannelState);
+        Assert.NotEqual(backChannelState, clientState);
 
-        _mockAuthorServerPipeline.GetSessionCookie().Should().BeNull();
-        _mockAuthorServerPipeline.BrowserClient.GetCookie("https://server", "idsrv").Should().BeNull();
+        Assert.Null(_mockAuthorServerPipeline.GetSessionCookie());
+        Assert.Null(_mockAuthorServerPipeline.BrowserClient.GetCookie("https://server", "idsrv"));
 
         // Run Auth Server /federation/udap-tiered/signin  This is the Registered scheme callback endpoint
         // Allow one redirect to run /connect/token.
@@ -582,23 +581,23 @@ public class TieredOauthTests
         var schemeCallbackResult = await _mockAuthorServerPipeline.BrowserClient.GetAsync(authorizeCallbackResult.Headers.Location!.AbsoluteUri);
 
 
-        schemeCallbackResult.StatusCode.Should().Be(HttpStatusCode.Redirect, await schemeCallbackResult.Content.ReadAsStringAsync());
-        schemeCallbackResult.Headers.Location.Should().NotBeNull();
-        schemeCallbackResult.Headers.Location!.OriginalString.Should().StartWith("/connect/authorize/callback?");
+        Assert.Equal(HttpStatusCode.Redirect, schemeCallbackResult.StatusCode);
+        Assert.NotNull(schemeCallbackResult.Headers.Location);
+        Assert.StartsWith("/connect/authorize/callback?", schemeCallbackResult.Headers.Location!.OriginalString);
         // _testOutputHelper.WriteLine(schemeCallbackResult.Headers.Location!.OriginalString);
         // Validate Cookies
-        _mockAuthorServerPipeline.GetSessionCookie().Should().NotBeNull();
+        Assert.NotNull(_mockAuthorServerPipeline.GetSessionCookie());
         _testOutputHelper.WriteLine(_mockAuthorServerPipeline.GetSessionCookie()!.Value);
-        _mockAuthorServerPipeline.BrowserClient.GetCookie("https://server", "idsrv").Should().NotBeNull();
+        Assert.NotNull(_mockAuthorServerPipeline.BrowserClient.GetCookie("https://server", "idsrv"));
         //TODO assert match State and nonce between Auth Server and IdP
 
         //
         // Check the IdToken in the back channel.  Ensure the HL7_Identifier is in the claims
         //
         // _testOutputHelper.WriteLine(_mockIdPPipeline.IdToken.ToString()); 
-        _mockIdPPipeline.IdToken.Should().NotBeNull();
-        _mockIdPPipeline.IdToken!.Claims.Should().Contain(c => c.Type == "hl7_identifier");
-        _mockIdPPipeline.IdToken.Claims.Single(c => c.Type == "hl7_identifier").Value.Should().Be("123");
+        Assert.NotNull(_mockIdPPipeline.IdToken);
+        Assert.Contains(_mockIdPPipeline.IdToken!.Claims, c => c.Type == "hl7_identifier");
+        Assert.Equal("123", _mockIdPPipeline.IdToken.Claims.Single(c => c.Type == "hl7_identifier").Value);
 
         // Run the authServer  https://server/connect/authorize/callback 
         _mockAuthorServerPipeline.BrowserClient.AllowAutoRedirect = false;
@@ -606,17 +605,17 @@ public class TieredOauthTests
         var clientCallbackResult = await _mockAuthorServerPipeline.BrowserClient.GetAsync(
                        $"https://server{schemeCallbackResult.Headers.Location!.OriginalString}");
 
-        clientCallbackResult.StatusCode.Should().Be(HttpStatusCode.Redirect, await clientCallbackResult.Content.ReadAsStringAsync());
-        clientCallbackResult.Headers.Location.Should().NotBeNull();
-        clientCallbackResult.Headers.Location!.AbsoluteUri.Should().StartWith("https://code_client/callback?");
+        Assert.Equal(HttpStatusCode.Redirect, clientCallbackResult.StatusCode);
+        Assert.NotNull(clientCallbackResult.Headers.Location);
+        Assert.StartsWith("https://code_client/callback?", clientCallbackResult.Headers.Location!.AbsoluteUri);
         // _testOutputHelper.WriteLine(clientCallbackResult.Headers.Location!.AbsoluteUri);
         
         
         // Assert match state and nonce between User and Auth Server
-        clientState.Should().BeEquivalentTo(_mockAuthorServerPipeline.GetClientState(clientCallbackResult));
+        Assert.Equal(_mockAuthorServerPipeline.GetClientState(clientCallbackResult), clientState, StringComparer.OrdinalIgnoreCase);
 
         queryParams = QueryHelpers.ParseQuery(clientCallbackResult.Headers.Location.Query);
-        queryParams.Should().Contain(p => p.Key == "code");
+        Assert.Contains(queryParams, p => p.Key == "code");
         var code = queryParams.Single(p => p.Key == "code").Value.ToString();
         // _testOutputHelper.WriteLine($"Code: {code}");
         ////////////////////////////
@@ -643,10 +642,10 @@ public class TieredOauthTests
         
 
         var accessToken = await udapClient.ExchangeCodeForTokenResponse(tokenRequest);
-        accessToken.Should().NotBeNull();
-        accessToken.IdentityToken.Should().NotBeNull();
+        Assert.NotNull(accessToken);
+        Assert.NotNull(accessToken.IdentityToken);
         var jwt = new JwtSecurityToken(accessToken.IdentityToken);
-        new JwtSecurityToken(accessToken.AccessToken).Should().NotBeNull();
+        Assert.NotNull(new JwtSecurityToken(accessToken.AccessToken));
 
         using var jsonDocument = JsonDocument.Parse(jwt.Payload.SerializeToJson());
         var formattedStatement = JsonSerializer.Serialize(
@@ -663,15 +662,15 @@ public class TieredOauthTests
 
         // udap.org Tiered 4.3
         // aud: client_id of Resource Holder (matches client_id in Resource Holder request in Step 3.4)
-        jwt.Claims.Should().Contain(c => c.Type == "aud");
-        jwt.Claims.Single(c => c.Type == "aud").Value.Should().Be(clientId);
+        Assert.Contains(jwt.Claims, c => c.Type == "aud");
+        Assert.Equal(clientId, jwt.Claims.Single(c => c.Type == "aud").Value);
 
         // iss: IdP’s unique identifying URI (matches idp parameter from Step 2)
-        jwt.Claims.Should().Contain(c => c.Type == "iss");
-        jwt.Claims.Single(c => c.Type == "iss").Value.Should().Be(UdapAuthServerPipeline.BaseUrl);
+        Assert.Contains(jwt.Claims, c => c.Type == "iss");
+        Assert.Equal(UdapAuthServerPipeline.BaseUrl, jwt.Claims.Single(c => c.Type == "iss").Value);
 
-        jwt.Claims.Should().Contain(c => c.Type == "hl7_identifier");
-        jwt.Claims.Single(c => c.Type == "hl7_identifier").Value.Should().Be("123");
+        Assert.Contains(jwt.Claims, c => c.Type == "hl7_identifier");
+        Assert.Equal("123", jwt.Claims.Single(c => c.Type == "hl7_identifier").Value);
 
 
 
@@ -680,11 +679,11 @@ public class TieredOauthTests
 
         // TODO: Currently the sub is the code given at access time.  Maybe that is OK?  I could put the clientId in from 
         // backchannel.  But I am not sure I want to show that.  After all it is still globally unique.
-        // jwt.Claims.Should().Contain(c => c.Type == "sub");
-        // jwt.Claims.Single(c => c.Type == "sub").Value.Should().Be(backChannelClientId);
+        // Assert.Contains(jwt.Claims, c => c.Type == "sub");
+        // Assert.Equal(backChannelClientId, jwt.Claims.Single(c => c.Type == "sub").Value);
 
-        // jwt.Claims.Should().Contain(c => c.Type == "sub");
-        // jwt.Claims.Single(c => c.Type == "sub").Value.Should().Be(backChannelCode);
+        // Assert.Contains(jwt.Claims, c => c.Type == "sub");
+        // Assert.Equal(backChannelCode, jwt.Claims.Single(c => c.Type == "sub").Value);
 
         // Todo: Nonce 
         // Todo: Validate claims.  Like missing name and other identity claims.  Maybe add a hl7_identifier
@@ -708,8 +707,8 @@ public class TieredOauthTests
         var resultDocument = await RegisterClientWithAuthServer();
         _mockAuthorServerPipeline.RemoveSessionCookie();
         _mockAuthorServerPipeline.RemoveLoginCookie();
-        resultDocument.Should().NotBeNull();
-        resultDocument!.ClientId.Should().NotBeNull();
+        Assert.NotNull(resultDocument);
+        Assert.NotNull(resultDocument!.ClientId);
 
         var clientId = resultDocument.ClientId!;
 
@@ -740,23 +739,23 @@ public class TieredOauthTests
         // We want to skip that and get a redirect to the login page
         _mockAuthorServerPipeline.BrowserClient.AllowCookies = false;
         var response = await _mockAuthorServerPipeline.BrowserClient.GetAsync(clientAuthorizeUrl);
-        response.StatusCode.Should().Be(HttpStatusCode.Redirect, await response.Content.ReadAsStringAsync());
-        response.Headers.Location.Should().NotBeNull();
-        response.Headers.Location!.AbsoluteUri.Should().Contain("https://server/Account/Login");
+        Assert.Equal(HttpStatusCode.Redirect, response.StatusCode);
+        Assert.NotNull(response.Headers.Location);
+        Assert.Contains("https://server/Account/Login", response.Headers.Location!.AbsoluteUri);
         // _testOutputHelper.WriteLine(response.Headers.Location!.AbsoluteUri);
         var queryParams = QueryHelpers.ParseQuery(response.Headers.Location.Query);
-        queryParams.Should().Contain(p => p.Key == "ReturnUrl");
-        queryParams.Should().NotContain(p => p.Key == "code");
-        queryParams.Should().NotContain(p => p.Key == "state");
+        Assert.Contains(queryParams, p => p.Key == "ReturnUrl");
+        Assert.DoesNotContain(queryParams, p => p.Key == "code");
+        Assert.DoesNotContain(queryParams, p => p.Key == "state");
 
 
         // Pull the inner query params from the ReturnUrl
         var returnUrl = queryParams.Single(p => p.Key == "ReturnUrl").Value.ToString();
-        returnUrl.Should().StartWith("/connect/authorize/callback?");
+        Assert.StartsWith("/connect/authorize/callback?", returnUrl);
         queryParams = QueryHelpers.ParseQuery(returnUrl);
-        queryParams.Single(q => q.Key == "scope").Value.ToString().Should().Contain("udap openid user/*.read");
-        queryParams.Single(q => q.Key == "state").Value.Should().BeEquivalentTo(clientState);
-        queryParams.Single(q => q.Key == "idp").Value.Should().BeEquivalentTo("https://idpserver2?community=udap://idp-community-2");
+        Assert.Contains("udap openid user/*.read", queryParams.Single(q => q.Key == "scope").Value.ToString());
+        Assert.Equal(clientState, queryParams.Single(q => q.Key == "state").Value.ToString(), StringComparer.OrdinalIgnoreCase);
+        Assert.Equal("https://idpserver2?community=udap://idp-community-2", queryParams.Single(q => q.Key == "idp").Value.ToString(), StringComparer.OrdinalIgnoreCase);
 
         // var schemes = await _mockAuthorServerPipeline.Resolve<IIdentityProviderStore>().GetAllSchemeNamesAsync();
 
@@ -799,60 +798,60 @@ public class TieredOauthTests
         // response after discovery and registration
         _mockAuthorServerPipeline.BrowserClient.AllowCookies = true; // Need to set the idsrv cookie so calls to /authorize will succeed
         
-        _mockAuthorServerPipeline.BrowserClient.GetXsrfCookie("https://server/federation/udap-tiered/signin", new TieredOAuthAuthenticationOptions().CorrelationCookie.Name!).Should().BeNull();
+        Assert.Null(_mockAuthorServerPipeline.BrowserClient.GetXsrfCookie("https://server/federation/udap-tiered/signin", new TieredOAuthAuthenticationOptions().CorrelationCookie.Name!));
         var backChannelChallengeResponse = await _mockAuthorServerPipeline.BrowserClient.GetAsync(clientAuthorizeUrl);
-        _mockAuthorServerPipeline.BrowserClient.GetXsrfCookie("https://server/federation/udap-tiered/signin", new TieredOAuthAuthenticationOptions().CorrelationCookie.Name!).Should().NotBeNull();
+        Assert.NotNull(_mockAuthorServerPipeline.BrowserClient.GetXsrfCookie("https://server/federation/udap-tiered/signin", new TieredOAuthAuthenticationOptions().CorrelationCookie.Name!));
 
-        backChannelChallengeResponse.StatusCode.Should().Be(HttpStatusCode.Redirect, await backChannelChallengeResponse.Content.ReadAsStringAsync());
-        backChannelChallengeResponse.Headers.Location.Should().NotBeNull();
-        backChannelChallengeResponse.Headers.Location!.AbsoluteUri.Should().StartWith("https://idpserver2/connect/authorize");
+        Assert.Equal(HttpStatusCode.Redirect, backChannelChallengeResponse.StatusCode);
+        Assert.NotNull(backChannelChallengeResponse.Headers.Location);
+        Assert.StartsWith("https://idpserver2/connect/authorize", backChannelChallengeResponse.Headers.Location!.AbsoluteUri);
 
         // _testOutputHelper.WriteLine(backChannelChallengeResponse.Headers.Location!.AbsoluteUri);
-        QueryHelpers.ParseQuery(backChannelChallengeResponse.Headers.Location.Query).Single(p => p.Key == "client_id").Value.Should().NotBeEmpty();
+        Assert.NotEmpty(QueryHelpers.ParseQuery(backChannelChallengeResponse.Headers.Location.Query).Single(p => p.Key == "client_id").Value);
         var backChannelState = QueryHelpers.ParseQuery(backChannelChallengeResponse.Headers.Location.Query).Single(p => p.Key == "state").Value.ToString();
-        backChannelState.Should().NotBeNullOrEmpty();
+        Assert.False(string.IsNullOrEmpty(backChannelState));
 
 
         var idpClient = _mockIdPPipeline2.Clients.Single(c => c.ClientName == "AuthServer Client");
-        idpClient.AlwaysIncludeUserClaimsInIdToken.Should().BeTrue();
+        Assert.True(idpClient.AlwaysIncludeUserClaimsInIdToken);
 
-        _mockIdPPipeline2.BrowserClient.Should().NotBeNull();
+        Assert.NotNull(_mockIdPPipeline2.BrowserClient);
         var backChannelAuthResult = await _mockIdPPipeline2.BrowserClient!.GetAsync(backChannelChallengeResponse.Headers.Location);
 
 
-        backChannelAuthResult.StatusCode.Should().Be(HttpStatusCode.Redirect, await backChannelAuthResult.Content.ReadAsStringAsync());
+        Assert.Equal(HttpStatusCode.Redirect, backChannelAuthResult.StatusCode);
         // _testOutputHelper.WriteLine(backChannelAuthResult.Headers.Location!.AbsoluteUri);
-        backChannelAuthResult.Headers.Location!.AbsoluteUri.Should().StartWith("https://idpserver2/Account/Login");
+        Assert.StartsWith("https://idpserver2/Account/Login", backChannelAuthResult.Headers.Location!.AbsoluteUri);
 
         // Run IdP /Account/Login
         var loginCallbackResult = await _mockIdPPipeline2.BrowserClient.GetAsync(backChannelAuthResult.Headers.Location!.AbsoluteUri);
-        loginCallbackResult.StatusCode.Should().Be(HttpStatusCode.Redirect, await backChannelAuthResult.Content.ReadAsStringAsync());
+        Assert.Equal(HttpStatusCode.Redirect, loginCallbackResult.StatusCode);
         // _testOutputHelper.WriteLine(loginCallbackResult.Headers.Location!.OriginalString);
-        loginCallbackResult.Headers.Location!.OriginalString.Should().StartWith("/connect/authorize/callback?");
+        Assert.StartsWith("/connect/authorize/callback?", loginCallbackResult.Headers.Location!.OriginalString);
 
         // Run IdP /connect/authorize/callback
         var authorizeCallbackResult = await _mockIdPPipeline2.BrowserClient.GetAsync(
             $"https://idpserver2{loginCallbackResult.Headers.Location!.OriginalString}");
         // _testOutputHelper.WriteLine(authorizeCallbackResult.Headers.Location!.OriginalString);
-        authorizeCallbackResult.StatusCode.Should().Be(HttpStatusCode.Redirect, await authorizeCallbackResult.Content.ReadAsStringAsync());
-        authorizeCallbackResult.Headers.Location.Should().NotBeNull();
-        authorizeCallbackResult.Headers.Location!.AbsoluteUri.Should().StartWith("https://server/federation/udap-tiered/signin?");
+        Assert.Equal(HttpStatusCode.Redirect, authorizeCallbackResult.StatusCode);
+        Assert.NotNull(authorizeCallbackResult.Headers.Location);
+        Assert.StartsWith("https://server/federation/udap-tiered/signin?", authorizeCallbackResult.Headers.Location!.AbsoluteUri);
 
         var backChannelCode = QueryHelpers.ParseQuery(authorizeCallbackResult.Headers.Location.Query).Single(p => p.Key == "code").Value.ToString();
-        backChannelCode.Should().NotBeEmpty();
+        Assert.NotEmpty(backChannelCode);
 
         //
         // Validate backchannel state is the same
         //
-        backChannelState.Should().BeEquivalentTo(_mockAuthorServerPipeline.GetClientState(authorizeCallbackResult));
+        Assert.Equal(_mockAuthorServerPipeline.GetClientState(authorizeCallbackResult), backChannelState, StringComparer.OrdinalIgnoreCase);
 
         //
         // Ensure client state and back channel state never become the same.
         //
-        clientState.Should().NotBeEquivalentTo(backChannelState);
+        Assert.NotEqual(backChannelState, clientState);
 
-        _mockAuthorServerPipeline.GetSessionCookie().Should().BeNull();
-        _mockAuthorServerPipeline.BrowserClient.GetCookie("https://server", "idsrv").Should().BeNull();
+        Assert.Null(_mockAuthorServerPipeline.GetSessionCookie());
+        Assert.Null(_mockAuthorServerPipeline.BrowserClient.GetCookie("https://server", "idsrv"));
 
         // Run Auth Server /federation/idpserver2/signin  This is the Registered scheme callback endpoint
         // Allow one redirect to run /connect/token.
@@ -874,14 +873,14 @@ public class TieredOauthTests
         var schemeCallbackResult = await _mockAuthorServerPipeline.BrowserClient.GetAsync(authorizeCallbackResult.Headers.Location!.AbsoluteUri);
 
 
-        schemeCallbackResult.StatusCode.Should().Be(HttpStatusCode.Redirect, await schemeCallbackResult.Content.ReadAsStringAsync());
-        schemeCallbackResult.Headers.Location.Should().NotBeNull();
-        schemeCallbackResult.Headers.Location!.OriginalString.Should().StartWith("/connect/authorize/callback?");
+        Assert.Equal(HttpStatusCode.Redirect, schemeCallbackResult.StatusCode);
+        Assert.NotNull(schemeCallbackResult.Headers.Location);
+        Assert.StartsWith("/connect/authorize/callback?", schemeCallbackResult.Headers.Location!.OriginalString);
         // _testOutputHelper.WriteLine(schemeCallbackResult.Headers.Location!.OriginalString);
         // Validate Cookies
-        _mockAuthorServerPipeline.GetSessionCookie().Should().NotBeNull();
+        Assert.NotNull(_mockAuthorServerPipeline.GetSessionCookie());
         // _testOutputHelper.WriteLine(_mockAuthorServerPipeline.GetSessionCookie()!.Value);
-        // _mockAuthorServerPipeline.BrowserClient.GetCookie("https://server", "idsrv").Should().NotBeNull();
+        // Assert.NotNull(_mockAuthorServerPipeline.BrowserClient.GetCookie("https://server", "idsrv"));
         //TODO assert match State and nonce between Auth Server and IdP
 
         //
@@ -889,9 +888,9 @@ public class TieredOauthTests
         //
         // _testOutputHelper.WriteLine(_mockIdPPipeline2.IdToken.ToString()); 
 
-        _mockIdPPipeline2.IdToken.Should().NotBeNull();
-        _mockIdPPipeline2.IdToken!.Claims.Should().Contain(c => c.Type == "hl7_identifier");
-        _mockIdPPipeline2.IdToken.Claims.Single(c => c.Type == "hl7_identifier").Value.Should().Be("123");
+        Assert.NotNull(_mockIdPPipeline2.IdToken);
+        Assert.Contains(_mockIdPPipeline2.IdToken!.Claims, c => c.Type == "hl7_identifier");
+        Assert.Equal("123", _mockIdPPipeline2.IdToken.Claims.Single(c => c.Type == "hl7_identifier").Value);
 
         // Run the authServer  https://server/connect/authorize/callback 
         _mockAuthorServerPipeline.BrowserClient.AllowAutoRedirect = false;
@@ -899,17 +898,17 @@ public class TieredOauthTests
         var clientCallbackResult = await _mockAuthorServerPipeline.BrowserClient.GetAsync(
                        $"https://server{schemeCallbackResult.Headers.Location!.OriginalString}");
 
-        clientCallbackResult.StatusCode.Should().Be(HttpStatusCode.Redirect, await clientCallbackResult.Content.ReadAsStringAsync());
-        clientCallbackResult.Headers.Location.Should().NotBeNull();
-        clientCallbackResult.Headers.Location!.AbsoluteUri.Should().StartWith("https://code_client/callback?");
+        Assert.Equal(HttpStatusCode.Redirect, clientCallbackResult.StatusCode);
+        Assert.NotNull(clientCallbackResult.Headers.Location);
+        Assert.StartsWith("https://code_client/callback?", clientCallbackResult.Headers.Location!.AbsoluteUri);
         // _testOutputHelper.WriteLine(clientCallbackResult.Headers.Location!.AbsoluteUri);
 
 
         // Assert match state and nonce between User and Auth Server
-        clientState.Should().BeEquivalentTo(_mockAuthorServerPipeline.GetClientState(clientCallbackResult));
+        Assert.Equal(_mockAuthorServerPipeline.GetClientState(clientCallbackResult), clientState, StringComparer.OrdinalIgnoreCase);
 
         queryParams = QueryHelpers.ParseQuery(clientCallbackResult.Headers.Location.Query);
-        queryParams.Should().Contain(p => p.Key == "code");
+        Assert.Contains(queryParams, p => p.Key == "code");
         var code = queryParams.Single(p => p.Key == "code").Value.ToString();
         // _testOutputHelper.WriteLine($"Code: {code}");
         ////////////////////////////
@@ -935,10 +934,10 @@ public class TieredOauthTests
         var udapClient = _mockAuthorServerPipeline.Resolve<IUdapClient>();
 
         var accessToken = await udapClient.ExchangeCodeForTokenResponse(tokenRequest);
-        accessToken.Should().NotBeNull();
-        accessToken.IdentityToken.Should().NotBeNull();
+        Assert.NotNull(accessToken);
+        Assert.NotNull(accessToken.IdentityToken);
         var jwt = new JwtSecurityToken(accessToken.IdentityToken);
-        new JwtSecurityToken(accessToken.AccessToken).Should().NotBeNull();
+        Assert.NotNull(new JwtSecurityToken(accessToken.AccessToken));
 
 
         using var jsonDocument = JsonDocument.Parse(jwt.Payload.SerializeToJson());
@@ -956,15 +955,15 @@ public class TieredOauthTests
 
         // udap.org Tiered 4.3
         // aud: client_id of Resource Holder (matches client_id in Resource Holder request in Step 3.4)
-        jwt.Claims.Should().Contain(c => c.Type == "aud");
-        jwt.Claims.Single(c => c.Type == "aud").Value.Should().Be(clientId);
+        Assert.Contains(jwt.Claims, c => c.Type == "aud");
+        Assert.Equal(clientId, jwt.Claims.Single(c => c.Type == "aud").Value);
 
         // iss: IdP’s unique identifying URI (matches idp parameter from Step 2)
-        jwt.Claims.Should().Contain(c => c.Type == "iss");
-        jwt.Claims.Single(c => c.Type == "iss").Value.Should().Be(UdapAuthServerPipeline.BaseUrl);
+        Assert.Contains(jwt.Claims, c => c.Type == "iss");
+        Assert.Equal(UdapAuthServerPipeline.BaseUrl, jwt.Claims.Single(c => c.Type == "iss").Value);
 
-        jwt.Claims.Should().Contain(c => c.Type == "hl7_identifier");
-        jwt.Claims.Single(c => c.Type == "hl7_identifier").Value.Should().Be("123");
+        Assert.Contains(jwt.Claims, c => c.Type == "hl7_identifier");
+        Assert.Equal("123", jwt.Claims.Single(c => c.Type == "hl7_identifier").Value);
 
 
 
@@ -973,11 +972,11 @@ public class TieredOauthTests
 
         // TODO: Currently the sub is the code given at access time.  Maybe that is OK?  I could put the clientId in from 
         // backchannel.  But I am not sure I want to show that.  After all it is still globally unique.
-        // jwt.Claims.Should().Contain(c => c.Type == "sub");
-        // jwt.Claims.Single(c => c.Type == "sub").Value.Should().Be(backChannelClientId);
+        // Assert.Contains(jwt.Claims, c => c.Type == "sub");
+        // Assert.Equal(backChannelClientId, jwt.Claims.Single(c => c.Type == "sub").Value);
 
-        // jwt.Claims.Should().Contain(c => c.Type == "sub");
-        // jwt.Claims.Single(c => c.Type == "sub").Value.Should().Be(backChannelCode);
+        // Assert.Contains(jwt.Claims, c => c.Type == "sub");
+        // Assert.Equal(backChannelCode, jwt.Claims.Single(c => c.Type == "sub").Value);
 
         // Todo: Nonce 
         // Todo: Validate claims.  Like missing name and other identity claims.  Maybe add a hl7_identifier
@@ -1002,8 +1001,8 @@ public class TieredOauthTests
         var resultDocument = await RegisterClientWithAuthServer();
         _mockAuthorServerPipeline.RemoveSessionCookie();
         _mockAuthorServerPipeline.RemoveLoginCookie();
-        resultDocument.Should().NotBeNull();
-        resultDocument!.ClientId.Should().NotBeNull();
+        Assert.NotNull(resultDocument);
+        Assert.NotNull(resultDocument!.ClientId);
 
         var clientId = resultDocument.ClientId!;
 
@@ -1034,23 +1033,23 @@ public class TieredOauthTests
         // We want to skip that and get a redirect to the login page
         _mockAuthorServerPipeline.BrowserClient.AllowCookies = false;
         var response = await _mockAuthorServerPipeline.BrowserClient.GetAsync(clientAuthorizeUrl);
-        response.StatusCode.Should().Be(HttpStatusCode.Redirect, await response.Content.ReadAsStringAsync());
-        response.Headers.Location.Should().NotBeNull();
-        response.Headers.Location!.AbsoluteUri.Should().Contain("https://server/Account/Login");
+        Assert.Equal(HttpStatusCode.Redirect, response.StatusCode);
+        Assert.NotNull(response.Headers.Location);
+        Assert.Contains("https://server/Account/Login", response.Headers.Location!.AbsoluteUri);
         // _testOutputHelper.WriteLine(response.Headers.Location!.AbsoluteUri);
         var queryParams = QueryHelpers.ParseQuery(response.Headers.Location.Query);
-        queryParams.Should().Contain(p => p.Key == "ReturnUrl");
-        queryParams.Should().NotContain(p => p.Key == "code");
-        queryParams.Should().NotContain(p => p.Key == "state");
+        Assert.Contains(queryParams, p => p.Key == "ReturnUrl");
+        Assert.DoesNotContain(queryParams, p => p.Key == "code");
+        Assert.DoesNotContain(queryParams, p => p.Key == "state");
 
 
         // Pull the inner query params from the ReturnUrl
         var returnUrl = queryParams.Single(p => p.Key == "ReturnUrl").Value.ToString();
-        returnUrl.Should().StartWith("/connect/authorize/callback?");
+        Assert.StartsWith("/connect/authorize/callback?", returnUrl);
         queryParams = QueryHelpers.ParseQuery(returnUrl);
-        queryParams.Single(q => q.Key == "scope").Value.ToString().Should().Contain("openid user/*.read");
-        queryParams.Single(q => q.Key == "state").Value.Should().BeEquivalentTo(clientState);
-        queryParams.Single(q => q.Key == "idp").Value.Should().BeEquivalentTo("https://idpserver");
+        Assert.Contains("openid user/*.read", queryParams.Single(q => q.Key == "scope").Value.ToString());
+        Assert.Equal(clientState, queryParams.Single(q => q.Key == "state").Value.ToString(), StringComparer.OrdinalIgnoreCase);
+        Assert.Equal("https://idpserver", queryParams.Single(q => q.Key == "idp").Value.ToString(), StringComparer.OrdinalIgnoreCase);
 
         var schemes = await _mockAuthorServerPipeline.Resolve<IAuthenticationSchemeProvider>().GetAllSchemesAsync();
 
@@ -1064,11 +1063,11 @@ public class TieredOauthTests
         // response after discovery and registration
         _mockAuthorServerPipeline.BrowserClient.AllowCookies = true; // Need to set the idsrv cookie so calls to /authorize will succeed
 
-        _mockAuthorServerPipeline.BrowserClient.GetXsrfCookie("https://server/federation/udap-tiered/signin",
-            new TieredOAuthAuthenticationOptions().CorrelationCookie.Name!).Should().BeNull();
+        Assert.Null(_mockAuthorServerPipeline.BrowserClient.GetXsrfCookie("https://server/federation/udap-tiered/signin",
+            new TieredOAuthAuthenticationOptions().CorrelationCookie.Name!));
 
        var exception = await Assert.ThrowsAsync<Exception>(() => _mockAuthorServerPipeline.BrowserClient.GetAsync(clientAuthorizeUrl));
-       exception.Message.Should().Be("Missing required udap scope from client for Tiered OAuth");
+       Assert.Equal("Missing required udap scope from client for Tiered OAuth", exception.Message);
     }
 
 
@@ -1091,8 +1090,8 @@ public class TieredOauthTests
         var resultDocument = await RegisterClientWithAuthServer();
         _mockAuthorServerPipeline.RemoveSessionCookie();
         _mockAuthorServerPipeline.RemoveLoginCookie();
-        resultDocument.Should().NotBeNull();
-        resultDocument!.ClientId.Should().NotBeNull();
+        Assert.NotNull(resultDocument);
+        Assert.NotNull(resultDocument!.ClientId);
 
         var clientId = resultDocument.ClientId!;
 
@@ -1123,23 +1122,23 @@ public class TieredOauthTests
         // We want to skip that and get a redirect to the login page
         _mockAuthorServerPipeline.BrowserClient.AllowCookies = false;
         var response = await _mockAuthorServerPipeline.BrowserClient.GetAsync(clientAuthorizeUrl);
-        response.StatusCode.Should().Be(HttpStatusCode.Redirect, await response.Content.ReadAsStringAsync());
-        response.Headers.Location.Should().NotBeNull();
-        response.Headers.Location!.AbsoluteUri.Should().Contain("https://server/Account/Login");
+        Assert.Equal(HttpStatusCode.Redirect, response.StatusCode);
+        Assert.NotNull(response.Headers.Location);
+        Assert.Contains("https://server/Account/Login", response.Headers.Location!.AbsoluteUri);
         // _testOutputHelper.WriteLine(response.Headers.Location!.AbsoluteUri);
         var queryParams = QueryHelpers.ParseQuery(response.Headers.Location.Query);
-        queryParams.Should().Contain(p => p.Key == "ReturnUrl");
-        queryParams.Should().NotContain(p => p.Key == "code");
-        queryParams.Should().NotContain(p => p.Key == "state");
+        Assert.Contains(queryParams, p => p.Key == "ReturnUrl");
+        Assert.DoesNotContain(queryParams, p => p.Key == "code");
+        Assert.DoesNotContain(queryParams, p => p.Key == "state");
         
 
         // Pull the inner query params from the ReturnUrl
         var returnUrl = queryParams.Single(p => p.Key == "ReturnUrl").Value.ToString();
-        returnUrl.Should().StartWith("/connect/authorize/callback?");
+        Assert.StartsWith("/connect/authorize/callback?", returnUrl);
         queryParams = QueryHelpers.ParseQuery(returnUrl);
-        queryParams.Single(q => q.Key == "scope").Value.ToString().Should().Contain("udap openid user/*.read");
-        queryParams.Single(q => q.Key == "state").Value.Should().BeEquivalentTo(clientState);
-        queryParams.Single(q => q.Key == "idp").Value.Should().BeEquivalentTo("https://idpserver");
+        Assert.Contains("udap openid user/*.read", queryParams.Single(q => q.Key == "scope").Value.ToString());
+        Assert.Equal(clientState, queryParams.Single(q => q.Key == "state").Value.ToString(), StringComparer.OrdinalIgnoreCase);
+        Assert.Equal("https://idpserver", queryParams.Single(q => q.Key == "idp").Value.ToString(), StringComparer.OrdinalIgnoreCase);
 
         var schemes = await _mockAuthorServerPipeline.Resolve<IAuthenticationSchemeProvider>().GetAllSchemesAsync();
 
@@ -1184,27 +1183,24 @@ public class TieredOauthTests
         _mockAuthorServerPipeline.BrowserClient.AllowCookies =
             true; // Need to set the idsrv cookie so calls to /authorize will succeed
 
-        _mockAuthorServerPipeline.BrowserClient.GetXsrfCookie("https://server/federation/udap-tiered/signin",
-            new TieredOAuthAuthenticationOptions().CorrelationCookie.Name!).Should().BeNull();
+        Assert.Null(_mockAuthorServerPipeline.BrowserClient.GetXsrfCookie("https://server/federation/udap-tiered/signin",
+            new TieredOAuthAuthenticationOptions().CorrelationCookie.Name!));
         var backChannelChallengeResponse = await _mockAuthorServerPipeline.BrowserClient.GetAsync(clientAuthorizeUrl);
-        _mockAuthorServerPipeline.BrowserClient.GetXsrfCookie("https://server/federation/udap-tiered/signin",
-            new TieredOAuthAuthenticationOptions().CorrelationCookie.Name!).Should().NotBeNull();
+        Assert.NotNull(_mockAuthorServerPipeline.BrowserClient.GetXsrfCookie("https://server/federation/udap-tiered/signin",
+            new TieredOAuthAuthenticationOptions().CorrelationCookie.Name!));
 
-        backChannelChallengeResponse.StatusCode.Should().Be(HttpStatusCode.Redirect,
-            await backChannelChallengeResponse.Content.ReadAsStringAsync());
-        backChannelChallengeResponse.Headers.Location.Should().NotBeNull();
-        backChannelChallengeResponse.Headers.Location!.AbsoluteUri.Should()
-            .StartWith("https://idpserver/connect/authorize");
+        Assert.Equal(HttpStatusCode.Redirect, backChannelChallengeResponse.StatusCode);
+        Assert.NotNull(backChannelChallengeResponse.Headers.Location);
+        Assert.StartsWith("https://idpserver/connect/authorize", backChannelChallengeResponse.Headers.Location!.AbsoluteUri);
 
         // _testOutputHelper.WriteLine(backChannelChallengeResponse.Headers.Location!.AbsoluteUri);
-        QueryHelpers.ParseQuery(backChannelChallengeResponse.Headers.Location.Query).Single(p => p.Key == "client_id")
-            .Value.Should().NotBeEmpty();
+        Assert.NotEmpty(QueryHelpers.ParseQuery(backChannelChallengeResponse.Headers.Location.Query).Single(p => p.Key == "client_id").Value);
         var backChannelState = QueryHelpers.ParseQuery(backChannelChallengeResponse.Headers.Location.Query)
             .Single(p => p.Key == "state").Value.ToString();
-        backChannelState.Should().NotBeNullOrEmpty();
+        Assert.False(string.IsNullOrEmpty(backChannelState));
 
         var idpClient = _mockIdPPipeline.Clients.Single(c => c.ClientName == "AuthServer Client");
-        idpClient.AlwaysIncludeUserClaimsInIdToken.Should().BeTrue();
+        Assert.True(idpClient.AlwaysIncludeUserClaimsInIdToken);
 
 
         Debug.Assert(_mockIdPPipeline.BrowserClient != null, "_mockIdPPipeline.BrowserClient != null");
@@ -1212,16 +1208,14 @@ public class TieredOauthTests
             await _mockIdPPipeline.BrowserClient.GetAsync(backChannelChallengeResponse.Headers.Location);
         _testOutputHelper.WriteLine(HttpUtility.UrlDecode(backChannelAuthResult.Headers.Location?.Query));
 
-        backChannelAuthResult.StatusCode.Should().Be(HttpStatusCode.Redirect,
-            await backChannelAuthResult.Content.ReadAsStringAsync());
-        backChannelAuthResult.Headers.Location.Should().NotBeNull();
-        backChannelAuthResult.Headers.Location!.AbsoluteUri.Should()
-            .StartWith("https://server/federation/udap-tiered/signin"); //signin callback scheme
+        Assert.Equal(HttpStatusCode.Redirect, backChannelAuthResult.StatusCode);
+        Assert.NotNull(backChannelAuthResult.Headers.Location);
+        Assert.StartsWith("https://server/federation/udap-tiered/signin", backChannelAuthResult.Headers.Location!.AbsoluteUri); //signin callback scheme
 
         var responseParams = QueryHelpers.ParseQuery(backChannelAuthResult.Headers.Location.Query);
-        responseParams["error"].Should().BeEquivalentTo("invalid_request");
-        responseParams["error_description"].Should().BeEquivalentTo("Missing udap and/or openid scope between data holder and IdP");
-        responseParams["scope"].Should().BeEquivalentTo(scopes.ToSpaceSeparatedString());
+        Assert.Equal("invalid_request", responseParams["error"].ToString(), StringComparer.OrdinalIgnoreCase);
+        Assert.Equal("Missing udap and/or openid scope between data holder and IdP", responseParams["error_description"].ToString(), StringComparer.OrdinalIgnoreCase);
+        Assert.Equal(scopes.ToSpaceSeparatedString(), responseParams["scope"].ToString(), StringComparer.OrdinalIgnoreCase);
     }
 
     private async Task<UdapDynamicClientRegistrationDocument?> RegisterClientWithAuthServer()
@@ -1243,7 +1237,7 @@ public class TieredOauthTests
             "https://server/UDAP_Ecosystem_Gears.png", 
             new List<string> { "https://code_client/callback" });
 
-        documentResponse.GetError().Should().BeNull();
+        Assert.Null(documentResponse.GetError());
         
         return documentResponse;
     }

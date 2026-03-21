@@ -2,7 +2,7 @@
 // /*
 //  Authors:
 //     Joseph Shook   Joseph.Shook@Surescripts.com
-// 
+//
 //  See LICENSE in the project root for license information.
 // */
 #endregion
@@ -12,11 +12,10 @@
 
 //
 // Most of this file is copied from Duende's Identity Server dom/dcr-proc branch
-// 
+//
 //
 
 using Duende.IdentityModel;
-using Duende.IdentityServer.Models;
 using Duende.IdentityServer.Services;
 using Duende.IdentityServer.Stores;
 using Microsoft.AspNetCore.Http;
@@ -36,7 +35,6 @@ using Udap.Common.Models;
 using Udap.Model;
 using Udap.Model.Registration;
 using Udap.Server.Configuration;
-using Udap.Server.Storage;
 using Udap.Server.Validation;
 using Udap.Util.Extensions;
 
@@ -54,7 +52,7 @@ public class UdapDynamicClientRegistrationValidator : IUdapDynamicClientRegistra
     private readonly ServerSettings _serverSettings;
     private readonly IHttpContextAccessor _httpContextAccessor;
     private readonly IScopeExpander _scopeExpander;
-    private readonly IResourceStore _resourceStore; 
+    private readonly IResourceStore _resourceStore;
 
     private const string Purpose = nameof(UdapDynamicClientRegistrationValidator);
 
@@ -80,13 +78,15 @@ public class UdapDynamicClientRegistrationValidator : IUdapDynamicClientRegistra
 
     /// <inheritdoc />
     public async Task<UdapDynamicClientRegistrationValidationResult> ValidateAsync(
-        UdapRegisterRequest request,
+        UdapDynamicClientRegistrationContext context,
         X509Certificate2Collection? intermediateCertificates,
         X509Certificate2Collection anchorCertificates,
         IEnumerable<Anchor>? anchors
         )
     {
         using var activity = Tracing.ValidationActivitySource.StartActivity();
+
+        var request = context.Request;
 
         //////////////////////////////
         // validate udap version
@@ -123,7 +123,7 @@ public class UdapDynamicClientRegistrationValidator : IUdapDynamicClientRegistra
         var tokenHandler = new JsonWebTokenHandler();
         var jsonWebToken = tokenHandler.ReadJsonWebToken(request.SoftwareStatement);
         var jwtHeader = JwtHeader.Base64UrlDeserialize(jsonWebToken.EncodedHeader);
-        
+
         var x5cArray = Getx5c(jwtHeader);
 
         if (x5cArray == null)
@@ -138,7 +138,7 @@ public class UdapDynamicClientRegistrationValidator : IUdapDynamicClientRegistra
         var subAltNames = publicCert.GetSubjectAltNames(n => n.TagNo == (int)X509Extensions.GeneralNameType.URI);
         TokenValidationResult? validatedToken;
         var publicKey = publicCert.PublicKey.GetRSAPublicKey();
-        
+
         if (publicKey != null)
         {
             validatedToken = await tokenHandler.ValidateTokenAsync(request.SoftwareStatement,
@@ -193,7 +193,7 @@ public class UdapDynamicClientRegistrationValidator : IUdapDynamicClientRegistra
                     UdapDynamicClientRegistrationErrors.InvalidSoftwareStatement,
                     $"{UdapDynamicClientRegistrationErrorDescriptions.ExpExpired}: {validatedToken.Exception.Message}"));
             }
-            
+
             _logger.LogWarning(validatedToken.Exception, "Invalid software statement: {Error}", UdapDynamicClientRegistrationErrors.InvalidSoftwareStatement);
 
             return await Task.FromResult(new UdapDynamicClientRegistrationValidationResult(
@@ -216,8 +216,8 @@ public class UdapDynamicClientRegistrationValidator : IUdapDynamicClientRegistra
 
         if (document.Subject == null)
         {
-            _logger.LogWarning("{Error}::{Description}", 
-                UdapDynamicClientRegistrationErrors.InvalidSoftwareStatement, 
+            _logger.LogWarning("{Error}::{Description}",
+                UdapDynamicClientRegistrationErrors.InvalidSoftwareStatement,
                 UdapDynamicClientRegistrationErrorDescriptions.SubIsMissing);
 
             return await Task.FromResult(new UdapDynamicClientRegistrationValidationResult(
@@ -227,10 +227,10 @@ public class UdapDynamicClientRegistrationValidator : IUdapDynamicClientRegistra
 
         if (document.Subject != document.Issuer)
         {
-            _logger.LogWarning("{Error}::{Description}", 
-                UdapDynamicClientRegistrationErrors.InvalidSoftwareStatement, 
+            _logger.LogWarning("{Error}::{Description}",
+                UdapDynamicClientRegistrationErrors.InvalidSoftwareStatement,
                 UdapDynamicClientRegistrationErrorDescriptions.SubNotEqualToIss);
-            
+
             return await Task.FromResult(new UdapDynamicClientRegistrationValidationResult(
                 UdapDynamicClientRegistrationErrors.InvalidSoftwareStatement,
                 UdapDynamicClientRegistrationErrorDescriptions.SubNotEqualToIss));
@@ -311,19 +311,15 @@ public class UdapDynamicClientRegistrationValidator : IUdapDynamicClientRegistra
                 UdapDynamicClientRegistrationErrorDescriptions.TokenEndpointAuthMethodMissing));
         }
 
-        //TODO There should be a context already created where the client can be injected.
-        var client = new Duende.IdentityServer.Models.Client
-        {
-            //TODO: Maybe inject a component to generate the clientID so a user can use their own technique.
-            ClientId = CryptoRandom.CreateUniqueId(),
-            AlwaysIncludeUserClaimsInIdToken = _serverSettings.AlwaysIncludeUserClaimsInIdToken,
-            RequireConsent = _serverSettings.RequireConsent,
-            AllowRememberConsent = _serverSettings.AllowRememberConsent
-        };
+        // Populate context with parsed JWT state
+        context.Document = document;
+        context.JsonWebToken = jsonWebToken;
+        context.JwtHeader = jwtHeader;
+        context.ClientCertificate = publicCert;
 
-        _logger.LogDebug("Validating chain for ClientId: {ClientId}. x5c {X5c}", client.ClientId, jwtHeader.X5c);
+        _logger.LogDebug("Validating chain. x5c {X5c}", jwtHeader.X5c);
 
-        if (!ValidateChain(client, jsonWebToken, jwtHeader, intermediateCertificates, anchorCertificates, anchors))
+        if (!await ValidateChainAsync(context, jsonWebToken, jwtHeader, intermediateCertificates, anchorCertificates, anchors))
         {
             _logger.LogWarning("{Error}::{Description}",
                 UdapDynamicClientRegistrationErrors.UnapprovedSoftwareStatement,
@@ -331,7 +327,7 @@ public class UdapDynamicClientRegistrationValidator : IUdapDynamicClientRegistra
 
             var sb = new StringBuilder();
             sb.AppendLine($"Client Thumbprint: {publicCert.Thumbprint}");
-            
+
             if (intermediateCertificates != null)
             {
                 sb.AppendLine(
@@ -347,23 +343,11 @@ public class UdapDynamicClientRegistrationValidator : IUdapDynamicClientRegistra
                 UdapDynamicClientRegistrationErrorDescriptions.UntrustedCertificate));
         }
 
-        _logger.LogDebug("Chain Validated {ClientId}", client.ClientId);
+        _logger.LogDebug("Chain Validated");
 
         var (org, dataHolder) = ResolveOrgAndDataHolder(_httpContextAccessor.HttpContext, aud);
-        if (!string.IsNullOrWhiteSpace(org) && !string.IsNullOrWhiteSpace(dataHolder))
-        {
-            client.Properties[UdapServerConstants.ClientPropertyConstants.Organization] = org;
-            client.Properties[UdapServerConstants.ClientPropertyConstants.DataHolder] = dataHolder;
-        }
-        else
-        {
-            client.Properties[UdapServerConstants.ClientPropertyConstants.Organization] = UdapServerConstants.ClientPropertyConstants.DefaultOrgMap;
-            client.Properties[UdapServerConstants.ClientPropertyConstants.DataHolder] = UdapServerConstants.ClientPropertyConstants.DefaultOrgMap;
-        }
-
-        // PKCE requirement is determined by server SSRAA version policy, not the client's udap field
-        // (which is always "1" per the UDAP base specification).
-        client.RequirePkce = _serverSettings.EffectiveRequirePkce;
+        context.Organization = org;
+        context.DataHolder = dataHolder;
 
         //////////////////////////////
         // validate grant_types
@@ -392,19 +376,14 @@ public class UdapDynamicClientRegistrationValidator : IUdapDynamicClientRegistra
             }
         }
 
-        if (document.GrantTypes != null && document.GrantTypes.Contains(OidcConstants.GrantTypes.ClientCredentials))
-        {
-            client.AllowedGrantTypes.Add(OidcConstants.GrantTypes.ClientCredentials);
-        }
-        if (document.GrantTypes != null && document.GrantTypes.Contains(OidcConstants.GrantTypes.AuthorizationCode))
-        {
-            client.AllowedGrantTypes.Add(OidcConstants.GrantTypes.AuthorizationCode); 
-        }
+        // Track recognized grant types for validation purposes (no Client mutation)
+        var hasClientCredentials = document.GrantTypes != null && document.GrantTypes.Contains(OidcConstants.GrantTypes.ClientCredentials);
+        var hasAuthorizationCode = document.GrantTypes != null && document.GrantTypes.Contains(OidcConstants.GrantTypes.AuthorizationCode);
+        var recognizedGrantTypeCount = (hasClientCredentials ? 1 : 0) + (hasAuthorizationCode ? 1 : 0);
 
         // we only support the two above grant types but, an empty GrantType is an indication of a cancel registration action.
-        // TODO: This whole method needs to be migrated into a better software pattern.
-        if (client.AllowedGrantTypes.Count == 0 && 
-            document.GrantTypes != null && 
+        if (recognizedGrantTypeCount == 0 &&
+            document.GrantTypes != null &&
             document.GrantTypes.Count != 0)
         {
             return await Task.FromResult(new UdapDynamicClientRegistrationValidationResult(
@@ -415,21 +394,18 @@ public class UdapDynamicClientRegistrationValidator : IUdapDynamicClientRegistra
         //TODO: Ensure test covers this and follows Security IG: http://hl7.org/fhir/us/udap-security/b2b.html#refresh-tokens
         if (document.GrantTypes != null && document.GrantTypes.Contains(OidcConstants.GrantTypes.RefreshToken))
         {
-            if (client.AllowedGrantTypes.Count == 1 &&
-                client.AllowedGrantTypes.FirstOrDefault(t => t.Equals(OidcConstants.GrantTypes.ClientCredentials)) != null)
+            if (recognizedGrantTypeCount == 1 && hasClientCredentials)
             {
                 return await Task.FromResult(new UdapDynamicClientRegistrationValidationResult(
                     UdapDynamicClientRegistrationErrors.InvalidClientMetadata,
                     UdapDynamicClientRegistrationErrorDescriptions.ClientCredentialsRefreshError));
             }
-
-            client.AllowOfflineAccess = true;
         }
 
         //
         // validate redirect URIs and ResponseTypes and logo_uri
         //
-        if (client.AllowedGrantTypes.Contains(OidcConstants.GrantTypes.AuthorizationCode))
+        if (hasAuthorizationCode)
         {
             var (successFlag, errorResult) = await ValidateLogoUri(document);
 
@@ -441,11 +417,6 @@ public class UdapDynamicClientRegistrationValidator : IUdapDynamicClientRegistra
                 }
             }
 
-            if (successFlag)
-            {
-                client.LogoUri = document.LogoUri;
-            }
-
             if (document.RedirectUris != null && document.RedirectUris.Count != 0)
             {
                 foreach (var requestRedirectUri in document.RedirectUris)
@@ -453,12 +424,7 @@ public class UdapDynamicClientRegistrationValidator : IUdapDynamicClientRegistra
                     //TODO add tests and decide how to handle invalid Uri exception
                     var uri = new Uri(requestRedirectUri);
 
-                    if (uri.IsAbsoluteUri)
-                    {
-                        client.RedirectUris.Add(uri.OriginalString);
-                        client.RequirePkce = _serverSettings.EffectiveRequirePkce;
-                    }
-                    else
+                    if (!uri.IsAbsoluteUri)
                     {
                         return await Task.FromResult(new UdapDynamicClientRegistrationValidationResult(
                             UdapDynamicClientRegistrationErrors.InvalidClientMetadata,
@@ -484,8 +450,7 @@ public class UdapDynamicClientRegistrationValidator : IUdapDynamicClientRegistra
             }
         }
 
-        if (client.AllowedGrantTypes.Count == 1 &&
-            client.AllowedGrantTypes.FirstOrDefault(t => t.Equals(OidcConstants.GrantTypes.ClientCredentials)) != null)
+        if (recognizedGrantTypeCount == 1 && hasClientCredentials)
         {
             //TODO: find the RFC reference for this rule and add a Test
             if (document.RedirectUris != null && document.RedirectUris.Count != 0)
@@ -499,15 +464,15 @@ public class UdapDynamicClientRegistrationValidator : IUdapDynamicClientRegistra
         //////////////////////////////
         // validate scopes
         //////////////////////////////
-        
-        if (client.AllowedGrantTypes.Count != 0 && //Cancel Registration
+
+        if (recognizedGrantTypeCount != 0 && //Cancel Registration
             string.IsNullOrEmpty(document.Scope))
         {
             return await Task.FromResult(new UdapDynamicClientRegistrationValidationResult(
                 UdapDynamicClientRegistrationErrors.InvalidClientMetadata,
                 "scope is required"));
         }
-        
+
         if (!string.IsNullOrWhiteSpace(document.Scope))
         {
             var scopes = document.Scope.Split(' ', StringSplitOptions.RemoveEmptyEntries);
@@ -530,39 +495,31 @@ public class UdapDynamicClientRegistrationValidator : IUdapDynamicClientRegistra
                     "invalid_scope supplied"));
             }
 
+            // Collect resolved scopes and store in context for the processor
+            var resolvedScopes = new List<string>();
 
             foreach (var scope in allowedApiScopes)
             {
-                client?.AllowedScopes.Add(scope.Name);
+                resolvedScopes.Add(scope.Name);
             }
 
             foreach (var scope in allowedResourceScopes.Where(s => s.Enabled).Select(s => s.Name))
             {
-                client?.AllowedScopes.Add(scope);
+                resolvedScopes.Add(scope);
             }
+
+            context.Items["ResolvedScopes"] = (IEnumerable<string>)resolvedScopes;
 
             //
             // Present scopes in aggregate form
             //
-            if (client?.AllowedScopes != null)
-            {
-                document.Scope = _scopeExpander.Aggregate(client.AllowedScopes).OrderBy(s => s).ToSpaceSeparatedString();
-            }
+            document.Scope = _scopeExpander.Aggregate(resolvedScopes).OrderBy(s => s).ToSpaceSeparatedString();
         }
 
+        // validation successful - return document
+        _logger.LogDebug("Validation success");
 
-        if (!string.IsNullOrWhiteSpace(document.ClientName))
-        {
-            if (client != null)
-            {
-                client.ClientName = document.ClientName;
-            }
-        }
-
-        // validation successful - return client
-        _logger.LogDebug("Validation success for ClientId: {ClientId}", client?.ClientId);
-
-        return await Task.FromResult(new UdapDynamicClientRegistrationValidationResult(client, document));
+        return await Task.FromResult(new UdapDynamicClientRegistrationValidationResult(document));
     }
 
     // Extracts org/dataholder from:
@@ -644,7 +601,7 @@ public class UdapDynamicClientRegistrationValidator : IUdapDynamicClientRegistra
 
                 return (false, errorResult);
             }
-            
+
             var response = await _httpClient.GetAsync(logoUri.OriginalString);
             response.Content.Headers.TryGetValues("Content-Type", out var contentTypes);
             var contentType = contentTypes?.FirstOrDefault();
@@ -657,7 +614,7 @@ public class UdapDynamicClientRegistrationValidator : IUdapDynamicClientRegistra
 
                 return (false, errorResult);
             }
-            
+
             if (contentType == null ||
                 !contentType.Equals("image/png", StringComparison.OrdinalIgnoreCase) &&
                 !contentType.Equals(MediaTypeNames.Image.Jpeg, StringComparison.OrdinalIgnoreCase) &&
@@ -693,7 +650,7 @@ public class UdapDynamicClientRegistrationValidator : IUdapDynamicClientRegistra
         long exp)
     {
         var jti = document.JwtId;
-        
+
 
         if (jti == null || jti.IsMissing())
         {
@@ -701,7 +658,7 @@ public class UdapDynamicClientRegistrationValidator : IUdapDynamicClientRegistra
             return new UdapDynamicClientRegistrationValidationResult(
                 UdapDynamicClientRegistrationErrors.InvalidClientMetadata,
                 UdapDynamicClientRegistrationErrorDescriptions.InvalidJti);
-            
+
         }
 
         if (await _replayCache.ExistsAsync(Purpose, jti))
@@ -716,12 +673,12 @@ public class UdapDynamicClientRegistrationValidator : IUdapDynamicClientRegistra
         {
             await _replayCache.AddAsync(Purpose, jti, DateTimeOffset.FromUnixTimeSeconds(exp));
         }
-        
+
         return new UdapDynamicClientRegistrationValidationResult(string.Empty);
     }
 
-    private bool ValidateChain(
-        Duende.IdentityServer.Models.Client client,
+    private async Task<bool> ValidateChainAsync(
+        UdapDynamicClientRegistrationContext context,
         JsonWebToken jwtSecurityToken,
         JwtHeader jwtHeader,
         X509Certificate2Collection? intermediateCertificates,
@@ -729,46 +686,31 @@ public class UdapDynamicClientRegistrationValidator : IUdapDynamicClientRegistra
         IEnumerable<Anchor>? anchors)
     {
         var x5cArray = Getx5c(jwtHeader);
-        
-        // TODO: no test cases for x5c with intermediate certificates.  
+
+        // TODO: no test cases for x5c with intermediate certificates.
         if (x5cArray != null)
         {
             var cert = new X509Certificate2(Convert.FromBase64String(x5cArray.First()));
 
-            if (_trustChainValidator.IsTrustedCertificate(
-                    client.ClientName ?? string.Empty,
-                    cert,
-                    intermediateCertificates,
-                    anchorCertificates, 
-                    out X509ChainElementCollection? chainElements,
-                    out long? communityId,
-                    anchors))
+            var result = await _trustChainValidator.IsTrustedCertificateAsync(
+                context.Document?.ClientName ?? string.Empty,
+                cert,
+                intermediateCertificates,
+                anchorCertificates,
+                anchors);
+
+            if (result.IsValid)
             {
-                if (chainElements == null)
+                if (result.ChainElements.Count == 0)
                 {
                     _logger.LogError("Missing chain elements");
 
                     return false;
                 }
-                
-                var clientSecrets = client.ClientSecrets = new List<Secret>();
 
-                clientSecrets.Add(new()
-                {
-                    Expiration = chainElements.First().Certificate.NotAfter.ToUniversalTime(),
-                    Type = UdapServerConstants.SecretTypes.UDAP_SAN_URI_ISS_NAME,
-                    Value = jwtSecurityToken.Issuer
-                });
-
-                if(communityId.HasValue)
-                {
-                    clientSecrets.Add(new()
-                    {
-                        Expiration = chainElements.First().Certificate.NotAfter.ToUniversalTime(),
-                        Type = UdapServerConstants.SecretTypes.UDAP_COMMUNITY,
-                        Value = communityId.Value.ToString()
-                    });
-                }
+                context.Issuer = jwtSecurityToken.Issuer;
+                context.CommunityId = result.CommunityId;
+                context.CertificateExpiration = result.ChainElements.First().Certificate.NotAfter.ToUniversalTime();
 
                 return true;
             }

@@ -200,6 +200,12 @@ public class UdapDcrBuilderForAuthorizationCode
         return this;
     }
 
+    public UdapDcrBuilderForAuthorizationCode WithDPoPEnabled(bool dpopEnabled)
+    {
+        _document.DPoPEnabled = dpopEnabled;
+        return this;
+    }
+
     public UdapDcrBuilderForAuthorizationCode WithResponseTypes(ICollection<string>? responseTypes)
     {
         _document.ResponseTypes = responseTypes;

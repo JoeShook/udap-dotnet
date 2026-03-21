@@ -7,7 +7,7 @@ using System.Text.Json;
 namespace Udap.Common.Authentication;
 
 /// <summary>
-/// Response from an provider for an OAuth token request.
+/// Response from a provider for an OAuth token request.
 /// </summary>
 public class OAuthTokenResponse : IDisposable
 {
@@ -58,6 +58,11 @@ public class OAuthTokenResponse : IDisposable
         GC.SuppressFinalize(this);
     }
 
+    /// <summary>
+    /// Releases the unmanaged resources used by the <see cref="OAuthTokenResponse"/> and optionally
+    /// releases the managed resources.
+    /// </summary>
+    /// <param name="disposing"><c>true</c> to release both managed and unmanaged resources; <c>false</c> to release only unmanaged resources.</param>
     protected virtual void Dispose(bool disposing)
     {
         if (disposing)
@@ -90,12 +95,13 @@ public class OAuthTokenResponse : IDisposable
     public string? RefreshToken { get; set; }
 
     /// <summary>
-    /// Gets or sets the validatity lifetime of the token in seconds.
+    /// Gets or sets the validity lifetime of the token in seconds.
     /// </summary>
     public string? ExpiresIn { get; set; }
 
     /// <summary>
-    /// The exception in the event the response was a failure.
+    /// Gets the exception when the token response indicates failure, either from an OAuth error
+    /// in the response body or from a transport/parsing failure. Returns <c>null</c> on success.
     /// </summary>
     public Exception? Error { get; set; }
 

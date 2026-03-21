@@ -41,7 +41,6 @@ public static class HostingExtensions
             });
 
         builder.Services.AddProblemDetails();
-        builder.Services.AddAutoMapper(typeof(Program));
         builder.Services.AddRazorPages();
         builder.Services.AddServerSideBlazor();
         

@@ -59,6 +59,8 @@ See the following Udap.Metadata.Server and Udap.Server sections.  The Udap.Metad
 
 Follow the [Udap.Metadata.Server docs](./Udap.Metadata.Server/docs/README.md) for configuring your resource server.
 
+For hosting multiple domains with different certificates under a single community, see [Multi-Domain Metadata Support](./docs/multi-domain-metadata.md).
+
 ## Udap.Client
 
 Follow the [Udap.Client docs](./Udap.Client/docs/README.md) for configuring your UDAP client.

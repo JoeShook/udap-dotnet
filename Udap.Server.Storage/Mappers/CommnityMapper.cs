@@ -1,33 +1,18 @@
-﻿#region (c) 2022-2025 Joseph Shook. All rights reserved.
+#region (c) 2022-2025 Joseph Shook. All rights reserved.
 // /*
 //  Authors:
 //     Joseph Shook   Joseph.Shook@Surescripts.com
-// 
+//
 //  See LICENSE in the project root for license information.
 // */
 #endregion
 
-using AutoMapper;
 using Udap.Server.Storage.Entities;
 
 namespace Udap.Server.Storage.Mappers
 {
-    //TODO: check if this is the best way:: https://jimmybogard.com/automapper-usage-guidelines/
     public static class CommunityMapper
     {
-        static CommunityMapper()
-        {
-            Mapper = new MapperConfiguration(cfg =>
-                {
-                    cfg.AddProfile<CommunityMapperProfile>();
-                    cfg.AddProfile<AnchorMapperProfile>();
-                    cfg.AddProfile<IntermediateCertificateMapperProfile>();
-                })
-                .CreateMapper();
-        }
-
-        internal static IMapper Mapper { get; }
-
         /// <summary>
         /// Maps an entity to a model.
         /// </summary>
@@ -35,7 +20,19 @@ namespace Udap.Server.Storage.Mappers
         /// <returns></returns>
         public static Common.Models.Community ToModel(this Community entity)
         {
-            return Mapper.Map<Common.Models.Community>(entity);
+            return new Common.Models.Community
+            {
+                Id = entity.Id,
+                Name = entity.Name,
+                Enabled = entity.Enabled,
+                Default = entity.Default,
+                Anchors = entity.Anchors?.Select(a => a.ToModel()).ToList(),
+                Certifications = entity.Certifications?.Select(c => new Common.Models.Certification
+                {
+                    Id = c.Id,
+                    Name = c.Name
+                }).ToList()
+            };
         }
 
         /// <summary>
@@ -45,22 +42,19 @@ namespace Udap.Server.Storage.Mappers
         /// <returns></returns>
         public static Community ToEntity(this Common.Models.Community model)
         {
-            return Mapper.Map<Community>(model);
-        }
-    }
-
-    public class CommunityMapperProfile : Profile
-    {
-        public CommunityMapperProfile()
-        {
-            
-            CreateMap<Community, Common.Models.Community>(MemberList.Destination)
-                .ConstructUsing(src => new Common.Models.Community())
-                .ReverseMap()
-                ;
-                
-            AllowNullCollections = true;
-            
+            return new Community
+            {
+                Id = model.Id,
+                Name = model.Name,
+                Enabled = model.Enabled,
+                Default = model.Default,
+                Anchors = model.Anchors?.Select(a => a.ToEntity()).ToList(),
+                Certifications = model.Certifications?.Select(c => new Certification
+                {
+                    Id = (int)c.Id,
+                    Name = c.Name
+                }).ToList()
+            };
         }
     }
 }

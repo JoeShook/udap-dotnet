@@ -23,4 +23,9 @@ public static class UdapServerConstants
         public const string DataHolder = "data_holder";
         public const string DefaultOrgMap = "empty";
     }
+
+    public static class HttpContextItems
+    {
+        public const string UdapErrorDescription = "udap:error_description";
+    }
 }

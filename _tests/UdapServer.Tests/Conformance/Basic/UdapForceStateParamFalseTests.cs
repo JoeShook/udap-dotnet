@@ -1,4 +1,4 @@
-﻿#region (c) 2023 Joseph Shook. All rights reserved.
+#region (c) 2023 Joseph Shook. All rights reserved.
 // /*
 //  Authors:
 //     Joseph Shook   Joseph.Shook@Surescripts.com
@@ -24,7 +24,6 @@ using System.Security.Cryptography.X509Certificates;
 using System.Text.Json;
 using Duende.IdentityServer.Models;
 using Duende.IdentityServer.Test;
-using FluentAssertions;
 using Microsoft.AspNetCore.WebUtilities;
 using Microsoft.Extensions.DependencyInjection;
 using Udap.Client.Configuration;
@@ -167,10 +166,10 @@ public class UdapForceStateParamFalseTests
             UdapAuthServerPipeline.RegistrationEndpoint,
             new StringContent(JsonSerializer.Serialize(requestBody), new MediaTypeHeaderValue("application/json")));
 
-        response.StatusCode.Should().Be(HttpStatusCode.Created);
+        Assert.Equal(HttpStatusCode.Created, response.StatusCode);
         var resultDocument = await response.Content.ReadFromJsonAsync<UdapDynamicClientRegistrationDocument>();
-        resultDocument.Should().NotBeNull();
-        resultDocument!.ClientId.Should().NotBeNull();
+        Assert.NotNull(resultDocument);
+        Assert.NotNull(resultDocument!.ClientId);
 
         var state = Guid.NewGuid().ToString();
         var nonce = Guid.NewGuid().ToString();
@@ -186,15 +185,15 @@ public class UdapForceStateParamFalseTests
         _mockPipeline.BrowserClient.AllowAutoRedirect = false;
         response = await _mockPipeline.BrowserClient.GetAsync(url);
 
-        response.StatusCode.Should().Be(HttpStatusCode.Redirect);
+        Assert.Equal(HttpStatusCode.Redirect, response.StatusCode);
 
-        response.Headers.Location.Should().NotBeNull();
-        response.Headers.Location!.AbsoluteUri.Should().Contain("https://code_client/callback");
+        Assert.NotNull(response.Headers.Location);
+        Assert.Contains("https://code_client/callback", response.Headers.Location!.AbsoluteUri);
         _testOutputHelper.WriteLine(response.Headers.Location!.AbsoluteUri);
         var queryParams = QueryHelpers.ParseQuery(response.Headers.Location.Query);
-        queryParams.Should().Contain(p => p.Key == "code");
+        Assert.Contains(queryParams, p => p.Key == "code");
         // Obsolete scope results in newer Duende builds during upgrade from 7.2.4 to 7.3.1
-        // queryParams.Single(q => q.Key == "scope").Value.Should().BeEquivalentTo("openid udap");
-        queryParams.Count(q => q.Key == "state").Should().Be(0);
+        // Assert.Equal("openid udap", queryParams.Single(q => q.Key == "scope").Value.ToString(), StringComparer.OrdinalIgnoreCase);
+        Assert.Equal(0, queryParams.Count(q => q.Key == "state"));
     }
 }

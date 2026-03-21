@@ -22,6 +22,7 @@ using Newtonsoft.Json.Serialization;
 using Serilog;
 using Udap.Common;
 using Udap.Common.Certificates;
+using Udap.Metadata.Server.Security;
 using Udap.Smart.Model;
 using Constants = Udap.Common.Constants;
 
@@ -112,15 +113,10 @@ builder.Services.AddAuthentication(OidcConstants.AuthenticationSchemes.Authoriza
     });
 
 
-builder.Services.Configure<UdapFileCertStoreManifest>(builder.Configuration.GetSection(Constants.UDAP_FILE_STORE_MANIFEST));
+builder.Services.Configure<UdapFileCertStoreManifest>(builder.Configuration.GetSection(Constants.UdapFileCertStoreManifestSectionName));
 
 builder.Services
-    .AddUdapMetadataServer(builder.Configuration)
-    .AddSingleton<IPrivateCertificateStore>(sp =>
-        new IssuedCertificateStore(
-            sp.GetRequiredService<IOptionsMonitor<UdapFileCertStoreManifest>>(),
-            sp.GetRequiredService<ILogger<IssuedCertificateStore>>()));
-
+    .AddUdapMetadataServer(builder.Configuration);
 
 
 #if NET8_0_OR_GREATER
@@ -160,10 +156,12 @@ var app = builder.Build();
 app.UseSerilogRequestLogging();
 
 app.UsePathBase(new PathString("/fhir/r4"));
+app.UseUdapMetadataServer();
 
 app.UseRouting();
 
 app.UseAuthentication();
+app.UseSecurityEventLogging();
 app.UseAuthorization();
 
 app.Use(async (context, next) =>
@@ -199,7 +197,6 @@ app.UseHttpsRedirection();
 //
 app.UseCors();
 
-app.UseUdapMetadataServer();
 app.UseSmartMetadata();
 
 // From Hl7.Fhir.WebApi(brian)

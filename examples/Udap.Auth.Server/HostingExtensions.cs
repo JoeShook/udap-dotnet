@@ -19,6 +19,9 @@ using OpenTelemetry.Trace;
 using Serilog;
 using Udap.Client.Configuration;
 using Udap.Common;
+using Udap.Common.Certificates;
+using Udap.Model;
+using ZiggyCreatures.Caching.Fusion;
 using Udap.Server.Configuration;
 using Udap.Server.Security.Authentication.TieredOAuth;
 using Udap.Server.Storage.DbContexts;
@@ -64,6 +67,13 @@ internal static class HostingExtensions
         
         builder.Services.Configure<UdapClientOptions>(builder.Configuration.GetSection("UdapClientOptions"));
 
+        builder.Services.AddUdapCertificateCache()
+            .WithDefaultEntryOptions(new FusionCacheEntryOptions
+            {
+                Duration = TimeSpan.FromHours(12),
+                FailSafeMaxDuration = TimeSpan.FromHours(48)
+            });
+
         builder.Services.AddUdapServer(
                 options =>
                 {
@@ -99,7 +109,7 @@ internal static class HostingExtensions
 
 
 
-        builder.Services.Configure<UdapFileCertStoreManifest>(builder.Configuration.GetSection(Constants.UDAP_FILE_STORE_MANIFEST));
+        builder.Services.Configure<UdapFileCertStoreManifest>(builder.Configuration.GetSection(Constants.UdapFileCertStoreManifestSectionName));
 
 
         var identityServer = builder.Services.AddIdentityServer(options =>
@@ -220,7 +230,25 @@ internal static class HostingExtensions
         // });
 
 
-        return builder.Build();
+        var app = builder.Build();
+
+        var serverSettings = app.Services.GetRequiredService<ServerSettings>();
+        Log.Information("--- UDAP ServerSettings ---");
+        Log.Information("  SsraaVersion:                      {SsraaVersion} ({SsraaVersionInt})",
+            serverSettings.SsraaVersion, (int)serverSettings.SsraaVersion);
+        Log.Information("  RequirePkce:                        {RequirePkce}", serverSettings.RequirePkce);
+        Log.Information("  ForceStateParamOnAuthorizationCode: {ForceState}", serverSettings.ForceStateParamOnAuthorizationCode);
+        Log.Information("  EffectiveRequirePkce:               {EffectiveRequirePkce}", serverSettings.EffectiveRequirePkce);
+        Log.Information("  EffectiveForceState:                {EffectiveForceState}", serverSettings.EffectiveForceState);
+        Log.Information("  LogoRequired:                       {LogoRequired}", serverSettings.LogoRequired);
+        Log.Information("  DefaultSystemScopes:                {DefaultSystemScopes}", serverSettings.DefaultSystemScopes);
+        Log.Information("  DefaultUserScopes:                  {DefaultUserScopes}", serverSettings.DefaultUserScopes);
+        Log.Information("  RequireConsent:                     {RequireConsent}", serverSettings.RequireConsent);
+        Log.Information("  RegistrationJtiRequired:            {RegistrationJtiRequired}", serverSettings.RegistrationJtiRequired);
+        Log.Information("  TieredIdp:                          {TieredIdp}", serverSettings.TieredIdp);
+        Log.Information("--- End UDAP ServerSettings ---");
+
+        return app;
     }
 
     public static WebApplication ConfigurePipeline(this WebApplication app, string[] args)

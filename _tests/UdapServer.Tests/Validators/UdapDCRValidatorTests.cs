@@ -1,4 +1,4 @@
-﻿#region (c) 2023 Joseph Shook. All rights reserved.
+#region (c) 2023 Joseph Shook. All rights reserved.
 // /*
 //  Authors:
 //     Joseph Shook   Joseph.Shook@Surescripts.com
@@ -9,7 +9,6 @@
 
 using System.Reflection;
 using Duende.IdentityServer.Stores;
-using FluentAssertions;
 using Duende.IdentityModel;
 using Microsoft.AspNetCore.Http;
 using Microsoft.Extensions.Logging;
@@ -44,10 +43,10 @@ public class UdapDcrValidatorTests
     {
         var document = BuildUdapDcrValidator(GetHttpClientForLogo("image/png"), out var validator);
         var (successFlag, errorResponse) = await validator.ValidateLogoUri(document);
-        successFlag.Should().BeFalse();
-        errorResponse.Should().NotBeNull();
-        errorResponse!.Error.Should().Be(UdapDynamicClientRegistrationErrors.InvalidClientMetadata);
-        errorResponse.ErrorDescription.Should().Be($"{UdapDynamicClientRegistrationErrorDescriptions.LogoMissing}");
+        Assert.False(successFlag);
+        Assert.NotNull(errorResponse);
+        Assert.Equal(UdapDynamicClientRegistrationErrors.InvalidClientMetadata, errorResponse!.Error);
+        Assert.Equal($"{UdapDynamicClientRegistrationErrorDescriptions.LogoMissing}", errorResponse.ErrorDescription);
     }
 
     [Fact]
@@ -56,8 +55,8 @@ public class UdapDcrValidatorTests
         var document = BuildUdapDcrValidator(GetHttpClientForLogo("image/png"), out var validator);
         document.LogoUri = "https://avatars.githubusercontent.com/u/77421324?s=48&v=4";
         var (successFlag, errorResponse) = await validator.ValidateLogoUri(document);
-        successFlag.Should().BeTrue();
-        errorResponse.Should().BeNull();
+        Assert.True(successFlag);
+        Assert.Null(errorResponse);
     }
 
 
@@ -67,10 +66,10 @@ public class UdapDcrValidatorTests
         var document = BuildUdapDcrValidator(GetHttpClientForLogo("image/tiff"), out var validator);
         document.LogoUri = "https://localhost/logo";
         var (successFlag, errorResponse) = await validator.ValidateLogoUri(document);
-        successFlag.Should().BeFalse();
-        errorResponse.Should().NotBeNull();
-        errorResponse!.Error.Should().Be(UdapDynamicClientRegistrationErrors.InvalidClientMetadata);
-        errorResponse.ErrorDescription.Should().Be($"{UdapDynamicClientRegistrationErrorDescriptions.LogoInvalidContentType}");
+        Assert.False(successFlag);
+        Assert.NotNull(errorResponse);
+        Assert.Equal(UdapDynamicClientRegistrationErrors.InvalidClientMetadata, errorResponse!.Error);
+        Assert.Equal($"{UdapDynamicClientRegistrationErrorDescriptions.LogoInvalidContentType}", errorResponse.ErrorDescription);
     }
 
     [Fact]
@@ -79,10 +78,10 @@ public class UdapDcrValidatorTests
         var document = BuildUdapDcrValidator(GetHttpClientForLogo("image/png"), out var validator);
         document.LogoUri = "http://localhost/logo.png";
         var (successFlag, errorResponse) = await validator.ValidateLogoUri(document);
-        successFlag.Should().BeFalse();
-        errorResponse.Should().NotBeNull();
-        errorResponse!.Error.Should().Be(UdapDynamicClientRegistrationErrors.InvalidClientMetadata);
-        errorResponse.ErrorDescription.Should().Be($"{UdapDynamicClientRegistrationErrorDescriptions.LogoInvalidScheme}");
+        Assert.False(successFlag);
+        Assert.NotNull(errorResponse);
+        Assert.Equal(UdapDynamicClientRegistrationErrors.InvalidClientMetadata, errorResponse!.Error);
+        Assert.Equal($"{UdapDynamicClientRegistrationErrorDescriptions.LogoInvalidScheme}", errorResponse.ErrorDescription);
     }
 
     [Fact]
@@ -91,10 +90,10 @@ public class UdapDcrValidatorTests
         var document = BuildUdapDcrValidator(GetHttpClientForLogo("image/png"), out var validator);
         document.LogoUri = "http:/localhost/logo.png"; // missing a slash
         var (successFlag, errorResponse) = await validator.ValidateLogoUri(document);
-        successFlag.Should().BeFalse();
-        errorResponse.Should().NotBeNull();
-        errorResponse!.Error.Should().Be(UdapDynamicClientRegistrationErrors.InvalidClientMetadata);
-        errorResponse.ErrorDescription.Should().Be($"{UdapDynamicClientRegistrationErrorDescriptions.LogoInvalidUri}");
+        Assert.False(successFlag);
+        Assert.NotNull(errorResponse);
+        Assert.Equal(UdapDynamicClientRegistrationErrors.InvalidClientMetadata, errorResponse!.Error);
+        Assert.Equal($"{UdapDynamicClientRegistrationErrorDescriptions.LogoInvalidUri}", errorResponse.ErrorDescription);
     }
 
 
@@ -148,7 +147,7 @@ public class UdapDcrValidatorTests
         var httpClient = new HttpClient(mockHandler);
 
         var validator = new UdapDynamicClientRegistrationValidator(
-            Substitute.For<TrustChainValidator>(Substitute.For<ILogger<TrustChainValidator>>()),
+            Substitute.For<TrustChainValidator>(Substitute.For<ILogger<TrustChainValidator>>(), null),
             httpClient,
             new TestReplayCache(_clock),
             serverSettings,
@@ -160,23 +159,23 @@ public class UdapDcrValidatorTests
     
         var result = await validator.ValidateJti(document, EpochTime.GetIntDate(expires));
 
-        result.Should().NotBeNull();
-        result.Error.Should().Be(UdapDynamicClientRegistrationErrors.InvalidClientMetadata);
-        result.ErrorDescription.Should().Be($"{UdapDynamicClientRegistrationErrorDescriptions.InvalidJti}");
+        Assert.NotNull(result);
+        Assert.Equal(UdapDynamicClientRegistrationErrors.InvalidClientMetadata, result.Error);
+        Assert.Equal($"{UdapDynamicClientRegistrationErrorDescriptions.InvalidJti}", result.ErrorDescription);
 
         document.JwtId = string.Empty;
         result = await validator.ValidateJti(document, EpochTime.GetIntDate(expires));
 
-        result.Should().NotBeNull();
-        result.Error.Should().Be(UdapDynamicClientRegistrationErrors.InvalidClientMetadata);
-        result.ErrorDescription.Should().Be($"{UdapDynamicClientRegistrationErrorDescriptions.InvalidJti}");
+        Assert.NotNull(result);
+        Assert.Equal(UdapDynamicClientRegistrationErrors.InvalidClientMetadata, result.Error);
+        Assert.Equal($"{UdapDynamicClientRegistrationErrorDescriptions.InvalidJti}", result.ErrorDescription);
         
         document.JwtId = "   ";
         result = await validator.ValidateJti(document, EpochTime.GetIntDate(expires));
 
-        result.Should().NotBeNull();
-        result.Error.Should().Be(UdapDynamicClientRegistrationErrors.InvalidClientMetadata);
-        result.ErrorDescription.Should().Be($"{UdapDynamicClientRegistrationErrorDescriptions.InvalidJti}");
+        Assert.NotNull(result);
+        Assert.Equal(UdapDynamicClientRegistrationErrors.InvalidClientMetadata, result.Error);
+        Assert.Equal($"{UdapDynamicClientRegistrationErrorDescriptions.InvalidJti}", result.ErrorDescription);
 
 
         //
@@ -185,14 +184,14 @@ public class UdapDcrValidatorTests
 
         document.JwtId = CryptoRandom.CreateUniqueId();
         result = await validator.ValidateJti(document, EpochTime.GetIntDate(expires));
-        result.Should().NotBeNull();
-        result.Error.Should().BeEmpty(result.Error);
+        Assert.NotNull(result);
+        Assert.Empty(result.Error);
 
         result = await validator.ValidateJti(document, EpochTime.GetIntDate(expires));
 
-        result.Should().NotBeNull();
-        result.Error.Should().Be(UdapDynamicClientRegistrationErrors.InvalidClientMetadata);
-        result.ErrorDescription.Should().Be(UdapDynamicClientRegistrationErrorDescriptions.Replay);
+        Assert.NotNull(result);
+        Assert.Equal(UdapDynamicClientRegistrationErrors.InvalidClientMetadata, result.Error);
+        Assert.Equal(UdapDynamicClientRegistrationErrorDescriptions.Replay, result.ErrorDescription);
     }
 
 
@@ -231,7 +230,7 @@ public class UdapDcrValidatorTests
         mockHttpContextAccessor.HttpContext.Returns(context);
         
         validator = new UdapDynamicClientRegistrationValidator(
-            Substitute.For<TrustChainValidator>(Substitute.For<ILogger<TrustChainValidator>>()),
+            Substitute.For<TrustChainValidator>(Substitute.For<ILogger<TrustChainValidator>>(), null),
             httpClient,
             new TestReplayCache(clock),
             serverSettings,

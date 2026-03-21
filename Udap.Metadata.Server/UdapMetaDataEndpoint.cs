@@ -62,11 +62,13 @@ public class UdapMetaDataEndpoint<TUdapMetadataOptions, TUdapMetadata>
         return Results.Ok(_metaDataBuilder.GetCommunities());
     }
 
-    public IResult GetCommunitiesAsHtml(HttpContext httpContext)
+    public async Task<IResult> GetCommunitiesAsHtml(HttpContext httpContext)
     {
-        var html = _metaDataBuilder.GetCommunitiesAsHtml(httpContext.Request.GetDisplayUrl().GetBaseUrlFromMetadataUrl());
+        var html = await _metaDataBuilder.GetCommunitiesAsHtml(
+            httpContext.Request.GetDisplayUrl().GetBaseUrlFromMetadataUrl(),
+            httpContext.RequestAborted);
         httpContext.Response.ContentType = "text/html";
-        
+
         return Results.Content(html);
     }
 }
