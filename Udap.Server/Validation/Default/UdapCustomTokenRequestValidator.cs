@@ -12,26 +12,32 @@ using Duende.IdentityServer.Validation;
 using Microsoft.Extensions.Logging;
 using Microsoft.IdentityModel.JsonWebTokens;
 using Udap.Model;
+using Udap.Model.UdapAuthenticationExtensions;
 using Udap.Server.Storage;
 
 namespace Udap.Server.Validation.Default;
 
 /// <summary>
 /// Custom token request validator that enforces UDAP authorization extension
-/// requirements (e.g., hl7-b2b, hl7-b2b-user, tefca-ias) for UDAP clients.
+/// requirements (e.g., hl7-b2b, hl7-b2b-user) for UDAP clients.
+/// Profile-specific extensions (e.g., tefca-ias) are supported via
+/// <see cref="IAuthorizationExtensionDeserializer"/> registrations.
 /// Runs after client authentication succeeds, returning <c>invalid_grant</c>
 /// with a descriptive error when required extensions are missing or invalid.
 /// </summary>
 public class UdapCustomTokenRequestValidator : ICustomTokenRequestValidator
 {
     private readonly IUdapAuthorizationExtensionValidator _extensionValidator;
+    private readonly IEnumerable<IAuthorizationExtensionDeserializer> _customDeserializers;
     private readonly ILogger<UdapCustomTokenRequestValidator> _logger;
 
     public UdapCustomTokenRequestValidator(
         IUdapAuthorizationExtensionValidator extensionValidator,
+        IEnumerable<IAuthorizationExtensionDeserializer> customDeserializers,
         ILogger<UdapCustomTokenRequestValidator> logger)
     {
         _extensionValidator = extensionValidator;
+        _customDeserializers = customDeserializers;
         _logger = logger;
     }
 
@@ -68,7 +74,7 @@ public class UdapCustomTokenRequestValidator : ICustomTokenRequestValidator
         if (jwtToken.TryGetPayloadValue<JsonElement>(UdapConstants.JwtClaimTypes.Extensions, out var extensionsElement)
             && extensionsElement.ValueKind == JsonValueKind.Object)
         {
-            extensions = PayloadSerializer.Deserialize(extensionsElement);
+            extensions = PayloadSerializer.Deserialize(extensionsElement, _customDeserializers);
         }
 
         var communityId = request.Client.ClientSecrets

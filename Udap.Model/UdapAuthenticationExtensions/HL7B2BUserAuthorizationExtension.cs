@@ -19,7 +19,7 @@ namespace Udap.Model.UdapAuthenticationExtensions;
 ///
 /// <a href="https://build.fhir.org/ig/HL7/fhir-identity-matching-ig/patient-matching.html#consumer-match">Consumer Match</a>
 /// </summary>
-public class HL7B2BUserAuthorizationExtension
+public class HL7B2BUserAuthorizationExtension : IAuthorizationExtensionObject
 {
     private string _version = "1";
     private JsonElement? _userPerson;
@@ -126,7 +126,10 @@ public class HL7B2BUserAuthorizationExtension
 
         return notes;
     }
-    
+
+    /// <inheritdoc />
+    public ICollection<string>? GetPurposeOfUse() => PurposeOfUse;
+
     /// <summary>
     /// Serializes this instance to JSON.
     /// </summary>
