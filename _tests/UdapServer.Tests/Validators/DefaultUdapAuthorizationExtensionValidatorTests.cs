@@ -1149,6 +1149,61 @@ public class DefaultUdapAuthorizationExtensionValidatorTests
 
     #endregion
 
+    #region ErrorExtensions
+
+    /// <summary>
+    /// Validates that <see cref="AuthorizationExtensionValidationResult.ErrorExtensions"/>
+    /// can carry custom error data for trust community profiles.
+    ///
+    /// <a href="https://rce.sequoiaproject.org/wp-content/uploads/2026/02/SOP-Facilitated-FHIR-Implementation-2.0-Draft-508.pdf#page=16">
+    /// SOP: Facilitated FHIR Implementation v2.0 — Section 6.11 B2B #3, Table 1</a>
+    /// </summary>
+    [Fact]
+    public void ErrorExtensions_Failure_Factory_Carries_Extensions()
+    {
+        var errorExtensions = new Dictionary<string, object>
+        {
+            ["hl7-b2b"] = new
+            {
+                consent_required = new[] { "urn:oid:2.16.840.1.113883.3.7204.1.1.1.1.2.1" },
+                consent_form = "https://tefca.example.com/consent/form.pdf"
+            }
+        };
+
+        var result = AuthorizationExtensionValidationResult.Failure(
+            "invalid_grant",
+            "Consent policy required",
+            errorExtensions);
+
+        Assert.False(result.IsValid);
+        Assert.Equal("invalid_grant", result.Error);
+        Assert.Equal("Consent policy required", result.ErrorDescription);
+        Assert.NotNull(result.ErrorExtensions);
+        Assert.True(result.ErrorExtensions.ContainsKey("hl7-b2b"));
+    }
+
+    [Fact]
+    public void ErrorExtensions_Standard_Failure_Has_Null_Extensions()
+    {
+        var result = AuthorizationExtensionValidationResult.Failure(
+            "invalid_grant",
+            "Missing required extension");
+
+        Assert.False(result.IsValid);
+        Assert.Null(result.ErrorExtensions);
+    }
+
+    [Fact]
+    public void ErrorExtensions_Success_Has_Null_Extensions()
+    {
+        var result = AuthorizationExtensionValidationResult.Success();
+
+        Assert.True(result.IsValid);
+        Assert.Null(result.ErrorExtensions);
+    }
+
+    #endregion
+
     #region Helpers
 
     private DefaultUdapAuthorizationExtensionValidator CreateValidator(

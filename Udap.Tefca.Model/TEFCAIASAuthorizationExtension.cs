@@ -17,7 +17,7 @@ namespace Udap.Tefca.Model;
 /// <summary>
 /// TEFCA IAS Authorization Extension Object.
 ///
-/// <a href="https://rce.sequoiaproject.org/wp-content/uploads/2024/07/SOP-Facilitated-FHIR-Implementation_508-1.pdf#page=17">TEFCA IAS AUTHORIZATION EXTENSION OBJECT</a>
+/// <a href="https://rce.sequoiaproject.org/wp-content/uploads/2026/02/SOP-Facilitated-FHIR-Implementation-2.0-Draft-508.pdf#page=16">SOP: Facilitated FHIR Implementation v2.0 — Section 6.11 IAS, Table 4</a>
 /// </summary>
 public class TEFCAIASAuthorizationExtension : IAuthorizationExtensionObject
 {
