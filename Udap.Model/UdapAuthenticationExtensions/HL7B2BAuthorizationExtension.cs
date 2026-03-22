@@ -10,7 +10,7 @@ namespace Udap.Model.UdapAuthenticationExtensions;
 ///
 /// <a href="http://hl7.org/fhir/us/udap-security/b2b.html#constructing-authentication-token">HL7 B2B</a>
 /// </summary>
-public class HL7B2BAuthorizationExtension
+public class HL7B2BAuthorizationExtension : IAuthorizationExtensionObject
 {
     private string _version = "1";
     private string? _subjectName;
@@ -181,6 +181,9 @@ public class HL7B2BAuthorizationExtension
 
         return notes;
     }
+
+    /// <inheritdoc />
+    public ICollection<string>? GetPurposeOfUse() => PurposeOfUse;
 
     /// <summary>
     /// Serializes this instance to JSON.

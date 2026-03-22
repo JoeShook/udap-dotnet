@@ -172,8 +172,6 @@ public static class UdapConstants
         /// </summary>
         public const string Hl7B2B = "hl7-b2b";
         public const string Hl7B2BUSER = "hl7-b2b-user";
-        public const string TEFCAIAS = "tefca-ias";
-        public const string TEFCASMART = "tefca_smart";
     }
 
     /// <summary>
@@ -208,28 +206,6 @@ public static class UdapConstants
         public const string ConsentReference = "consent_reference";
     }
     
-    public static class TEFCAIASAuthorizationExtension
-    {
-        public const string Version = "version";
-        public const string PurposeOfUse = "purpose_of_use";
-        public const string PurposeOfUseCode = "T-IAS";
-        public const string UserInformation = "user_information";
-        public const string PatientInformation = "patient_information";
-        public const string IalVetted = "ial_vetted";
-        public const string ConsentPolicy = "consent_policy";
-        public const string ConsentReference = "consent_reference";
-        public const string IdToken = "id_token";
-    }
-
-    public static class TEFCASMARTAuthorizationExtension
-    {
-        public const string Version = "version";
-        public const string PurposeOfUse = "purpose_of_use";
-        public const string ConsentPolicy = "consent_policy";
-        public const string ConsentReference = "consent_reference";
-        public const string IdToken = "id_token";
-    }
-
     public static class JwtClaimTypes
     {
         public const string Extensions = "extensions";
