@@ -223,33 +223,22 @@ public class DefaultUdapAuthorizationExtensionValidator : IUdapAuthorizationExte
 
     private static ICollection<string>? GetPurposeOfUse(string key, object value)
     {
-        return key switch
+        if (value is IAuthorizationExtensionObject extensionObject)
         {
-            UdapConstants.UdapAuthorizationExtensions.Hl7B2B
-                when value is HL7B2BAuthorizationExtension b2b => b2b.PurposeOfUse,
+            return extensionObject.GetPurposeOfUse();
+        }
 
-            UdapConstants.UdapAuthorizationExtensions.Hl7B2BUSER
-                when value is HL7B2BUserAuthorizationExtension b2bUser => b2bUser.PurposeOfUse,
-
-            _ => null
-        };
+        return null;
     }
 
     private static List<string> ValidateExtensionObject(string key, object value)
     {
-        return key switch
+        if (value is IAuthorizationExtensionObject extensionObject)
         {
-            UdapConstants.UdapAuthorizationExtensions.Hl7B2B
-                when value is HL7B2BAuthorizationExtension b2b => b2b.Validate(),
+            return extensionObject.Validate();
+        }
 
-            UdapConstants.UdapAuthorizationExtensions.Hl7B2BUSER
-                when value is HL7B2BUserAuthorizationExtension b2bUser => b2bUser.Validate(),
-
-            UdapConstants.UdapAuthorizationExtensions.TEFCAIAS
-                when value is TEFCAIASAuthorizationExtension tefca => tefca.Validate(),
-
-            _ => []
-        };
+        return [];
     }
 
     private class ResolvedSettings

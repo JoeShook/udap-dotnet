@@ -63,6 +63,7 @@
     <ProjectReference Include="..\..\Udap.Client\Udap.Client.csproj" />
     <ProjectReference Include="..\..\Udap.Common\Udap.Common.csproj" />
     <ProjectReference Include="..\..\Udap.Model\Udap.Model.csproj" />
+    <ProjectReference Include="..\..\Udap.Tefca.Model\Udap.Tefca.Model.csproj" />
     <ProjectReference Include="..\..\Udap.Smart.Model\Udap.Smart.Model.csproj" />
     <ProjectReference Include="..\..\Udap.Util\Udap.Util.csproj" />
     <ProjectReference Include="..\Udap.Support.Tests\Udap.Support.Tests.csproj" />

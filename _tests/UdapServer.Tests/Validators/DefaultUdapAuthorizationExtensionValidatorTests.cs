@@ -17,6 +17,7 @@ using Udap.Server.Configuration;
 using Udap.Server.Storage.Stores;
 using Udap.Server.Validation;
 using Udap.Server.Validation.Default;
+using Udap.Tefca.Model;
 using UdapServer.Tests.Common;
 
 namespace UdapServer.Tests.Validators;
@@ -527,7 +528,7 @@ public class DefaultUdapAuthorizationExtensionValidatorTests
                     AuthorizationExtensionsRequired =
                     [
                         UdapConstants.UdapAuthorizationExtensions.Hl7B2B,
-                        UdapConstants.UdapAuthorizationExtensions.TEFCAIAS
+                        TefcaConstants.UdapAuthorizationExtensions.TEFCAIAS
                     ]
                 }
             ]

@@ -19,6 +19,7 @@ using Udap.Model;
 using Udap.Model.Registration;
 using Udap.Model.Statement;
 using Udap.Model.UdapAuthenticationExtensions;
+using Udap.Tefca.Model;
 using Udap.Util.Extensions;
 using Xunit.Abstractions;
 using Claim = System.Security.Claims.Claim;
