@@ -1,0 +1,14 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(docker build:*)",
+      "Bash(docker run --rm udap-pki-cli -c \"\necho ''=== /root/.bashrc ===''\ncat /root/.bashrc\necho ''''\necho ''=== /root/.profile ===''\ncat /root/.profile\necho ''''\necho ''=== /etc/inputrc ===''\ncat /etc/inputrc\necho ''''\necho ''=== /etc/profile.d/ ===''\nls -la /etc/profile.d/\necho ''''\necho ''=== /etc/bash_completion.d/ ===''\nls -la /etc/bash_completion.d/ 2>/dev/null\necho ''''\necho ''=== gcloud shell files ===''\nfind /opt/google-cloud-sdk -name ''*.bashrc'' -o -name ''*.bash*'' -o -name ''*.sh'' -o -name ''properties'' 2>/dev/null | head -30\necho ''''\necho ''=== check if install.sh modified anything ===''\nfind /opt/google-cloud-sdk -name ''install.sh'' -exec head -50 {} \\\\;\n\")",
+      "Bash(docker run --rm udap-pki-cli -c \"cd /app && compgen -f ''Udap''\")",
+      "Bash(docker run --rm udap-pki-cli -c \"rm /etc/inputrc && exec bash -c ''cd /app && compgen -f Udap''\")",
+      "Bash(docker run --rm udap-pki-cli -c 'python3 -c \"\"import readline; print\\(readline.__doc__\\)\"\"')",
+      "Bash(docker run --rm udap-pki-cli -c \"cat /etc/profile.d/bash_completion.sh\")",
+      "Bash(docker run --rm mcr.microsoft.com/dotnet/runtime:8.0 bash -c \"ldd /bin/bash | grep -i read; ls -la /lib/x86_64-linux-gnu/libreadline* 2>/dev/null; ls -la /usr/lib/x86_64-linux-gnu/libreadline* 2>/dev/null; dpkg -l | grep readline 2>/dev/null\")",
+      "Bash(docker run:*)"
+    ]
+  }
+}

@@ -47,7 +47,7 @@ public class UdapClientDiscoveryValidator : IUdapClientEvents
     }
 
     /// <inheritdoc/>
-    public event Action<X509ChainElement>? Problem
+    public event Action<ChainElementInfo>? Problem
     {
         add => _trustChainValidator.Problem += value;
         remove => _trustChainValidator.Problem -= value;
@@ -81,9 +81,11 @@ public class UdapClientDiscoveryValidator : IUdapClientEvents
             .GetSubjectAltNames(n =>
                 n.TagNo == (int)X509Extensions.GeneralNameType.URI) //URI only, by udap.org specification
             .Select(n => new Uri(n.Item2).OriginalString)
-            .ToArray();
+            .ToList();  
 
-        var validatedToken = await ValidateToken(udapServerMetaData, tokenHandler, subjectAltNames, jwt);
+        DenormalizeSubjectAltNames(subjectAltNames);
+
+        var validatedToken = await ValidateToken(udapServerMetaData, tokenHandler, subjectAltNames?.ToArray(), jwt);
 
         if (_publicCertificate == null)
         {
@@ -118,6 +120,36 @@ public class UdapClientDiscoveryValidator : IUdapClientEvents
 
         return true;
 
+    }
+
+    //
+    // Ensure both with and without trailing slash for domain-only URIs
+    // Postel's Law" or the Robustness Principle is being applied here.
+    // "Be conservative in what you send, be liberal in what you accept."
+    // — Jon Postel, RFC 761 (Transmission Control Protocol, 1981)
+    //
+    private static void DenormalizeSubjectAltNames(List<string>? subjectAltNames)
+    {
+        if (subjectAltNames != null)
+        {
+            var additionalNames = new HashSet<string>();
+            foreach (var name in subjectAltNames)
+            {
+                if (Uri.TryCreate(name, UriKind.Absolute, out var uri))
+                {
+                    if (string.IsNullOrEmpty(uri.AbsolutePath) || uri.AbsolutePath == "/")
+                    {
+                        var withSlash = uri.GetLeftPart(UriPartial.Authority) + "/";
+                        var withoutSlash = uri.GetLeftPart(UriPartial.Authority);
+                        if (!subjectAltNames.Contains(withSlash))
+                            additionalNames.Add(withSlash);
+                        if (!subjectAltNames.Contains(withoutSlash))
+                            additionalNames.Add(withoutSlash);
+                    }
+                }
+            }
+            subjectAltNames.AddRange(additionalNames);
+        }
     }
 
     private async Task<TokenValidationResult> ValidateToken(
@@ -202,7 +234,7 @@ public class UdapClientDiscoveryValidator : IUdapClientEvents
             return false;
         }
 
-        return _trustChainValidator.IsTrustedCertificate(
+        return await _trustChainValidator.IsTrustedCertificateAsync(
             nameof(UdapClient),
             _publicCertificate,
             anchors.SelectMany(a =>

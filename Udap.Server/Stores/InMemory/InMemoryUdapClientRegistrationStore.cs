@@ -1,4 +1,4 @@
-﻿#region (c) 2023 Joseph Shook. All rights reserved.
+﻿#region (c) 2023-2025 Joseph Shook. All rights reserved.
 // /*
 //  Authors:
 //     Joseph Shook   Joseph.Shook@Surescripts.com
@@ -11,8 +11,10 @@ using System.Security.Cryptography.X509Certificates;
 using Duende.IdentityServer.Models;
 using Udap.Common;
 using Udap.Common.Models;
-using Udap.Server.Extensions;
+using Udap.Server.Storage;
+using Udap.Server.Storage.Extensions;
 using Udap.Server.Storage.Stores;
+using ParsedSecret = Udap.Common.Models.ParsedSecret;
 
 namespace Udap.Server.Stores.InMemory;
 
@@ -78,6 +80,9 @@ public class InMemoryUdapClientRegistrationStore : IUdapClientRegistrationStore
             .SingleOrDefault(cs => cs.Type == UdapServerConstants.SecretTypes.UDAP_COMMUNITY)
             ?.Value;
 
+        client.Properties.TryGetValue(UdapServerConstants.ClientPropertyConstants.Organization, out var org);
+        client.Properties.TryGetValue(UdapServerConstants.ClientPropertyConstants.DataHolder, out var dataHolder);
+        
         var existingClient = _clients.SingleOrDefault(c => 
             // ISS
             c.ClientSecrets.Any(cs =>
@@ -86,7 +91,9 @@ public class InMemoryUdapClientRegistrationStore : IUdapClientRegistrationStore
             // Community
             c.ClientSecrets.Any(cs =>
                 cs.Type == UdapServerConstants.SecretTypes.UDAP_COMMUNITY &&
-                cs.Value == community));
+                cs.Value == community) &&
+            c.Properties.Any(p => p.Key == UdapServerConstants.ClientPropertyConstants.Organization && p.Value == org) &&
+            c.Properties.Any(p => p.Key == UdapServerConstants.ClientPropertyConstants.DataHolder && p.Value == dataHolder));
 
         if (existingClient != null)
         {
@@ -95,6 +102,8 @@ public class InMemoryUdapClientRegistrationStore : IUdapClientRegistrationStore
             existingClient.RedirectUris = client.RedirectUris;
             existingClient.AllowedGrantTypes = client.AllowedGrantTypes;
             existingClient.AllowOfflineAccess = client.AllowOfflineAccess;
+            existingClient.RequirePkce = client.RequirePkce;
+            existingClient.RequireDPoP = client.RequireDPoP;
             //TODO update Certifications
             //TODO update others?
             return Task.FromResult(true);
@@ -145,6 +154,9 @@ public class InMemoryUdapClientRegistrationStore : IUdapClientRegistrationStore
             .SingleOrDefault(cs => cs.Type == UdapServerConstants.SecretTypes.UDAP_COMMUNITY)
             ?.Value;
 
+        client.Properties.TryGetValue(UdapServerConstants.ClientPropertyConstants.Organization, out var org);
+        client.Properties.TryGetValue(UdapServerConstants.ClientPropertyConstants.DataHolder, out var dataHolder);
+
         var clientsFound = _clients.Where(c => 
             // ISS
             c.ClientSecrets.Any(cs =>
@@ -153,7 +165,9 @@ public class InMemoryUdapClientRegistrationStore : IUdapClientRegistrationStore
             // Community
             c.ClientSecrets.Any(cs =>
                 cs.Type == UdapServerConstants.SecretTypes.UDAP_COMMUNITY &&
-                cs.Value == community))
+                cs.Value == community) &&
+            c.Properties.Any(p => p.Key == UdapServerConstants.ClientPropertyConstants.Organization && p.Value == org) &&
+            c.Properties.Any(p => p.Key == UdapServerConstants.ClientPropertyConstants.DataHolder && p.Value == dataHolder))
             .Select(c => c)
             .ToList();
 

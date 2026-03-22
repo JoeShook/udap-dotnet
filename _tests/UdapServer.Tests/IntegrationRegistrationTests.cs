@@ -16,7 +16,6 @@ using Duende.IdentityServer.EntityFramework.Mappers;
 using Duende.IdentityServer.EntityFramework.Options;
 using Duende.IdentityServer.EntityFramework.Storage;
 using Duende.IdentityServer.Models;
-using FluentAssertions;
 using Duende.IdentityModel;
 using Microsoft.AspNetCore.Http;
 using Microsoft.EntityFrameworkCore;
@@ -31,10 +30,9 @@ using Udap.Model.Registration;
 using Udap.Model.Statement;
 using Udap.Server.Configuration;
 using Udap.Server.Configuration.DependencyInjection;
-using Udap.Server.DbContexts;
 using Udap.Server.Registration;
+using Udap.Server.Storage.DbContexts;
 using Udap.Server.Storage.Stores;
-using Udap.Server.Stores;
 using Udap.Util.Extensions;
 using Xunit.Abstractions;
 using JsonClaimValueTypes = System.IdentityModel.Tokens.Jwt.JsonClaimValueTypes;
@@ -152,7 +150,7 @@ namespace UdapServer.Tests
 
             var client = new Client();
             client = await store.GetClient(client);
-            client.Should().BeNull();
+            Assert.Null(client);
 
 
             client = new Client
@@ -163,7 +161,7 @@ namespace UdapServer.Tests
             
 
             client = await store.GetClient(client);
-            client.Should().NotBeNull();
+            Assert.NotNull(client);
 
             //
             // Checking to see two contexts are working together.
@@ -174,20 +172,20 @@ namespace UdapServer.Tests
             client.ClientId = clientId;
 
             var entity = await context.Clients.SingleOrDefaultAsync(c => c.ClientId == client.ClientId);
-            entity.Should().BeNull();
+            Assert.Null(entity);
 
             context.Clients.Add(client.ToEntity());
             await context.SaveChangesAsync();
             entity = await context.Clients.SingleOrDefaultAsync(c => c.ClientId == client.ClientId);
             client = entity.ToModel();
-            client.Should().NotBeNull();
+            Assert.NotNull(client);
 
             client = await store.GetClient(new Client() { ClientId = clientId });
-            client!.ClientId.Should().Be(clientId);
+            Assert.Equal(clientId, client!.ClientId);
 
             var anchors = (await store.GetAnchors()).ToList();
-            anchors.Count.Should().Be(2);
-            anchors.First().Certificate.ToLf().Should().BeEquivalentTo(_anchorCert.ToPemFormat().ToLf());
+            Assert.Equal(2, anchors.Count);
+            Assert.Equal(_anchorCert.ToPemFormat().ToLf(), anchors.First().Certificate.ToLf(), StringComparer.OrdinalIgnoreCase);
         }
 
 
@@ -263,10 +261,9 @@ namespace UdapServer.Tests
                     signingCredentials);
             var signedSoftwareStatement = string.Concat(encodedHeader, ".", encodedPayloadJwt, ".", encodedSignature);
 
-            jwtPayload.SerializeToJson().Should()
-                .BeEquivalentTo(JsonSerializer.Serialize(document));
+            Assert.Equal(JsonSerializer.Serialize(document), jwtPayload.SerializeToJson(), StringComparer.OrdinalIgnoreCase);
 
-            encodedPayloadJwt.Should().BeEquivalentTo(encodedPayload);
+            Assert.Equal(encodedPayload, encodedPayloadJwt, StringComparer.OrdinalIgnoreCase);
 
             var handler = new JwtSecurityTokenHandler();
             var token = handler.ReadToken(signedSoftwareStatement) as JwtSecurityToken;
@@ -286,22 +283,14 @@ namespace UdapServer.Tests
             //
             // Certificate revocation is offline for unit tests.
             //
-            var problemFlags = X509ChainStatusFlags.NotTimeValid |
-                               X509ChainStatusFlags.Revoked |
-                               X509ChainStatusFlags.NotSignatureValid |
-                               X509ChainStatusFlags.InvalidBasicConstraints |
-                               X509ChainStatusFlags.CtlNotTimeValid |
-                               // X509ChainStatusFlags.OfflineRevocation |
-                               X509ChainStatusFlags.CtlNotSignatureValid;
+            var problemFlags = ChainProblemStatus.NotTimeValid |
+                               ChainProblemStatus.Revoked |
+                               ChainProblemStatus.NotSignatureValid |
+                               ChainProblemStatus.InvalidBasicConstraints;
 
             services.AddSingleton(new TrustChainValidator(
-                new X509ChainPolicy()
-                {
-                    DisableCertificateDownloads = true,
-                    UrlRetrievalTimeout = TimeSpan.FromMicroseconds(1),
-                    RevocationMode = X509RevocationMode.NoCheck
-                }, 
                 problemFlags,
+                false,
                 _testOutputHelper.ToLogger<TrustChainValidator>()));
 
 
@@ -323,7 +312,7 @@ namespace UdapServer.Tests
 
             services.AddScoped<IUdapClientRegistrationStore, UdapClientRegistrationStore>();
             services.AddScoped<UdapDynamicClientRegistrationEndpoint, UdapDynamicClientRegistrationEndpoint>();
-            services.AddSingleton(new ServerSettings());
+            services.AddSingleton(new ServerSettings { SsraaVersion = SsraaVersion.V1_1 });
             
             var mockHttpContextAccessor = Substitute.For<IHttpContextAccessor>();
             var context = new DefaultHttpContext();
@@ -375,7 +364,7 @@ namespace UdapServer.Tests
                  UdapConstants.UdapVersionsSupportedValue
             );
 
-            document.ClientId.Should().BeNull();
+            Assert.Null(document.ClientId);
 
             var store = sp.GetRequiredService<IUdapClientRegistrationStore>();
             var communityAnchors = await store.GetAnchorsCertificates("http://localhost");
@@ -383,14 +372,15 @@ namespace UdapServer.Tests
             var intermediateCerts = new X509Certificate2Collection(anchors.First().Intermediates!
                 .Select(s => X509Certificate2.CreateFromPem(s.Certificate)).ToArray());
 
+            var registrationContext = new UdapDynamicClientRegistrationContext { Request = requestBody };
             var result = await validator.ValidateAsync(
-                requestBody, 
-                intermediateCerts, 
-                communityAnchors!, 
+                registrationContext,
+                intermediateCerts,
+                communityAnchors!,
                 anchors);
 
-            result.IsError.Should().BeFalse($"{result.Error} : {result.ErrorDescription}");
-            result.Document.Should().BeEquivalentTo(document);
+            Assert.False(result.IsError, $"{result.Error} : {result.ErrorDescription}");
+            Assert.Equal(document, result.Document);
 
 
         }
@@ -403,22 +393,14 @@ namespace UdapServer.Tests
             //
             // Certificate revocation is offline for unit tests.
             //
-            var problemFlags = X509ChainStatusFlags.NotTimeValid |
-                               X509ChainStatusFlags.Revoked |
-                               X509ChainStatusFlags.NotSignatureValid |
-                               X509ChainStatusFlags.InvalidBasicConstraints |
-                               X509ChainStatusFlags.CtlNotTimeValid |
-                               // X509ChainStatusFlags.OfflineRevocation |
-                               X509ChainStatusFlags.CtlNotSignatureValid;
+            var problemFlags = ChainProblemStatus.NotTimeValid |
+                               ChainProblemStatus.Revoked |
+                               ChainProblemStatus.NotSignatureValid |
+                               ChainProblemStatus.InvalidBasicConstraints;
 
             services.AddSingleton(new TrustChainValidator(
-                new X509ChainPolicy()
-                {
-                    DisableCertificateDownloads = true,
-                    UrlRetrievalTimeout = TimeSpan.FromMicroseconds(1),
-                    RevocationMode = X509RevocationMode.NoCheck
-                },
                 problemFlags,
+                false,
                 _testOutputHelper.ToLogger<TrustChainValidator>()));
 
 
@@ -440,7 +422,7 @@ namespace UdapServer.Tests
 
             services.AddScoped<IUdapClientRegistrationStore, UdapClientRegistrationStore>();
             services.AddScoped<UdapDynamicClientRegistrationEndpoint, UdapDynamicClientRegistrationEndpoint>();
-            services.AddSingleton(new ServerSettings());
+            services.AddSingleton(new ServerSettings { SsraaVersion = SsraaVersion.V1_1 });
 
             var mockHttpContextAccessor = Substitute.For<IHttpContextAccessor>();
             var context = new DefaultHttpContext();
@@ -496,7 +478,7 @@ namespace UdapServer.Tests
                  UdapConstants.UdapVersionsSupportedValue
             );
 
-            document.ClientId.Should().BeNull();
+            Assert.Null(document.ClientId);
 
             var store = sp.GetRequiredService<IUdapClientRegistrationStore>();
             var communityAnchors = await store.GetAnchorsCertificates("http://localhost");
@@ -504,14 +486,15 @@ namespace UdapServer.Tests
             var intermediateCerts = new X509Certificate2Collection(anchors.First().Intermediates!
                 .Select(s => X509Certificate2.CreateFromPem(s.Certificate)).ToArray());
 
+            var registrationContext = new UdapDynamicClientRegistrationContext { Request = requestBody };
             var result = await validator.ValidateAsync(
-                requestBody,
+                registrationContext,
                 intermediateCerts,
                 communityAnchors!,
                 anchors);
 
-            result.IsError.Should().BeFalse($"{result.Error} : {result.ErrorDescription}");
-            result.Document.Should().BeEquivalentTo(document);
+            Assert.False(result.IsError, $"{result.Error} : {result.ErrorDescription}");
+            Assert.Equal(document, result.Document);
 
 
         }
@@ -521,7 +504,7 @@ namespace UdapServer.Tests
         /// certificate included in the x5c JWT header
         ///
         /// The unique client URI used for the iss claim SHALL match the uriName entry in the Subject Alternative Name
-        /// extension of the client app operator’s X.509 certificate, and SHALL uniquely identify a single client app
+        /// extension of the client app operatorï¿½s X.509 certificate, and SHALL uniquely identify a single client app
         /// operator and application over time. 
         /// </summary>
         /// <returns></returns>
@@ -536,7 +519,7 @@ namespace UdapServer.Tests
         /// (1970-01-01T00:00:00Z UTC). The exp time SHALL be no more than 5 minutes after the value of the iat claim.
         ///
         /// The software statement is intended for one-time use with a single OAuth 2.0 server. As such, the aud
-        /// claim SHALL list the URL of the OAuth Server’s registration endpoint, and the lifetime of the software
+        /// claim SHALL list the URL of the OAuth Serverï¿½s registration endpoint, and the lifetime of the software
         /// statement (exp minus iat) SHALL be 5 minutes.
         /// </summary>
         /// <returns></returns>
@@ -631,10 +614,9 @@ namespace UdapServer.Tests
                     signingCredentials);
             var signedSoftwareStatement = string.Concat(encodedHeader, ".", encodedPayloadJwt, ".", encodedSignature);
 
-            jwtPayload.SerializeToJson().Should()
-                .BeEquivalentTo(JsonSerializer.Serialize(document));
+            Assert.Equal(JsonSerializer.Serialize(document), jwtPayload.SerializeToJson(), StringComparer.OrdinalIgnoreCase);
             
-            encodedPayloadJwt.Should().BeEquivalentTo(encodedPayload);
+            Assert.Equal(encodedPayload, encodedPayloadJwt, StringComparer.OrdinalIgnoreCase);
             
             var handler = new JwtSecurityTokenHandler();
             var token = handler.ReadToken(signedSoftwareStatement) as JwtSecurityToken;

@@ -21,7 +21,7 @@ using Duende.IdentityServer.EntityFramework.DbContexts;
 using Duende.IdentityServer.EntityFramework.Options;
 using Duende.IdentityServer.EntityFramework.Stores;
 using Duende.IdentityServer.Services;
-using FluentAssertions;
+using Xunit;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
 using NSubstitute;
@@ -63,6 +63,6 @@ public class ClientStoreTests : StorageFixture<ClientStoreTests, ConfigurationDb
 
         var store = new ClientStore(context, Substitute.For<ILogger<ClientStore>>(), new NoneCancellationTokenProvider());
         var client = await store.FindClientByIdAsync(Guid.NewGuid().ToString());
-        client.Should().BeNull();
+        Assert.Null(client);
     }
 }

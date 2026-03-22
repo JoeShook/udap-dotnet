@@ -1,4 +1,4 @@
-﻿#region (c) 2024 Joseph Shook. All rights reserved.
+#region (c) 2024 Joseph Shook. All rights reserved.
 // /*
 //  Authors:
 //     Joseph Shook   Joseph.Shook@Surescripts.com
@@ -7,16 +7,10 @@
 // */
 #endregion
 
-using System.Net;
-using System.Net.Http.Headers;
-using System.Net.Http.Json;
-using System.Security.Claims;
-using System.Security.Cryptography.X509Certificates;
-using System.Text.Json;
-using Duende.IdentityServer.Models;
-using FluentAssertions;
 using Duende.IdentityModel;
 using Duende.IdentityModel.Client;
+using Duende.IdentityServer;
+using Duende.IdentityServer.Models;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
@@ -24,6 +18,12 @@ using Microsoft.IdentityModel.JsonWebTokens;
 using Microsoft.IdentityModel.Tokens;
 using Newtonsoft.Json.Linq;
 using NSubstitute;
+using System.Net;
+using System.Net.Http.Headers;
+using System.Net.Http.Json;
+using System.Security.Claims;
+using System.Security.Cryptography.X509Certificates;
+using System.Text.Json;
 using Udap.Client.Client;
 using Udap.Client.Client.Extensions;
 using Udap.Client.Configuration;
@@ -62,7 +62,8 @@ public class ClientCredentialsUdapModeTests
             services.AddSingleton(new ServerSettings
             {
                 DefaultUserScopes = "udap",
-                DefaultSystemScopes = "udap"
+                DefaultSystemScopes = "udap",
+                SsraaVersion = SsraaVersion.V1_1 // Support both V1 and V2 for backward compatibility
             });
 
             services.AddSingleton<IOptionsMonitor<UdapClientOptions>>(new OptionsMonitorForTests<UdapClientOptions>(
@@ -175,7 +176,7 @@ public class ClientCredentialsUdapModeTests
             clientCert,
             "system/Patient.rs");
 
-        regDocumentResult.GetError().Should().BeNull();
+        Assert.Null(regDocumentResult.GetError());
 
         var b2bHl7 = new HL7B2BAuthorizationExtension()
         {
@@ -205,7 +206,7 @@ public class ClientCredentialsUdapModeTests
             .Build("RS384");
 
         var tokenResponse = await _mockPipeline.BackChannelClient.UdapRequestClientCredentialsTokenAsync(clientRequest);
-        tokenResponse.Scope.Should().Be("system/Patient.rs", tokenResponse.Raw);
+        Assert.Equal("system/Patient.rs", tokenResponse.Scope);
     }
 
 
@@ -227,7 +228,7 @@ public class ClientCredentialsUdapModeTests
             clientCert,
             "system/Patient.rs");
 
-        regDocumentResult.GetError().Should().BeNull();
+        Assert.Null(regDocumentResult.GetError());
 
         //
         // Now lets set the Client Secret entry in the database to an expired entry.
@@ -250,7 +251,7 @@ public class ClientCredentialsUdapModeTests
 
         var tokenResponse = await _mockPipeline.BackChannelClient.UdapRequestClientCredentialsTokenAsync(clientRequest);
 
-        tokenResponse.Scope.Should().Be("system/Patient.rs", tokenResponse.Raw);
+        Assert.Equal("system/Patient.rs", tokenResponse.Scope);
 
         client = _mockPipeline.Clients.Single(c => c.ClientId == regDocumentResult.ClientId);
         foreach (var secret in client.ClientSecrets)
@@ -278,7 +279,7 @@ public class ClientCredentialsUdapModeTests
             clientCert,
             "system/Patient.rs");
 
-        regDocumentResult.GetError().Should().BeNull();
+        Assert.Null(regDocumentResult.GetError());
 
         //
         // Get Access Token
@@ -328,10 +329,10 @@ public class ClientCredentialsUdapModeTests
         
         var tokenResponse = await _mockPipeline.BackChannelClient.UdapRequestClientCredentialsTokenAsync(clientRequest);
         
-        tokenResponse.IsError.Should().BeTrue();
-        tokenResponse.HttpStatusCode.Should().Be(HttpStatusCode.BadRequest);
-        tokenResponse.Error.Should().Be("invalid_client");
-        tokenResponse.ErrorType.Should().Be(ResponseErrorType.Protocol);
+        Assert.True(tokenResponse.IsError);
+        Assert.Equal(HttpStatusCode.BadRequest, tokenResponse.HttpStatusCode);
+        Assert.Equal("invalid_client", tokenResponse.Error);
+        Assert.Equal(ResponseErrorType.Protocol, tokenResponse.ErrorType);
     }
 
     [Fact]
@@ -351,7 +352,7 @@ public class ClientCredentialsUdapModeTests
             clientCert,
             "system/Patient.rs");
 
-        regDocumentResult.GetError().Should().BeNull();
+        Assert.Null(regDocumentResult.GetError());
 
         //
         // Get Access Token
@@ -400,10 +401,10 @@ public class ClientCredentialsUdapModeTests
         
         var tokenResponse = await _mockPipeline.BackChannelClient.UdapRequestClientCredentialsTokenAsync(clientRequest);
 
-        tokenResponse.IsError.Should().BeTrue();
-        tokenResponse.HttpStatusCode.Should().Be(HttpStatusCode.BadRequest);
-        tokenResponse.Error.Should().Be("invalid_client");
-        tokenResponse.ErrorType.Should().Be(ResponseErrorType.Protocol);
+        Assert.True(tokenResponse.IsError);
+        Assert.Equal(HttpStatusCode.BadRequest, tokenResponse.HttpStatusCode);
+        Assert.Equal("invalid_client", tokenResponse.Error);
+        Assert.Equal(ResponseErrorType.Protocol, tokenResponse.ErrorType);
     }
 
     //Sign with RS384 but set the header alg claim to RS256
@@ -424,7 +425,7 @@ public class ClientCredentialsUdapModeTests
             clientCert,
             "system/Patient.rs");
 
-        regDocumentResult.GetError().Should().BeNull();
+        Assert.Null(regDocumentResult.GetError());
 
         //
         // Get Access Token
@@ -483,10 +484,10 @@ public class ClientCredentialsUdapModeTests
 
         var tokenResponse = await _mockPipeline.BackChannelClient.UdapRequestClientCredentialsTokenAsync(clientRequest);
         
-        tokenResponse.IsError.Should().BeTrue();
-        tokenResponse.HttpStatusCode.Should().Be(HttpStatusCode.BadRequest);
-        tokenResponse.Error.Should().Be("invalid_client");
-        tokenResponse.ErrorType.Should().Be(ResponseErrorType.Protocol);
+        Assert.True(tokenResponse.IsError);
+        Assert.Equal(HttpStatusCode.BadRequest, tokenResponse.HttpStatusCode);
+        Assert.Equal("invalid_client", tokenResponse.Error);
+        Assert.Equal(ResponseErrorType.Protocol, tokenResponse.ErrorType);
     }
 
     [Fact]
@@ -506,7 +507,7 @@ public class ClientCredentialsUdapModeTests
             clientCert,
             "system/Patient.rs");
 
-        regDocumentResult.GetError().Should().BeNull();
+        Assert.Null(regDocumentResult.GetError());
 
         //
         // Get Access Token
@@ -564,10 +565,10 @@ public class ClientCredentialsUdapModeTests
 
         var tokenResponse = await _mockPipeline.BackChannelClient.UdapRequestClientCredentialsTokenAsync(clientRequest);
 
-        tokenResponse.IsError.Should().BeTrue();
-        tokenResponse.HttpStatusCode.Should().Be(HttpStatusCode.BadRequest);
-        tokenResponse.Error.Should().Be("invalid_client");
-        tokenResponse.ErrorType.Should().Be(ResponseErrorType.Protocol);
+        Assert.True(tokenResponse.IsError);
+        Assert.Equal(HttpStatusCode.BadRequest, tokenResponse.HttpStatusCode);
+        Assert.Equal("invalid_client", tokenResponse.Error);
+        Assert.Equal(ResponseErrorType.Protocol, tokenResponse.ErrorType);
     }
 
     [Fact]
@@ -588,7 +589,7 @@ public class ClientCredentialsUdapModeTests
             clientCert,
             "system/Patient.rs");
 
-        regDocumentResult.GetError().Should().BeNull();
+        Assert.Null(regDocumentResult.GetError());
 
 
         //
@@ -603,7 +604,7 @@ public class ClientCredentialsUdapModeTests
 
         var tokenResponse = await _mockPipeline.BackChannelClient.UdapRequestClientCredentialsTokenAsync(clientRequest);
         
-        tokenResponse.Scope.Should().Be("system/Patient.rs", tokenResponse.Raw);
+        Assert.Equal("system/Patient.rs", tokenResponse.Scope);
 
     }
 
@@ -625,7 +626,7 @@ public class ClientCredentialsUdapModeTests
             clientCert,
             "system/Patient.rs");
 
-        regDocumentResult.GetError().Should().BeNull();
+        Assert.Null(regDocumentResult.GetError());
 
 
         //
@@ -640,7 +641,7 @@ public class ClientCredentialsUdapModeTests
 
         var tokenResponse = await _mockPipeline.BackChannelClient.UdapRequestClientCredentialsTokenAsync(clientRequest);
 
-        tokenResponse.Scope.Should().Be("system/Patient.rs", tokenResponse.Raw);
+        Assert.Equal("system/Patient.rs", tokenResponse.Scope);
 
     }
 
@@ -664,8 +665,8 @@ public class ClientCredentialsUdapModeTests
             clientCert,
             "system/Patient.rs");
 
-        regDocumentResult.GetError().Should().BeNull();
-        regDocumentResult.Scope.Should().Be("system/Patient.rs");
+        Assert.Null(regDocumentResult.GetError());
+        Assert.Equal("system/Patient.rs", regDocumentResult.Scope);
 
         var clientIdWithDefaultSubAltName = regDocumentResult.ClientId;
 
@@ -676,10 +677,10 @@ public class ClientCredentialsUdapModeTests
             clientCert,
             "system/Patient.rs system/Appointment.rs");
 
-        regDocumentResult.GetError().Should().BeNull();
-        regDocumentResult.Scope.Should().Be("system/Appointment.rs system/Patient.rs");
+        Assert.Null(regDocumentResult.GetError());
+        Assert.Equal("system/Appointment.rs system/Patient.rs", regDocumentResult.Scope);
 
-        regDocumentResult.ClientId.Should().Be(clientIdWithDefaultSubAltName);
+        Assert.Equal(clientIdWithDefaultSubAltName, regDocumentResult.ClientId);
 
         //
         // Third Registration with different Uri Subject Alt Name from same client certificate
@@ -690,9 +691,9 @@ public class ClientCredentialsUdapModeTests
             "system/Patient.rs system/Appointment.rs",
             "https://fhirlabs.net:7016/fhir/r4");
         
-        regDocumentResultForSelectedSubAltName.Scope.Should().Be("system/Appointment.rs system/Patient.rs");
+        Assert.Equal("system/Appointment.rs system/Patient.rs", regDocumentResultForSelectedSubAltName.Scope);
         var clientIdWithSelectedSubAltName = regDocumentResultForSelectedSubAltName.ClientId;
-        clientIdWithSelectedSubAltName.Should().NotBe(clientIdWithDefaultSubAltName);
+        Assert.NotEqual(clientIdWithDefaultSubAltName, clientIdWithSelectedSubAltName);
 
         //
         // Fourth Registration with Uri Subject Alt Name from third registration
@@ -703,8 +704,8 @@ public class ClientCredentialsUdapModeTests
             "system/Patient.rs",
             "https://fhirlabs.net:7016/fhir/r4");
         
-        regDocumentResultForSelectedSubAltNameSecond.Scope.Should().Be("system/Patient.rs");
-        regDocumentResultForSelectedSubAltNameSecond.ClientId.Should().Be(clientIdWithSelectedSubAltName);
+        Assert.Equal("system/Patient.rs", regDocumentResultForSelectedSubAltNameSecond.Scope);
+        Assert.Equal(clientIdWithSelectedSubAltName, regDocumentResultForSelectedSubAltNameSecond.ClientId);
 
     }
 
@@ -747,9 +748,9 @@ public class ClientCredentialsUdapModeTests
             UdapAuthServerPipeline.RegistrationEndpoint,
             new StringContent(JsonSerializer.Serialize(requestBody), new MediaTypeHeaderValue("application/json")));
 
-        regResponse.StatusCode.Should().Be(HttpStatusCode.Created);
+        Assert.Equal(HttpStatusCode.Created, regResponse.StatusCode);
         var regDocumentResult = await regResponse.Content.ReadFromJsonAsync<UdapDynamicClientRegistrationDocument>();
-        regDocumentResult!.Scope.Should().Be("system/Patient.rs");
+        Assert.Equal("system/Patient.rs", regDocumentResult!.Scope);
 
         var clientIdWithDefaultSubAltName = regDocumentResult.ClientId!;
 
@@ -787,14 +788,14 @@ public class ClientCredentialsUdapModeTests
             UdapAuthServerPipeline.RegistrationEndpoint,
             new StringContent(JsonSerializer.Serialize(requestBody), new MediaTypeHeaderValue("application/json")));
 
-        regResponse.StatusCode.Should().Be(HttpStatusCode.OK); // Deleted finished so returns a 200 status code according to udap.org specifications
+        Assert.Equal(HttpStatusCode.OK, regResponse.StatusCode); // Deleted finished so returns a 200 status code according to udap.org specifications
         
         //
         // Even during a cancel registration it is expected that he SoftwareStatement returned is the same.
         //
         regDocumentResult = await regResponse.Content.ReadFromJsonAsync<UdapDynamicClientRegistrationDocument>();
-        regDocumentResult!.SoftwareStatement.Should().Be(signedSoftwareStatement);
-        regDocumentResult.ClientId.Should().Be("removed"); 
+        Assert.Equal(signedSoftwareStatement, regDocumentResult!.SoftwareStatement);
+        Assert.Equal("removed", regDocumentResult.ClientId); 
 
         //
         // Repeated un-register should be 400 rather than not found (404).
@@ -804,7 +805,7 @@ public class ClientCredentialsUdapModeTests
             UdapAuthServerPipeline.RegistrationEndpoint,
             new StringContent(JsonSerializer.Serialize(requestBody), new MediaTypeHeaderValue("application/json")));
 
-        regResponse.StatusCode.Should().Be(HttpStatusCode.BadRequest); 
+        Assert.Equal(HttpStatusCode.BadRequest, regResponse.StatusCode); 
 
         //
         // Registration with different Uri Subject Alt Name from same client certificate
@@ -842,12 +843,12 @@ public class ClientCredentialsUdapModeTests
             UdapAuthServerPipeline.RegistrationEndpoint,
             new StringContent(JsonSerializer.Serialize(requestBody), new MediaTypeHeaderValue("application/json")));
 
-        regResponse.StatusCode.Should().Be(HttpStatusCode.Created, await regResponse.Content.ReadAsStringAsync());
+        Assert.Equal(HttpStatusCode.Created, regResponse.StatusCode);
         var regDocumentResultForSelectedSubAltName =
             await regResponse.Content.ReadFromJsonAsync<UdapDynamicClientRegistrationDocument>();
-        regDocumentResultForSelectedSubAltName!.Scope.Should().Be("system/Appointment.rs system/Patient.rs");
+        Assert.Equal("system/Appointment.rs system/Patient.rs", regDocumentResultForSelectedSubAltName!.Scope);
         var clientIdWithSelectedSubAltName = regDocumentResultForSelectedSubAltName.ClientId;
-        clientIdWithSelectedSubAltName.Should().NotBe(clientIdWithDefaultSubAltName);
+        Assert.NotEqual(clientIdWithDefaultSubAltName, clientIdWithSelectedSubAltName);
 
         
         //
@@ -884,13 +885,13 @@ public class ClientCredentialsUdapModeTests
             UdapAuthServerPipeline.RegistrationEndpoint,
             new StringContent(JsonSerializer.Serialize(requestBody), new MediaTypeHeaderValue("application/json")));
 
-        regResponse.StatusCode.Should().Be(HttpStatusCode.OK); // Deleted finished so returns a 200 status code according to udap.org specifications
+        Assert.Equal(HttpStatusCode.OK, regResponse.StatusCode); // Deleted finished so returns a 200 status code according to udap.org specifications
         //
         // Even during a cancel registration it is expected that he SoftwareStatement returned is the same.
         //
         regDocumentResult = await regResponse.Content.ReadFromJsonAsync<UdapDynamicClientRegistrationDocument>();
-        regDocumentResult!.SoftwareStatement.Should().Be(signedSoftwareStatement);
-        // regDocumentResult.ClientId.Should().Be(clientIdWithSelectedSubAltName);  //with a cancel it is possible to delete multiple client ids.
+        Assert.Equal(signedSoftwareStatement, regDocumentResult!.SoftwareStatement);
+        // Assert.Equal(clientIdWithSelectedSubAltName, regDocumentResult.ClientId);  //with a cancel it is possible to delete multiple client ids.
         //
         // Repeated un-register should be 400 rather than not found (404).
         // This is following section 5.2 of https://www.udap.org/udap-dynamic-client-registration.html
@@ -899,7 +900,7 @@ public class ClientCredentialsUdapModeTests
             UdapAuthServerPipeline.RegistrationEndpoint,
             new StringContent(JsonSerializer.Serialize(requestBody), new MediaTypeHeaderValue("application/json")));
 
-        regResponse.StatusCode.Should().Be(HttpStatusCode.BadRequest); // Deleted finished so returns a 404 status code
+        Assert.Equal(HttpStatusCode.BadRequest, regResponse.StatusCode); // Deleted finished so returns a 404 status code
     }
 
     [Fact]
@@ -941,9 +942,9 @@ public class ClientCredentialsUdapModeTests
             UdapAuthServerPipeline.RegistrationEndpoint,
             new StringContent(JsonSerializer.Serialize(requestBody), new MediaTypeHeaderValue("application/json")));
 
-        regResponse.StatusCode.Should().Be(HttpStatusCode.Created);
+        Assert.Equal(HttpStatusCode.Created, regResponse.StatusCode);
         var regDocumentResult = await regResponse.Content.ReadFromJsonAsync<UdapDynamicClientRegistrationDocument>();
-        regDocumentResult!.Scope.Should().Be("system/Patient.rs");
+        Assert.Equal("system/Patient.rs", regDocumentResult!.Scope);
         
         //
         // Register Client 2 from community "localhost_fhirlabs_community2"
@@ -978,11 +979,11 @@ public class ClientCredentialsUdapModeTests
             UdapAuthServerPipeline.RegistrationEndpoint,
             new StringContent(JsonSerializer.Serialize(requestBody), new MediaTypeHeaderValue("application/json")));
 
-        regResponse.StatusCode.Should().Be(HttpStatusCode.Created);
+        Assert.Equal(HttpStatusCode.Created, regResponse.StatusCode);
         regDocumentResult = await regResponse.Content.ReadFromJsonAsync<UdapDynamicClientRegistrationDocument>();
-        regDocumentResult!.Scope.Should().Be("system/Patient.rs");
+        Assert.Equal("system/Patient.rs", regDocumentResult!.Scope);
 
-        _mockPipeline.Clients.Count.Should().Be(2);
+        Assert.Equal(2, _mockPipeline.Clients.Count);
 
         //
         // Cancel Registration from community "udap://fhirlabs.net"
@@ -1018,11 +1019,11 @@ public class ClientCredentialsUdapModeTests
             UdapAuthServerPipeline.RegistrationEndpoint,
             new StringContent(JsonSerializer.Serialize(requestBody), new MediaTypeHeaderValue("application/json")));
 
-        regResponse.StatusCode.Should().Be(HttpStatusCode.OK); // Deleted finished so returns a 200 status code according to udap.org specifications
+        Assert.Equal(HttpStatusCode.OK, regResponse.StatusCode); // Deleted finished so returns a 200 status code according to udap.org specifications
 
 
         //Store validation
-        _mockPipeline.Clients.Count.Should().Be(1);
+        Assert.Equal(1, _mockPipeline.Clients.Count);
 
     }
 
@@ -1064,9 +1065,9 @@ public class ClientCredentialsUdapModeTests
             UdapAuthServerPipeline.RegistrationEndpoint,
             new StringContent(JsonSerializer.Serialize(requestBody), new MediaTypeHeaderValue("application/json")));
 
-        regResponse.StatusCode.Should().Be(HttpStatusCode.Created);
+        Assert.Equal(HttpStatusCode.Created, regResponse.StatusCode);
         var regDocumentResult = await regResponse.Content.ReadFromJsonAsync<UdapDynamicClientRegistrationDocument>();
-        regDocumentResult!.Scope.Should().Be("system/Patient.rs");
+        Assert.Equal("system/Patient.rs", regDocumentResult!.Scope);
 
         var clientIdWithDefaultSubAltName = regDocumentResult.ClientId;
 
@@ -1105,14 +1106,14 @@ public class ClientCredentialsUdapModeTests
             UdapAuthServerPipeline.RegistrationEndpoint,
             new StringContent(JsonSerializer.Serialize(requestBody), new MediaTypeHeaderValue("application/json")));
 
-        regResponse.StatusCode.Should().Be(HttpStatusCode.OK); // Deleted finished so returns a 200 status code according to udap.org specifications
+        Assert.Equal(HttpStatusCode.OK, regResponse.StatusCode); // Deleted finished so returns a 200 status code according to udap.org specifications
 
         //
         // Even during a cancel registration it is expected that he SoftwareStatement returned is the same.
         //
         regDocumentResult = await regResponse.Content.ReadFromJsonAsync<UdapDynamicClientRegistrationDocument>();
-        regDocumentResult!.SoftwareStatement.Should().Be(signedSoftwareStatement);
-        // regDocumentResult.ClientId.Should().Be(clientIdWithDefaultSubAltName);  //with a cancel it is possible to delete multiple client ids.
+        Assert.Equal(signedSoftwareStatement, regDocumentResult!.SoftwareStatement);
+        // Assert.Equal(clientIdWithDefaultSubAltName, regDocumentResult.ClientId);  //with a cancel it is possible to delete multiple client ids.
 
         //
         // Repeated un-register should be 400 rather than not found (404).
@@ -1122,7 +1123,7 @@ public class ClientCredentialsUdapModeTests
             UdapAuthServerPipeline.RegistrationEndpoint,
             new StringContent(JsonSerializer.Serialize(requestBody), new MediaTypeHeaderValue("application/json")));
 
-        regResponse.StatusCode.Should().Be(HttpStatusCode.BadRequest); // Deleted finished so returns a 204 status code
+        Assert.Equal(HttpStatusCode.BadRequest, regResponse.StatusCode); // Deleted finished so returns a 204 status code
 
         //
         // Registration with different Uri Subject Alt Name from same client certificate
@@ -1161,12 +1162,12 @@ public class ClientCredentialsUdapModeTests
             UdapAuthServerPipeline.RegistrationEndpoint,
             new StringContent(JsonSerializer.Serialize(requestBody), new MediaTypeHeaderValue("application/json")));
 
-        regResponse.StatusCode.Should().Be(HttpStatusCode.Created, await regResponse.Content.ReadAsStringAsync());
+        Assert.Equal(HttpStatusCode.Created, regResponse.StatusCode);
         var regDocumentResultForSelectedSubAltName =
             await regResponse.Content.ReadFromJsonAsync<UdapDynamicClientRegistrationDocument>();
-        regDocumentResultForSelectedSubAltName!.Scope.Should().Be("system/Appointment.rs system/Patient.rs");
+        Assert.Equal("system/Appointment.rs system/Patient.rs", regDocumentResultForSelectedSubAltName!.Scope);
         var clientIdWithSelectedSubAltName = regDocumentResultForSelectedSubAltName.ClientId;
-        clientIdWithSelectedSubAltName.Should().NotBe(clientIdWithDefaultSubAltName);
+        Assert.NotEqual(clientIdWithDefaultSubAltName, clientIdWithSelectedSubAltName);
 
 
         //
@@ -1203,13 +1204,13 @@ public class ClientCredentialsUdapModeTests
             UdapAuthServerPipeline.RegistrationEndpoint,
             new StringContent(JsonSerializer.Serialize(requestBody), new MediaTypeHeaderValue("application/json")));
 
-        regResponse.StatusCode.Should().Be(HttpStatusCode.OK); // Deleted finished so returns a 200 status code according to udap.org specifications
+        Assert.Equal(HttpStatusCode.OK, regResponse.StatusCode); // Deleted finished so returns a 200 status code according to udap.org specifications
         //
         // Even during a cancel registration it is expected that he SoftwareStatement returned is the same.
         //
         regDocumentResult = await regResponse.Content.ReadFromJsonAsync<UdapDynamicClientRegistrationDocument>();
-        regDocumentResult!.SoftwareStatement.Should().Be(signedSoftwareStatement);
-        // regDocumentResult.ClientId.Should().Be(clientIdWithSelectedSubAltName);  //with a cancel it is possible to delete multiple client ids.
+        Assert.Equal(signedSoftwareStatement, regDocumentResult!.SoftwareStatement);
+        // Assert.Equal(clientIdWithSelectedSubAltName, regDocumentResult.ClientId);  //with a cancel it is possible to delete multiple client ids.
         //
         // Repeated un-register should be 400 rather than not found (404).
         // This is following section 5.2 of https://www.udap.org/udap-dynamic-client-registration.html
@@ -1218,7 +1219,7 @@ public class ClientCredentialsUdapModeTests
             UdapAuthServerPipeline.RegistrationEndpoint,
             new StringContent(JsonSerializer.Serialize(requestBody), new MediaTypeHeaderValue("application/json")));
 
-        regResponse.StatusCode.Should().Be(HttpStatusCode.BadRequest); // Deleted finished so returns a 404 status code
+        Assert.Equal(HttpStatusCode.BadRequest, regResponse.StatusCode); // Deleted finished so returns a 404 status code
     }
 
     [Fact]
@@ -1259,9 +1260,9 @@ public class ClientCredentialsUdapModeTests
             UdapAuthServerPipeline.RegistrationEndpoint,
             new StringContent(JsonSerializer.Serialize(requestBody), new MediaTypeHeaderValue("application/json")));
 
-        regResponse.StatusCode.Should().Be(HttpStatusCode.Created);
+        Assert.Equal(HttpStatusCode.Created, regResponse.StatusCode);
         var regDocumentResult = await regResponse.Content.ReadFromJsonAsync<UdapDynamicClientRegistrationDocument>();
-        regDocumentResult!.Scope.Should().Be("system/Patient.rs");
+        Assert.Equal("system/Patient.rs", regDocumentResult!.Scope);
 
 
 
@@ -1272,13 +1273,76 @@ public class ClientCredentialsUdapModeTests
             UdapAuthServerPipeline.RegistrationEndpoint,
             new StringContent(JsonSerializer.Serialize(requestBody), new MediaTypeHeaderValue("application/json")));
 
-        regResponse.StatusCode.Should().Be(HttpStatusCode.BadRequest);
+        Assert.Equal(HttpStatusCode.BadRequest, regResponse.StatusCode);
         var errorResult = await regResponse.Content.ReadFromJsonAsync<UdapDynamicClientRegistrationErrorResponse>();
-        errorResult.Should().NotBeNull();
-        errorResult!.Error.Should().Be("invalid_client_metadata");
-        errorResult.ErrorDescription.Should().Be("software_statement replayed");
+        Assert.NotNull(errorResult);
+        Assert.Equal("invalid_client_metadata", errorResult!.Error);
+        Assert.Equal("software_statement replayed", errorResult.ErrorDescription);
         
     }
 
+    /// <summary>
+    /// Don't forget to add .AddJwtBearerClientAuthentication() to the IdentityServer configuration
+    /// if you are going to enable compact JWS that are not UDAP.  They can coexist with UDAP
+    /// in your client store. 
+    /// </summary>
+    /// <returns></returns>
+    [Fact]
+    public async Task GetAccessToken_With_Standard_X509CertificateBase64_Secret()
+    {
+        var clientCert = new X509Certificate2("CertStore/issued/fhirlabs.net.client.pfx", "udap-test");
+        var clientId = "test_client_x509";
 
+        _mockPipeline.Clients.Add(new Client
+        {
+            ClientId = clientId,
+            AllowedGrantTypes = GrantTypes.ClientCredentials,
+            AllowedScopes = { "system/Patient.rs" },
+            RequireClientSecret = true,
+            ClientSecrets = new List<Secret>
+            {
+                new Secret(Convert.ToBase64String(clientCert.RawData), "Test X509 Cert")
+                {
+                    Type = IdentityServerConstants.SecretTypes.X509CertificateBase64
+                }
+            }
+        });
+
+        //
+        // Get Access Token
+        //
+        var now = DateTime.UtcNow;
+        var tokenDescriptor = new SecurityTokenDescriptor
+        {
+            Issuer = clientId,
+            Subject = new ClaimsIdentity(new[] { new Claim(JwtClaimTypes.Subject, clientId) }),
+            Audience = IdentityServerPipeline.TokenEndpoint,
+            Expires = now.AddMinutes(5),
+            IssuedAt = now,
+            NotBefore = now,
+            SigningCredentials = new SigningCredentials(new X509SecurityKey(clientCert), "RS384"),
+            Claims = new Dictionary<string, object> { { JwtClaimTypes.JwtId, CryptoRandom.CreateUniqueId() } }
+        };
+
+        var tokenHandler = new JsonWebTokenHandler();
+        var clientAssertion = tokenHandler.CreateToken(tokenDescriptor);
+        _testOutputHelper.WriteLine(clientAssertion);
+        var clientRequest = new ClientCredentialsTokenRequest
+        {
+            Address = IdentityServerPipeline.TokenEndpoint,
+            ClientId = clientId,
+            Scope = "system/Patient.rs",
+            ClientCredentialStyle = ClientCredentialStyle.PostBody,
+            ClientAssertion = new ClientAssertion
+            {
+                Type = OidcConstants.ClientAssertionTypes.JwtBearer,
+                Value = clientAssertion
+            }
+        };
+
+        var tokenResponse = await _mockPipeline.BackChannelClient.RequestClientCredentialsTokenAsync(clientRequest);
+
+        Assert.False(tokenResponse.IsError, tokenResponse.Error);
+        Assert.Equal("system/Patient.rs", tokenResponse.Scope);
+    }
 }

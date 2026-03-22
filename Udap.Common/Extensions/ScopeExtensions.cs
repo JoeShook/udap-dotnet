@@ -10,8 +10,18 @@
 using System.Text;
 
 namespace Udap.Common.Extensions;
+
+/// <summary>
+/// Extension methods for generating FHIR scope string combinations.
+/// </summary>
 public static class ScopeExtensions
 {
+    /// <summary>
+    /// Generates all non-empty substring combinations of the input string.
+    /// Used to expand SMART v2 scope suffixes (e.g., "rs" → "r", "s", "rs").
+    /// </summary>
+    /// <param name="input">The string to generate combinations from.</param>
+    /// <returns>A list of all non-empty character combinations.</returns>
     public static List<string> GenerateCombinations(string input)
     {
         var result = new List<string>();

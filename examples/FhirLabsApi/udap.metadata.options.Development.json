@@ -20,6 +20,24 @@
       }
     },
 
+    //
+    //  Many dataholder in the same organization can be client isolated by adding
+    //  the {org}={dataholder} query parameter to the endpoints.
+    //  This will inform the Authorization server to register a unique client per dataholder
+    //  even if using the same UDAP client certificate and subject-alt name.
+    //
+    //  /connect/register?{org}={dataholder}
+    //  /connect/token?{org}={dataholder}
+    //
+    // {
+    //  "Community": "udap://fhirlabs1/",
+    //  "SignedMetadataConfig": {
+    //    "AuthorizationEndpoint": "https://host.docker.internal:5002/connect/authorize",
+    //    "TokenEndpoint": "https://host.docker.internal:5002/connect/token?orgA=https://host.docker.internal:7016/fhir/r4",
+    //    "RegistrationEndpoint": "https://host.docker.internal:5002/connect/register?orgA=https://host.docker.internal:7016/fhir/r4"
+    //  }
+    //},
+
     {
       "Community": "udap://Provider2",
       "SignedMetadataConfig": {
@@ -43,8 +61,6 @@
     {
       "Community": "udap://IssMismatchToSubjAltName/",
       "SignedMetadataConfig": {
-        "Issuer": "http://localhost/fhir/r4",
-        "Subject": "http://localhost/fhir/r4",
         "AuthorizationEndpoint": "https://host.docker.internal:5002/connect/authorize",
         "TokenEndpoint": "https://host.docker.internal:5002/connect/token",
         "RegistrationEndpoint": "https://host.docker.internal:5002/connect/register"
@@ -54,8 +70,6 @@
     {
       "Community": "udap://IssMismatchToBaseUrl/",
       "SignedMetadataConfig": {
-        "Issuer": "http://localhost/IssMismatchToBaseUrl/r4",
-        "Subject": "http://localhost/IssMismatchToBaseUrl/r4",
         "AuthorizationEndpoint": "https://host.docker.internal:5002/connect/authorize",
         "TokenEndpoint": "https://host.docker.internal:5002/connect/token",
         "RegistrationEndpoint": "https://host.docker.internal:5002/connect/register"
@@ -67,6 +81,15 @@
       "SignedMetadataConfig": {
         "RegistrationSigningAlgorithms": [ "ES384" ],
         "TokenSigningAlgorithms": [ "ES384" ],
+        "AuthorizationEndpoint": "https://host.docker.internal:5002/connect/authorize",
+        "TokenEndpoint": "https://host.docker.internal:5002/connect/token",
+        "RegistrationEndpoint": "https://host.docker.internal:5002/connect/register"
+      }
+    },
+
+    {
+      "Community": "udap://multihost/",
+      "SignedMetadataConfig": {
         "AuthorizationEndpoint": "https://host.docker.internal:5002/connect/authorize",
         "TokenEndpoint": "https://host.docker.internal:5002/connect/token",
         "RegistrationEndpoint": "https://host.docker.internal:5002/connect/register"

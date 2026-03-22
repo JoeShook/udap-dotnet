@@ -7,8 +7,8 @@
 // */
 #endregion
 
-using FluentAssertions;
 using Udap.Common.Extensions;
+using Xunit;
 
 namespace Udap.Common.Tests.Extensions;
 public class Hl7ModelInfoExtensionsTests
@@ -18,21 +18,29 @@ public class Hl7ModelInfoExtensionsTests
     [Fact]
     public void Test()
     {
-        Hl7ModelInfoExtensions.BuildHl7FhirV1Scopes(new List<string>() { "patient", "user" }, treatmentSpecification)
-            .Should().Contain("patient/Patient.read");
+        var v1Scopes = Hl7ModelInfoExtensions.BuildHl7FhirV1Scopes(new List<string>() { "patient", "user" }, treatmentSpecification);
+        Assert.Contains("patient/Patient.read", v1Scopes);
 
-        Hl7ModelInfoExtensions.BuildHl7FhirV2Scopes(new List<string>() { "patient", "user" }, treatmentSpecification)
-            .Should().Contain("patient/Patient.r").And.Contain("patient/Patient.rs");
+        var v2Scopes = Hl7ModelInfoExtensions.BuildHl7FhirV2Scopes(new List<string>() { "patient", "user" }, treatmentSpecification);
+        Assert.Contains("patient/Patient.r", v2Scopes);
+        Assert.Contains("patient/Patient.rs", v2Scopes);
 
-        Hl7ModelInfoExtensions.BuildHl7FhirV2Scopes(new List<string>() { "patient", "user" }, treatmentSpecification, "cruds")
-            .Should().Contain("patient/Patient.cruds").And.Contain("patient/Patient.rs");
+        var v2ScopesCruds = Hl7ModelInfoExtensions.BuildHl7FhirV2Scopes(new List<string>() { "patient", "user" }, treatmentSpecification, "cruds");
+        Assert.Contains("patient/Patient.cruds", v2ScopesCruds);
+        Assert.Contains("patient/Patient.rs", v2ScopesCruds);
 
-        Hl7ModelInfoExtensions.BuildHl7FhirV1AndV2Scopes(new List<string>() { "patient", "user" }, treatmentSpecification, "read", "cruds")
-            .Should().Contain("patient/Patient.cruds").And.Contain("patient/Patient.rs").And.Contain("patient/Patient.read").And
-            .Contain("user/Patient.cruds").And.Contain("user/Patient.rs").And.Contain("user/Patient.read");
+        var v1AndV2Scopes = Hl7ModelInfoExtensions.BuildHl7FhirV1AndV2Scopes(new List<string>() { "patient", "user" }, treatmentSpecification, "read", "cruds");
+        Assert.Contains("patient/Patient.cruds", v1AndV2Scopes);
+        Assert.Contains("patient/Patient.rs", v1AndV2Scopes);
+        Assert.Contains("patient/Patient.read", v1AndV2Scopes);
+        Assert.Contains("user/Patient.cruds", v1AndV2Scopes);
+        Assert.Contains("user/Patient.rs", v1AndV2Scopes);
+        Assert.Contains("user/Patient.read", v1AndV2Scopes);
 
-        Hl7ModelInfoExtensions.BuildHl7FhirV1AndV2Scopes("user", treatmentSpecification, "read", "cruds")
-            .Should().Contain("user/Patient.cruds").And.Contain("user/Patient.rs").And.Contain("user/Patient.read");
+        var userScopes = Hl7ModelInfoExtensions.BuildHl7FhirV1AndV2Scopes("user", treatmentSpecification, "read", "cruds");
+        Assert.Contains("user/Patient.cruds", userScopes);
+        Assert.Contains("user/Patient.rs", userScopes);
+        Assert.Contains("user/Patient.read", userScopes);
 
     }
 }

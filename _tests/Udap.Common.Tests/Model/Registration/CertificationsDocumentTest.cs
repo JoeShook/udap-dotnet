@@ -1,4 +1,4 @@
-#region (c) 2024 Joseph Shook. All rights reserved.
+#region (c) 2024-2025 Joseph Shook. All rights reserved;
 // /*
 //  Authors:
 //     Joseph Shook   Joseph.Shook@Surescripts.com
@@ -7,10 +7,9 @@
 // */
 #endregion
 
+using System.Security.Cryptography;
 using System.Security.Cryptography.X509Certificates;
 using System.Text.Json;
-using System.Text.Json.Serialization;
-using FluentAssertions;
 using Duende.IdentityModel;
 using Udap.Model.Registration;
 using Xunit.Abstractions;
@@ -49,16 +48,16 @@ namespace Udap.Common.Tests.Model.Registration
                 .Create("FhirLabs Administrator Certification")
                 .WithExpiration(DateTime.Now.AddDays(1));
 
-            act.Should().Throw<Exception>()
-                .Where(e => e.Message.StartsWith("Certificate required"));
+            var ex = Assert.Throws<Exception>(act);
+            Assert.StartsWith("Certificate required", ex.Message);
 
             act = () => UdapCertificationsAndEndorsementBuilder
                 .Create("FhirLabs Administrator Certification")
                 .BuildSoftwareStatement();
 
 
-            act.Should().Throw<Exception>()
-                .Where(e => e.Message.StartsWith("Missing certificate"));
+            ex = Assert.Throws<Exception>(act);
+            Assert.StartsWith("Missing certificate", ex.Message);
         }
 
         [Fact]
@@ -70,19 +69,19 @@ namespace Udap.Common.Tests.Model.Registration
 
             Action act = () => UdapCertificationsAndEndorsementBuilder
                 .Create("FhirLabs Administrator Certification", certificationCert)
-            .WithExpiration(DateTime.Now.AddYears(3).Subtract(TimeSpan.FromSeconds(10)));
+            .WithExpiration(expiration.AddDays(1));
 
-            act.Should().Throw<ArgumentOutOfRangeException>()
-                .WithParameterName("expirationOffset")
-                .Where(e => e.Message.StartsWith("Expiration must not expire after certificate"));
+            var ex1 = Assert.Throws<ArgumentOutOfRangeException>(act);
+            Assert.Equal("expirationOffset", ex1.ParamName);
+            Assert.StartsWith("Expiration must not expire after certificate", ex1.Message);
 
             act = () => UdapCertificationsAndEndorsementBuilder
                 .Create("FhirLabs Administrator Certification", certificationCert)
                 .WithExpiration(DateTime.Now.AddYears(3));
 
-            act.Should().Throw<ArgumentOutOfRangeException>()
-                .WithParameterName("expirationOffset")
-                .Where(e => e.Message.StartsWith("Expiration limit to 3 years"));
+            var ex2 = Assert.Throws<ArgumentOutOfRangeException>(act);
+            Assert.Equal("expirationOffset", ex2.ParamName);
+            Assert.StartsWith("Expiration limit to 3 years", ex2.Message);
 
             //
             // Still good on the actual expiration DateTime
@@ -91,15 +90,16 @@ namespace Udap.Common.Tests.Model.Registration
                 .Create("FhirLabs Administrator Certification", certificationCert)
                 .WithExpiration(expiration);
 
-            act.Should().NotThrow();
+            var exception = Record.Exception(act);
+            Assert.Null(exception);
 
             act = () => UdapCertificationsAndEndorsementBuilder
                 .Create("FhirLabs Administrator Certification", certificationCert)
                 .WithExpiration(expiration + TimeSpan.FromSeconds(1));
 
-            act.Should().Throw<ArgumentOutOfRangeException>()
-                .WithParameterName("expirationOffset")
-                .Where(e => e.Message.StartsWith("Expiration must not expire after certificate"));
+            var ex3 = Assert.Throws<ArgumentOutOfRangeException>(act);
+            Assert.Equal("expirationOffset", ex3.ParamName);
+            Assert.StartsWith("Expiration must not expire after certificate", ex3.Message);
 
 
 
@@ -108,17 +108,18 @@ namespace Udap.Common.Tests.Model.Registration
             //
             act = () => UdapCertificationsAndEndorsementBuilder
                 .Create("FhirLabs Administrator Certification", certificationCert)
-                .WithExpiration(DateTime.Now.AddYears(3).ToEpochTime());
+                .WithExpiration(new DateTimeOffset(expiration.AddDays(1)).ToUnixTimeSeconds());
 
-            act.Should().Throw<ArgumentOutOfRangeException>()
-                .WithParameterName("expirationOffset")
-                .Where(e => e.Message.StartsWith("Expiration must not expire after certificate"));
+            var ex4 = Assert.Throws<ArgumentOutOfRangeException>(act);
+            Assert.Equal("expirationOffset", ex4.ParamName);
+            Assert.StartsWith("Expiration must not expire after certificate", ex4.Message);
 
             act = () => UdapCertificationsAndEndorsementBuilder
                 .Create("FhirLabs Administrator Certification", certificationCert)
-                .WithExpiration(expiration.ToEpochTime());
+                .WithExpiration(new DateTimeOffset(expiration).ToUnixTimeSeconds());
 
-            act.Should().NotThrow();
+            exception = Record.Exception(act);
+            Assert.Null(exception);
         }
 
         [Fact]
@@ -132,14 +133,15 @@ namespace Udap.Common.Tests.Model.Registration
                 .Create("Client Name")
                 .WithLogoUri("Poof");
 
-            act.Should().Throw<UriFormatException> ()
-                .WithMessage("Invalid URI: The format of the URI could not be determined.");
+            var ex = Assert.Throws<UriFormatException>(act);
+            Assert.Equal("Invalid URI: The format of the URI could not be determined.", ex.Message);
 
             act = () => UdapCertificationsAndEndorsementBuilder
                 .Create("Client Name")
                 .WithLogoUri("https://certifications.fhirlabs.net/logo.png");
 
-            act.Should().NotThrow();
+            var exception = Record.Exception(act);
+            Assert.Null(exception);
 
             //
             // certification_logo
@@ -148,14 +150,15 @@ namespace Udap.Common.Tests.Model.Registration
                 .Create("Client Name")
                 .WithCertificationLogo("Poof");
 
-            act.Should().Throw<UriFormatException>()
-                .WithMessage("Invalid URI: The format of the URI could not be determined.");
+            ex = Assert.Throws<UriFormatException>(act);
+            Assert.Equal("Invalid URI: The format of the URI could not be determined.", ex.Message);
 
             act = () => UdapCertificationsAndEndorsementBuilder
                 .Create("Client Name")
                 .WithCertificationLogo("https://certifications.fhirlabs.net/logo.png");
 
-            act.Should().NotThrow();
+            exception = Record.Exception(act);
+            Assert.Null(exception);
 
             var certificationsDoc = UdapCertificationsAndEndorsementBuilder
                 .Create("Client Name");
@@ -168,14 +171,15 @@ namespace Udap.Common.Tests.Model.Registration
                 .Create("Client Name")
                 .WithLaunchUri("Poof");
 
-            act.Should().Throw<UriFormatException>()
-                .WithMessage("Invalid URI: The format of the URI could not be determined.");
+            var ex = Assert.Throws<UriFormatException>(act);
+            Assert.Equal("Invalid URI: The format of the URI could not be determined.", ex.Message);
 
             act = () => UdapCertificationsAndEndorsementBuilder
                 .Create("Client Name")
                 .WithLaunchUri("https://smart.fhirlabs.net/launch");
 
-            act.Should().NotThrow();
+            var exception = Record.Exception(act);
+            Assert.Null(exception);
         }
 
         [Fact]
@@ -185,14 +189,15 @@ namespace Udap.Common.Tests.Model.Registration
                 .Create("Client Name")
                 .WithAudience("Poof");
 
-            act.Should().Throw<UriFormatException>()
-                .WithMessage("Invalid URI: The format of the URI could not be determined.");
+            var ex = Assert.Throws<UriFormatException>(act);
+            Assert.Equal("Invalid URI: The format of the URI could not be determined.", ex.Message);
 
             act = () => UdapCertificationsAndEndorsementBuilder
                 .Create("Client Name")
                 .WithLaunchUri("https://securedcontrols.net/connect/register");
 
-            act.Should().NotThrow();
+            var exception = Record.Exception(act);
+            Assert.Null(exception);
         }
 
         /// <summary>
@@ -202,13 +207,13 @@ namespace Udap.Common.Tests.Model.Registration
         [Fact]
         public void IssuedAtTests()
         {
-            var now = DateTime.Now.ToEpochTime();
+            var now = new DateTimeOffset(DateTime.Now).ToUnixTimeSeconds();
             var certificationsDoc = UdapCertificationsAndEndorsementBuilder
                 .Create("Client Name")
                 .WithIssuedAt(now)
                 .Build();
 
-            certificationsDoc.IssuedAt.Should().Be(now);
+            Assert.Equal(now, certificationsDoc.IssuedAt);
 
         }
 
@@ -220,20 +225,20 @@ namespace Udap.Common.Tests.Model.Registration
                 .Build();
 
             var firstJwtId = certificationsDoc.JwtId;
-            certificationsDoc.JwtId.Should().NotBeNullOrWhiteSpace();
+            Assert.False(string.IsNullOrWhiteSpace(certificationsDoc.JwtId));
 
             certificationsDoc = UdapCertificationsAndEndorsementBuilder
                 .Create("Client Name")
                 .Build();
 
-            certificationsDoc.JwtId.Should().NotBe(firstJwtId);
+            Assert.NotEqual(firstJwtId, certificationsDoc.JwtId);
 
             certificationsDoc = UdapCertificationsAndEndorsementBuilder
                 .Create("Client Name")
                 .WithJwtId("Joe-JwtId-1")
                 .Build();
 
-            certificationsDoc.JwtId.Should().Be("Joe-JwtId-1");
+            Assert.Equal("Joe-JwtId-1", certificationsDoc.JwtId);
         }
 
         [Fact]
@@ -243,14 +248,14 @@ namespace Udap.Common.Tests.Model.Registration
                 .Create("Client Name")
                 .Build();
 
-            certificationsDoc.CertificationDescription.Should().BeNull();
+            Assert.Null(certificationsDoc.CertificationDescription);
 
             certificationsDoc = UdapCertificationsAndEndorsementBuilder
                 .Create("Client Name")
                 .WithCertificationDescription("Sample Description")
                 .Build();
 
-            certificationsDoc.CertificationDescription.Should().Be("Sample Description");
+            Assert.Equal("Sample Description", certificationsDoc.CertificationDescription);
 
         }
 
@@ -265,14 +270,15 @@ namespace Udap.Common.Tests.Model.Registration
                 .Create("AdminFhirLabsCertification")
                 .WithCertificationStatusEndpoint("Poof");
 
-            act.Should().Throw<UriFormatException>()
-                .WithMessage("Invalid URI: The format of the URI could not be determined.");
+            var ex = Assert.Throws<UriFormatException>(act);
+            Assert.Equal("Invalid URI: The format of the URI could not be determined.", ex.Message);
 
             act = () => UdapCertificationsAndEndorsementBuilder
                 .Create("AdminFhirLabsCertification")
                 .WithCertificationStatusEndpoint("https://certification.securedcontrols.net/status/AdminFhirLabsCertification");
 
-            act.Should().NotThrow();
+            var exception = Record.Exception(act);
+            Assert.Null(exception);
         }
 
         [Fact]
@@ -286,14 +292,14 @@ namespace Udap.Common.Tests.Model.Registration
                 .Create("AdminFhirLabsCertification")
                 .Build();
 
-           certificationsDoc.IsEndorsement.Should().BeFalse();
+           Assert.False(certificationsDoc.IsEndorsement);
 
            certificationsDoc = UdapCertificationsAndEndorsementBuilder
                .Create("AdminFhirLabsCertification")
                .WithEndorsement(true)
                .Build();
 
-           certificationsDoc.IsEndorsement.Should().BeTrue();
+           Assert.True(certificationsDoc.IsEndorsement);
         }
 
         [Fact]
@@ -303,7 +309,7 @@ namespace Udap.Common.Tests.Model.Registration
                 .Create("AdminFhirLabsCertification")
                 .WithJwks("Poof");
 
-            act.Should().Throw<NotImplementedException>();
+            Assert.Throws<NotImplementedException>(act);
         }
 
         [Fact]
@@ -344,8 +350,8 @@ namespace Udap.Common.Tests.Model.Registration
                                                                  //
                 .Build();
 
-            certificationsDoc.Audience.Should().Be(null);
-            
+            Assert.Null(certificationsDoc.Audience);
+
 
             certificationsDoc = UdapCertificationsAndEndorsementBuilder
                 .Create("FhirLabs Administrator Certification", certificationCert)
@@ -380,9 +386,9 @@ namespace Udap.Common.Tests.Model.Registration
                                                                  //
                 .Build();
 
-            certificationsDoc.Audience.Should().Be("https://securedcontrols.net/connect/register");
-            certificationsDoc.CertificationName.Should().Be("FhirLabs Administrator Certification");
-            certificationsDoc.Expiration.Should().Be(expiration.ToEpochTime());
+            Assert.Equal("https://securedcontrols.net/connect/register", certificationsDoc.Audience);
+            Assert.Equal("FhirLabs Administrator Certification", certificationsDoc.CertificationName);
+            Assert.Equal(new DateTimeOffset(expiration).ToUnixTimeSeconds(), certificationsDoc.Expiration);
             
         }
 
@@ -426,6 +432,101 @@ namespace Udap.Common.Tests.Model.Registration
                 // The additional value private_key_jwt may also be used.
                 //
                 .BuildSoftwareStatement();
+        }
+
+        [Fact]
+        public void ClampedExpiration_DefaultsToFiveMinutes()
+        {
+            var cert = new X509Certificate2(Path.Combine("CertStore/issued", "FhirLabsAdminCertification.pfx"), "udap-test");
+            var before = DateTime.UtcNow.AddMinutes(5).AddSeconds(-5);
+            var after = DateTime.UtcNow.AddMinutes(5).AddSeconds(5);
+
+            var exp = UdapCertificationsAndEndorsementBuilder.WithClampedExpiration(TimeSpan.Zero, cert);
+
+            var expDt = DateTimeOffset.FromUnixTimeSeconds(exp).UtcDateTime;
+            Assert.True(expDt > before);
+            Assert.True(expDt < after);
+            Assert.True(expDt <= cert.NotAfter.ToUniversalTime());
+        }
+
+        [Fact]
+        public void ClampedExpiration_NegativeOffset_Throws()
+        {
+            var cert = new X509Certificate2(Path.Combine("CertStore/issued", "FhirLabsAdminCertification.pfx"), "udap-test");
+
+            Action act = () => UdapCertificationsAndEndorsementBuilder.WithClampedExpiration(TimeSpan.FromSeconds(-1), cert);
+            var ex = Assert.Throws<ArgumentOutOfRangeException>(act);
+            Assert.Equal("expirationOffset", ex.ParamName);
+        }
+
+        [Fact]
+        public void ClampedExpiration_ExceedsThreeYearPolicy_Clamped()
+        {
+            var cert = new X509Certificate2(Path.Combine("CertStore/issued", "FhirLabsAdminCertification.pfx"), "udap-test");
+
+            var requested = TimeSpan.FromDays(365 * 5); // 5 years
+            var exp = UdapCertificationsAndEndorsementBuilder.WithClampedExpiration(requested, cert);
+
+            var expDt = DateTimeOffset.FromUnixTimeSeconds(exp).UtcDateTime;
+            var maxPolicy = DateTime.UtcNow.AddYears(3).AddSeconds(10); // allow small timing drift
+            Assert.True(expDt < maxPolicy);
+        }
+
+        [Fact]
+        public void ClampedExpiration_ExceedsCertificate_NotAfterSafetyApplied()
+        {
+            var cert = new X509Certificate2(Path.Combine("CertStore/issued", "FhirLabsAdminCertification.pfx"), "udap-test");
+            var safetySeconds = 7;
+            var huge = TimeSpan.FromDays(2000);
+
+            var exp = UdapCertificationsAndEndorsementBuilder.WithClampedExpiration(huge, cert, safetySeconds);
+
+            var expected = cert.NotAfter.ToUniversalTime().AddSeconds(-safetySeconds);
+            var expDt = DateTimeOffset.FromUnixTimeSeconds(exp).UtcDateTime;
+
+            Assert.True((expected - expDt).Duration() < TimeSpan.FromSeconds(2));
+        }
+
+        [Fact]
+        public void ClampedExpiration_CertificateTooShort_Throws()
+        {
+            //
+            // This must create a certificate whose NotAfter is within (<=) safetySeconds of now
+            // so that certLimit = NotAfter - safetySeconds is <= now and the method throws.
+            //
+            using var rsa = RSA.Create(2048);
+            var now = DateTimeOffset.UtcNow;
+            var req = new CertificateRequest("CN=ShortLived", rsa, HashAlgorithmName.SHA256, RSASignaturePadding.Pkcs1);
+
+            // NotBefore slightly in past, NotAfter only 4 seconds in the future.
+            // Default safetySeconds = 5  => certLimit = (now + 4s) - 5s = now - 1s  => triggers the throw condition.
+            var veryShortCert = req.CreateSelfSigned(now.AddSeconds(-30), now.AddSeconds(4));
+
+            Action act = () => UdapCertificationsAndEndorsementBuilder.WithClampedExpiration(TimeSpan.Zero, veryShortCert);
+            var ex = Assert.Throws<ArgumentOutOfRangeException>(act);
+            Assert.Equal("certificate", ex.ParamName);
+        }
+
+        [Fact]
+        public void ClampedExpiration_CertificateSoonButNotTooSoon_IsClampedNotThrown()
+        {
+            //
+            // Certificate that expires soon (e.g. 90 seconds) but still outside safety window.
+            // Should clamp (not throw) and set exp to NotAfter - safetySeconds.
+            //
+            using var rsa = RSA.Create(2048);
+            var now = DateTimeOffset.UtcNow;
+            var req = new CertificateRequest("CN=ShortButValid", rsa, HashAlgorithmName.SHA256, RSASignaturePadding.Pkcs1);
+            var shortButValidCert = req.CreateSelfSigned(now.AddSeconds(-10), now.AddSeconds(90)); // ~90s lifetime remaining
+
+            var safetySeconds = 5;
+            var exp = UdapCertificationsAndEndorsementBuilder.WithClampedExpiration(TimeSpan.Zero, shortButValidCert, safetySeconds);
+
+            var expDt = DateTimeOffset.FromUnixTimeSeconds(exp).UtcDateTime;
+            var expected = shortButValidCert.NotAfter.ToUniversalTime().AddSeconds(-safetySeconds);
+
+            // Allow tiny drift
+            Assert.True((expected - expDt).Duration() < TimeSpan.FromSeconds(2));
         }
     }
 

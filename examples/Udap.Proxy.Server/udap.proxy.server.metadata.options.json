@@ -4,17 +4,31 @@
   "UdapAuthorizationExtensionsSupported": [ "hl7-b2b" ],
   "UdapAuthorizationExtensionsRequired": [],
   "ScopesSupported": [ "openid", "system/*.read", "user/*.read", "patient/*.read" ],
-
+  "GrantTypesSupported": [ "authorization_code", "refresh_token", "client_credentials" ],
   "UdapMetadataConfigs": [
 
     {
       "Community": "udap://fhirlabs1/",
       "SignedMetadataConfig": {
-        "Issuer": "https://localhost:7074/fhir/r4",
-        "Subject": "https://localhost:7074/fhir/r4",
         "AuthorizationEndpoint": "https://host.docker.internal:5002/connect/authorize",
         "TokenEndpoint": "https://host.docker.internal:5002/connect/token",
         "RegistrationEndpoint": "https://host.docker.internal:5002/connect/register"
+      }
+    },
+    {
+      "Community": "udap://stage.healthtogo.me/",
+      "SignedMetadataConfig": {
+        "AuthorizationEndpoint": "https://host.docker.internal:5002/connect/authorize",
+        "TokenEndpoint": "https://host.docker.internal:5002/connect/token",
+        "RegistrationEndpoint": "https://host.docker.internal:5002/connect/register"
+      }
+    },
+    {
+      "Community": "urn:oid:2.16.840.1.113883.3.7204.1.5",
+      "SignedMetadataConfig": {
+        "AuthorizationEndpoint": "https://securedcontrols.net/connect/authorize",
+        "TokenEndpoint": "https://securedcontrols.net/connect/token",
+        "RegistrationEndpoint": "https://securedcontrols.net/connect/register"
       }
     }
   ]

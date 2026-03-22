@@ -1,8 +1,8 @@
-﻿using FluentAssertions;
-using System.Text.Json;
+﻿using System.Text.Json;
 using Udap.Smart.Model;
+using Xunit;
 
-namespace Udap.Common.Tests.Smart; 
+namespace Udap.Common.Tests.Smart;
 public class SmartModelTest
 {
     private readonly string modelConfigSource = @"
@@ -43,6 +43,6 @@ public class SmartModelTest
     public void DeserializeSmartMetadata()
     {
         var smartMetadata = JsonSerializer.Deserialize<SmartMetadata>(modelConfigSource);
-        smartMetadata!.issuer.Should().Be("https://host.docker.internal:5002");
+        Assert.Equal("https://host.docker.internal:5002", smartMetadata!.issuer);
     }
 }

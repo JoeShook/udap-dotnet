@@ -45,9 +45,7 @@
             "name": [
                 {
                     "use": "official",
-                    "family": [
-                        "Adams"
-                    ],
+                    "family": "Adams",
                     "given": [
                         "Daniel",
                         "X."

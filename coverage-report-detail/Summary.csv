@@ -1,0 +1,48 @@
+Summary
+Generated on:;3/14/2026 - 10:51:08 AM
+Parser:;Cobertura
+Assemblies:;1
+Classes:;34
+Files:;30
+Line coverage:;90.2%
+Covered lines:;1235
+Uncovered lines:;134
+Coverable lines:;1369
+Total lines:;2840
+
+Udap.Common;90.2%
+
+Microsoft.Extensions.DependencyInjection.UdapCertificateCacheExtensions;0%
+Udap.Common.Authentication.AuthenticationFailureException;100%
+Udap.Common.Authentication.JsonDocumentAuthExtensions;100%
+Udap.Common.Authentication.OAuthTokenResponse;100%
+Udap.Common.Certificates.CertificateDownloadCache;100%
+Udap.Common.Certificates.ChainElementExtensions;100%
+Udap.Common.Certificates.ChainElementInfo;91.6%
+Udap.Common.Certificates.ChainProblem;100%
+Udap.Common.Certificates.ChainValidationResult;100%
+Udap.Common.Certificates.FileCertificateStore;98.2%
+Udap.Common.Certificates.IssuedCertificateStore;87.3%
+Udap.Common.Certificates.TrustAnchorFileStore;75.5%
+Udap.Common.Certificates.TrustAnchorMemoryStore;0%
+Udap.Common.Certificates.TrustChainValidator;95.7%
+Udap.Common.DuplicateAnchorException;100%
+Udap.Common.DuplicateCommunityException;100%
+Udap.Common.DuplicateIntermediateCertificateException;100%
+Udap.Common.Extensions.CertificateStoreExtensions;100%
+Udap.Common.Extensions.Hl7ModelInfoExtensions;100%
+Udap.Common.Extensions.ScopeExtensions;100%
+Udap.Common.Extensions.StringExtensions;37.5%
+Udap.Common.Metadata.AnchoFile;100%
+Udap.Common.Metadata.Community;100%
+Udap.Common.Metadata.IssuedCertFile;100%
+Udap.Common.Metadata.UdapMetaDataBuilder`2;80.5%
+Udap.Common.Models.Anchor;100%
+Udap.Common.Models.Certification;100%
+Udap.Common.Models.Community;83.3%
+Udap.Common.Models.Intermediate;100%
+Udap.Common.Models.IssuedCertificate;96.2%
+Udap.Common.Models.ParsedSecret;0%
+Udap.Common.Models.TieredClient;100%
+Udap.Common.Tracing;0%
+Udap.Common.UdapFileCertStoreManifest;100%

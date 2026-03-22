@@ -8,8 +8,6 @@
 #endregion
 
 using System.CommandLine;
-using System.CommandLine.Hosting;
-using System.CommandLine.NamingConventionBinder;
 using System.Text.Json;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
@@ -21,24 +19,25 @@ using Udap.Util.Extensions;
 
 class Program
 {
-    static Task Main(string[] args) => BuildCommandLine()
-        .UseHost(_ => Host.CreateDefaultBuilder(),
-            host =>
-            {
-                host.ConfigureServices((context, services) =>
-                {
-                    services.Configure<UdapFileCertStoreManifest>(context.Configuration.GetSection("UdapFileCertStoreManifest"));
-                    services.AddSingleton<ITrustAnchorStore, TrustAnchorFileStore>();
-                    services.AddScoped<TrustChainValidator>();
-                    services.AddSingleton<UdapClientDiscoveryValidator>();
-                    services.AddHttpClient<IUdapClient, UdapClient>();
-                });
-            })
-        .InvokeAsync(args);
-
-    private static CliConfiguration BuildCommandLine()
+    static int Main(string[] args)
     {
-        var root = new CliRootCommand(@"$ dotnet run --baseUrl 'https://fhirlabs.net/fhir/r4' --community 'udap://fhirlabs.net/' 
+        Option<string> baseUrlOption = new("--baseUrl")
+        {
+            Description = "The base URL of the FHIR server",
+            Required = true
+        };
+
+        Option<string> trustAnchorOption = new("--trustAnchor")
+        {
+            Description = "Path to trust anchor certificate"
+        };
+
+        Option<string> communityOption = new("--community")
+        {
+            Description = "UDAP community URI"
+        };
+
+        RootCommand rootCommand = new(@"$ dotnet run --baseUrl 'https://fhirlabs.net/fhir/r4' --community 'udap://fhirlabs.net/'
 
 Other --community options to try against the https://fhirlabs.net/fhir/r4 baseUrl
 
@@ -50,39 +49,48 @@ Other --community options to try against the https://fhirlabs.net/fhir/r4 baseUr
 --community 'udap://Iss.Miss.Match.To.BaseUrl/'
 --community 'udap://ECDSA/'
 
-"){
-            
-            new CliOption<string>("--baseUrl"){
-                Required = true
-            },
-            new CliOption<string>("--trustAnchor")
-            {
-                Required = false
-            },
-            new CliOption<string>("--community")
-            {
-                Required = false
-            }
+")
+        {
+            baseUrlOption,
+            trustAnchorOption,
+            communityOption
         };
-        root.Action = CommandHandler.Create<ClientOptions, IHost>(Run);
-        return new CliConfiguration(root);
+
+        rootCommand.SetAction(parseResult =>
+        {
+            var baseUrl = parseResult.GetValue(baseUrlOption)!;
+            var community = parseResult.GetValue(communityOption);
+
+            using var host = Host.CreateDefaultBuilder()
+                .ConfigureServices((context, services) =>
+                {
+                    services.Configure<UdapFileCertStoreManifest>(context.Configuration.GetSection("UdapFileCertStoreManifest"));
+                    services.AddSingleton<ITrustAnchorStore, TrustAnchorFileStore>();
+                    services.AddScoped<TrustChainValidator>();
+                    services.AddSingleton<UdapClientDiscoveryValidator>();
+                    services.AddHttpClient<IUdapClient, UdapClient>();
+                })
+                .Build();
+
+            Run(baseUrl, community, host);
+        });
+
+        return rootCommand.Parse(args).Invoke();
     }
 
-    private static void Run(ClientOptions options, IHost host)
+    private static void Run(string baseUrl, string? community, IHost host)
     {
         var serviceProvider = host.Services;
         var udapClient = serviceProvider.GetRequiredService<IUdapClient>();
         var loggerFactory = serviceProvider.GetRequiredService<ILoggerFactory>();
         var logger = loggerFactory.CreateLogger(typeof(Program));
-        
-        string? community = options.Community;
 
         udapClient.Problem += element => logger.LogWarning(element.ChainElementStatus.Summarize(TrustChainValidator.DefaultProblemFlags));
         udapClient.Untrusted += certificate2 => logger.LogWarning("Untrusted: " + certificate2.Subject);
         udapClient.TokenError += message => logger.LogWarning("TokenError: " + message);
-        
-        logger.LogInformation($"Requesting {options.BaseUrl}");
-        var response = udapClient.ValidateResource(options.BaseUrl, community).GetAwaiter().GetResult();
+
+        logger.LogInformation($"Requesting {baseUrl}");
+        var response = udapClient.ValidateResource(baseUrl, community).GetAwaiter().GetResult();
 
         if (response.IsError)
         {
@@ -90,23 +98,7 @@ Other --community options to try against the https://fhirlabs.net/fhir/r4 baseUr
         }
         else
         {
-            logger.LogInformation(JsonSerializer.Serialize(udapClient.UdapServerMetaData, new JsonSerializerOptions{WriteIndented = true})); 
+            logger.LogInformation(JsonSerializer.Serialize(udapClient.UdapServerMetaData, new JsonSerializerOptions{WriteIndented = true}));
         }
     }
-}
-
-public class ClientOptions
-{
-    public ClientOptions(string baseUrl, string? trustAnchor, string? community)
-    {
-        BaseUrl = baseUrl;
-        TrustAnchor = trustAnchor;
-        Community = community;
-    }
-
-    public string BaseUrl { get; }
-
-    public string? TrustAnchor { get; }
-
-    public string?Community { get; }
 }

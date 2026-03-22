@@ -1,4 +1,4 @@
-#region (c) 2022 Joseph Shook. All rights reserved.
+#region (c) 2022-2025 Joseph Shook. All rights reserved.
 // /*
 //  Authors:
 //     Joseph Shook   Joseph.Shook@Surescripts.com
@@ -17,7 +17,7 @@ using OpenTelemetry.Trace;
 using Udap.Common;
 using Udap.Identity.Provider;
 using Udap.Server.Configuration;
-using Udap.Server.DbContexts;
+using Udap.Server.Storage.DbContexts;
 
 namespace Udap.Idp;
 
@@ -75,7 +75,7 @@ internal static class HostingExtensions
                     })
             .AddPrivateFileStore();
 
-        builder.Services.Configure<UdapFileCertStoreManifest>(builder.Configuration.GetSection(Common.Constants.UDAP_FILE_STORE_MANIFEST));
+        builder.Services.Configure<UdapFileCertStoreManifest>(builder.Configuration.GetSection(Common.Constants.UdapFileCertStoreManifestSectionName));
         builder.Services.AddUdapMetadataServer(builder.Configuration);
 
 
@@ -218,7 +218,7 @@ internal static class HostingExtensions
         app.UseRouting();
 
         app.UseUdapMetadataServer();
-        app.UseUdapIdPServer();
+        app.UseUdapServer();
         app.UseIdentityServer();
         
         

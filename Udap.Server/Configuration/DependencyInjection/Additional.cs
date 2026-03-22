@@ -14,6 +14,7 @@ using Duende.IdentityServer.Validation;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
 using Udap.Server.Storage.Stores;
+using Udap.Server.Validation;
 using Udap.Server.Validation.Default;
 
 //
@@ -32,6 +33,8 @@ public static class IdentityServerBuilderExtensionsAdditional
     public static IUdapServiceBuilder AddUdapJwtBearerClientAuthentication(this IUdapServiceBuilder builder)
     {
         builder.Services.TryAddTransient<IReplayCache, DefaultReplayCache>();
+        builder.Services.TryAddTransient<IUdapAuthorizationExtensionValidator, DefaultUdapAuthorizationExtensionValidator>();
+        builder.Services.TryAddTransient<ICustomTokenRequestValidator, UdapCustomTokenRequestValidator>();
         builder.Services.AddTransient<ISecretParser, UdapJwtBearerClientAssertionSecretParser>();
         builder.Services.AddTransient<ISecretValidator, UdapJwtSecretValidator>();
 

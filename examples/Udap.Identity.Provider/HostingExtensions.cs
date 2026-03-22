@@ -1,4 +1,4 @@
-#region (c) 2023 Joseph Shook. All rights reserved.
+#region (c) 2023-2025 Joseph Shook. All rights reserved.
 // /*
 //  Authors:
 //     Joseph Shook   Joseph.Shook@Surescripts.com
@@ -19,7 +19,7 @@ using Udap.Common;
 using Udap.Common.Certificates;
 using Udap.Identity.Provider;
 using Udap.Server.Configuration;
-using Udap.Server.DbContexts;
+using Udap.Server.Storage.DbContexts;
 
 namespace Udap.Idp;
 
@@ -79,7 +79,7 @@ internal static class HostingExtensions
             .AddPrivateFileStore();
 
         
-        builder.Services.Configure<UdapFileCertStoreManifest>(builder.Configuration.GetSection(Common.Constants.UDAP_FILE_STORE_MANIFEST));
+        builder.Services.Configure<UdapFileCertStoreManifest>(builder.Configuration.GetSection(Common.Constants.UdapFileCertStoreManifestSectionName));
         builder.Services.AddSingleton<IPrivateCertificateStore>(sp =>
             new IssuedCertificateStore(
                 sp.GetRequiredService<IOptionsMonitor<UdapFileCertStoreManifest>>(),
@@ -226,7 +226,7 @@ internal static class HostingExtensions
         app.UseRouting();
 
         app.UseUdapMetadataServer();
-        app.UseUdapIdPServer();
+        app.UseUdapServer();
         app.UseIdentityServer();
         
         

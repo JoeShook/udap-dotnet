@@ -16,6 +16,7 @@ using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using Microsoft.IdentityModel.Tokens;
 using Udap.Client.Configuration;
+using Udap.Common.Certificates;
 using Udap.Common.Extensions;
 using Udap.Model;
 
@@ -69,7 +70,7 @@ public class UdapClientMessageHandler : DelegatingHandler, IUdapClientEvents
     }
 
     /// <inheritdoc/>
-    public event Action<X509ChainElement>? Problem
+    public event Action<ChainElementInfo>? Problem
     {
         add => _clientDiscoveryValidator.Problem += value;
         remove => _clientDiscoveryValidator.Problem -= value;

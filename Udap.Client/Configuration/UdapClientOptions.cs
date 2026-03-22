@@ -10,6 +10,7 @@
 using System.Diagnostics.CodeAnalysis;
 using System.Text.Json.Serialization;
 using Udap.Client.Client;
+using Udap.Model;
 
 namespace Udap.Client.Configuration;
 
@@ -46,6 +47,7 @@ public class UdapClientOptions
         Contacts = [];
         Headers = [];
         TieredOAuthClientLogo = string.Empty;
+        UdapVersion = UdapConstants.UdapVersionsSupportedValue;
     }
 
     [JsonConstructor]
@@ -53,12 +55,14 @@ public class UdapClientOptions
         string? clientName = null,
         HashSet<string>? contacts = null,
         Dictionary<string, string>? headers = null,
-        string tieredOAuthClientLogo = "")
+        string tieredOAuthClientLogo = "",
+        string? udapVersion = null)
     {
         ClientName = clientName ?? string.Empty;
         Contacts = contacts ?? [];
         Headers = headers ?? [];
         TieredOAuthClientLogo = tieredOAuthClientLogo;
+        UdapVersion = udapVersion ?? UdapConstants.UdapVersionsSupportedValue;
     }
 
     [JsonPropertyName("ClientName")]
@@ -72,4 +76,12 @@ public class UdapClientOptions
 
     [JsonPropertyName("TieredOAuthClientLogo")]
     public string TieredOAuthClientLogo { get; set; }
+
+    /// <summary>
+    /// The UDAP protocol version sent in the <c>udap</c> field of every registration request.
+    /// Per the udap.org specification this is always <c>"1"</c>. Do not change this value.
+    /// Which SSRAA IG version the server enforces is a server-side setting (<see cref="SsraaVersion"/>).
+    /// </summary>
+    [JsonPropertyName("UdapVersion")]
+    public string UdapVersion { get; set; }
 }

@@ -66,7 +66,7 @@ public class FhirResourceConverter : JsonConverter<Dictionary<string, Resource>>
         {
             writer.WritePropertyName(kvp.Key);
             var resourceJson = new FhirJsonSerializer(serializerSettings).SerializeToString(kvp.Value);
-            
+
             // Console.WriteLine(resourceJson);
             var indentedResourceJson = IndentJson(resourceJson, 2);
             writer.WriteRawValue(indentedResourceJson);

@@ -16,11 +16,11 @@ using Duende.IdentityModel.Client;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using Microsoft.IdentityModel.Tokens;
-using Udap.Client.Authentication;
 using Udap.Client.Client.Extensions;
 using Udap.Client.Client.Messages;
 using Udap.Client.Configuration;
 using Udap.Client.Extensions;
+using Udap.Common.Authentication;
 using Udap.Common.Certificates;
 using Udap.Common.Extensions;
 using Udap.Model;
@@ -43,13 +43,15 @@ namespace Udap.Client.Client
         private readonly UdapClientOptions _udapClientOptions;
         private DiscoveryPolicy _discoveryPolicy;
         private readonly ILogger<UdapClient> _logger;
+        private readonly ICertificateDownloadCache? _certificateDownloadCache;
 
         public UdapClient(
             HttpClient httpClient,
             UdapClientDiscoveryValidator clientDiscoveryValidator,
             IOptionsMonitor<UdapClientOptions> udapClientOptions,
             ILogger<UdapClient> logger,
-            DiscoveryPolicy? discoveryPolicy = null)
+            DiscoveryPolicy? discoveryPolicy = null,
+            ICertificateDownloadCache? certificateDownloadCache = null)
         {
             _httpClient = httpClient;
             _clientDiscoveryValidator = clientDiscoveryValidator;
@@ -57,6 +59,7 @@ namespace Udap.Client.Client
             _udapClientOptions = udapClientOptions.CurrentValue;
             _logger = logger;
             _discoveryPolicy = discoveryPolicy ?? DiscoveryPolicy.DefaultMetadataServerPolicy();
+            _certificateDownloadCache = certificateDownloadCache;
         }
 
         public UdapMetadata? UdapDynamicClientRegistrationDocument { get; set; }
@@ -70,7 +73,7 @@ namespace Udap.Client.Client
         }
 
         /// <inheritdoc/>
-        public event Action<X509ChainElement>? Problem
+        public event Action<ChainElementInfo>? Problem
         {
             add => _clientDiscoveryValidator.Problem += value;
             remove => _clientDiscoveryValidator.Problem -= value;
@@ -523,8 +526,7 @@ namespace Udap.Client.Client
                 var requestBody = new UdapRegisterRequest
                 (
                     signedSoftwareStatement,
-                    UdapConstants.UdapVersionsSupportedValue
-                    // Array.Empty<string>()
+                    _udapClientOptions.UdapVersion
                 );
 
                 // New StringContent constructor taking a MediaTypeHeaderValue to ensure CharSet can be controlled
@@ -633,8 +635,7 @@ namespace Udap.Client.Client
                 var requestBody = new UdapRegisterRequest
                 (
                     signedSoftwareStatement,
-                    UdapConstants.UdapVersionsSupportedValue
-                // Array.Empty<string>()
+                    _udapClientOptions.UdapVersion
                 );
 
                 // New StringContent constructor taking a MediaTypeHeaderValue to ensure CharSet can be controlled
@@ -677,6 +678,32 @@ namespace Udap.Client.Client
             };
 
             return resultDocument;
+        }
+
+        /// <inheritdoc />
+        public async Task RemoveCachedIntermediateAsync(string url, CancellationToken cancellationToken = default)
+        {
+            if (_certificateDownloadCache == null)
+            {
+                throw new InvalidOperationException(
+                    $"{nameof(ICertificateDownloadCache)} is not registered. " +
+                    "Register it in DI to enable cache eviction.");
+            }
+
+            await _certificateDownloadCache.RemoveIntermediateAsync(url, cancellationToken);
+        }
+
+        /// <inheritdoc />
+        public async Task RemoveCachedCrlAsync(string url, CancellationToken cancellationToken = default)
+        {
+            if (_certificateDownloadCache == null)
+            {
+                throw new InvalidOperationException(
+                    $"{nameof(ICertificateDownloadCache)} is not registered. " +
+                    "Register it in DI to enable cache eviction.");
+            }
+
+            await _certificateDownloadCache.RemoveCrlAsync(url, cancellationToken);
         }
     }
 }

@@ -14,9 +14,6 @@ public class SignedMetadataConfig
     public List<string>? RegistrationSigningAlgorithms { get; set; } = [];
     public List<string>? TokenSigningAlgorithms { get; set; } = [];
 
-    public string Issuer { get; set; } = string.Empty;
-    public string Subject { get; set; } = string.Empty;
-
     /// <summary>
     /// The expiration timespan SHALL be no more than 5 minutes after the value of
     /// issued (iat) time. 

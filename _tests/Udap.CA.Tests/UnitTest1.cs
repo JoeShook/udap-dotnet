@@ -1,5 +1,4 @@
 using System.Formats.Asn1;
-using FluentAssertions;
 using System.Security.Cryptography;
 using System.Security.Cryptography.X509Certificates;
 using Udap.CA.Services;
@@ -19,9 +18,9 @@ public class UnitTest1
         using var certificateUtilities = new CertificateUtilities();
         var rootCert = certificateUtilities.GenerateRootCA(subject);
 
-        rootCert.Subject.Should().Be(subject);
-        rootCert.HasPrivateKey.Should().BeTrue();
-        rootCert.Issuer.Should().Be(subject);
+        Assert.Equal(subject, rootCert.Subject);
+        Assert.True(rootCert.HasPrivateKey);
+        Assert.Equal(subject, rootCert.Issuer);
 
         certificateUtilities.Dispose();
 
@@ -29,9 +28,8 @@ public class UnitTest1
         // Just exercising dispose test behavior
         //
         Action action = () => rootCert.Subject.ToString();
-        action.Should().Throw<CryptographicException>().Subject
-            .First().Message.Should()
-            .BeEquivalentTo("m_safeCertContext is an invalid handle.");
+        var ex = Assert.Throws<CryptographicException>(action);
+        Assert.Equal("m_safeCertContext is an invalid handle.", ex.Message, StringComparer.OrdinalIgnoreCase);
     }
 
     
@@ -42,9 +40,9 @@ public class UnitTest1
         var certificateUtilities = new CertificateUtilities();
         var rootCert = certificateUtilities.GenerateRootCA(subject);
 
-        rootCert.Subject.Should().Be(subject);
-        rootCert.HasPrivateKey.Should().BeTrue();
-        rootCert.Issuer.Should().Be(subject);
+        Assert.Equal(subject, rootCert.Subject);
+        Assert.True(rootCert.HasPrivateKey);
+        Assert.Equal(subject, rootCert.Issuer);
 
         return rootCert;
     }
@@ -68,9 +66,9 @@ public class UnitTest1
             certificateAuthIssuerUri,
             rootCertificate);
 
-        intermediateCertificate.Subject.Should().Be(subject);
-        intermediateCertificate.HasPrivateKey.Should().BeTrue();
-        intermediateCertificate.Issuer.Should().Be(rootCertificate.Subject);
+        Assert.Equal(subject, intermediateCertificate.Subject);
+        Assert.True(intermediateCertificate.HasPrivateKey);
+        Assert.Equal(rootCertificate.Subject, intermediateCertificate.Issuer);
 
         return intermediateCertificate;
     }
@@ -95,7 +93,7 @@ public class UnitTest1
             intermediateCertificate);
 
 
-        issuedCertificate.Subject.Should().Be(subject);
+        Assert.Equal(subject, issuedCertificate.Subject);
         //
         // It might be cool to try using the Microsoft AsnReader instead of BouncyCastle.
         // Good resources here:
@@ -105,13 +103,13 @@ public class UnitTest1
         //
         issuedCertificate.GetExtensionValue("1.3.6.1.5.5.7.1.1");
 
-        issuedCertificate.HasPrivateKey.Should().BeTrue();
-        issuedCertificate.Issuer.Should().Be(intermediateCertificate.Subject);
+        Assert.True(issuedCertificate.HasPrivateKey);
+        Assert.Equal(intermediateCertificate.Subject, issuedCertificate.Issuer);
 
         var aiaExtensions =
             issuedCertificate.Extensions["1.3.6.1.5.5.7.1.1"] as X509AuthorityInformationAccessExtension;
-        aiaExtensions.Should().NotBeNull();
-        aiaExtensions!.EnumerateCAIssuersUris().Single().Should().Be(certificateAuthIssuerUri.AbsoluteUri);
+        Assert.NotNull(aiaExtensions);
+        Assert.Equal(certificateAuthIssuerUri.AbsoluteUri, aiaExtensions!.EnumerateCAIssuersUris().Single());
 
         //
         // No good because it just gets the first one
@@ -144,9 +142,9 @@ public class UnitTest1
         //TODO: this code needs to be put into a library so we can used it to assert subAltName the same as iss and url etc...
         ReadOnlyMemory<byte> encoded = subjectAltNameExtension.RawData;
         AsnReader reader = new AsnReader(subjectAltNameExtension.RawData, AsnEncodingRules.DER);
-        reader.HasData.Should().BeTrue();
+        Assert.True(reader.HasData);
         AsnReader sanExtensionValue = reader.ReadSequence();
-        reader.HasData.Should().BeFalse();
+        Assert.False(reader.HasData);
         Asn1Tag uriName = new Asn1Tag(TagClass.ContextSpecific, 6);
 
         //
@@ -154,7 +152,7 @@ public class UnitTest1
         //
         // sanExtensionValue.ReadCharacterString(UniversalTagNumber.IA5String, uriName).Should().Be("http://localhost/");
         
-        sanExtensionValue.ReadCharacterString(UniversalTagNumber.IA5String, uriName).Should().Be(subjectAltName.AbsoluteUri);
+        Assert.Equal(subjectAltName.AbsoluteUri, sanExtensionValue.ReadCharacterString(UniversalTagNumber.IA5String, uriName));
 
     }
     

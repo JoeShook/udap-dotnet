@@ -1,4 +1,4 @@
-﻿#region (c) 2022 Joseph Shook. All rights reserved.
+﻿#region (c) 2022-2025 Joseph Shook. All rights reserved.
 // /*
 //  Authors:
 //     Joseph Shook   Joseph.Shook@Surescripts.com
@@ -9,8 +9,8 @@
 
 using Microsoft.EntityFrameworkCore;
 using Udap.Common;
-using Udap.Server.DbContexts;
-using Udap.Server.Entities;
+using Udap.Server.Storage.DbContexts;
+using Udap.Server.Storage.Entities;
 
 namespace Udap.Auth.Server.Admin.Services.DataBase;
 

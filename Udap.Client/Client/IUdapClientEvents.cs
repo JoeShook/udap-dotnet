@@ -8,6 +8,7 @@
 #endregion
 
 using System.Security.Cryptography.X509Certificates;
+using Udap.Common.Certificates;
 
 namespace Udap.Client.Client;
 
@@ -21,7 +22,7 @@ public interface IUdapClientEvents
     /// <summary>
     /// Event fired if a certificate has a problem.
     /// </summary>
-    event Action<X509ChainElement>? Problem;
+    event Action<ChainElementInfo>? Problem;
 
     /// <summary>
     /// Event fired if there was an error during certificate validation

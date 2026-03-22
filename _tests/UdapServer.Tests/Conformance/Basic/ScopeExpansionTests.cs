@@ -1,4 +1,4 @@
-﻿#region (c) 2023 Joseph Shook. All rights reserved.
+#region (c) 2023 Joseph Shook. All rights reserved.
 // /*
 //  Authors:
 //     Joseph Shook   Joseph.Shook@Surescripts.com
@@ -15,8 +15,6 @@ using System.Security.Cryptography.X509Certificates;
 using System.Text.Json;
 using Duende.IdentityServer.Models;
 using Duende.IdentityServer.Test;
-using FluentAssertions;
-using FluentAssertions.Common;
 using Duende.IdentityModel;
 using Duende.IdentityModel.Client;
 using Microsoft.AspNetCore.WebUtilities;
@@ -61,6 +59,7 @@ public class ScopeExpansionTests
                 var serverSettings = sp.GetRequiredService<IOptions<ServerSettings>>().Value;
                 serverSettings.RequireConsent = false;
                 serverSettings.RequirePkce = false;
+                serverSettings.SsraaVersion = SsraaVersion.V1_1; // Support V1 and V2 for backward compat
                 return serverSettings;
             });
 
@@ -152,8 +151,8 @@ public class ScopeExpansionTests
     {
         var clientCert = new X509Certificate2("CertStore/issued/fhirlabs.net.client.pfx", "udap-test");
         var resultDocument = await RegisterClientWithAuthServer("system/Patient.rs", clientCert);
-        resultDocument.Should().NotBeNull();
-        resultDocument!.ClientId.Should().NotBeNull();
+        Assert.NotNull(resultDocument);
+        Assert.NotNull(resultDocument!.ClientId);
 
         //
         // Get Access Token
@@ -193,7 +192,7 @@ public class ScopeExpansionTests
 
         var tokenResponse = await _mockPipeline.BackChannelClient.UdapRequestClientCredentialsTokenAsync(clientRequest);
 
-        tokenResponse.Scope.Should().Be("system/Patient.r", tokenResponse.Raw);
+        Assert.Equal("system/Patient.r", tokenResponse.Scope);
 
 
         //
@@ -235,7 +234,7 @@ public class ScopeExpansionTests
 
         tokenResponse = await _mockPipeline.BackChannelClient.UdapRequestClientCredentialsTokenAsync(clientRequest);
 
-        tokenResponse.Scope.Should().Be("system/Patient.s", tokenResponse.Raw);
+        Assert.Equal("system/Patient.s", tokenResponse.Scope);
 
 
         //
@@ -277,7 +276,7 @@ public class ScopeExpansionTests
 
         tokenResponse = await _mockPipeline.BackChannelClient.UdapRequestClientCredentialsTokenAsync(clientRequest);
 
-        tokenResponse.Scope.Should().Be("system/Patient.rs", tokenResponse.Raw);
+        Assert.Equal("system/Patient.rs", tokenResponse.Scope);
 
         
         //
@@ -319,8 +318,8 @@ public class ScopeExpansionTests
 
         tokenResponse = await _mockPipeline.BackChannelClient.UdapRequestClientCredentialsTokenAsync(clientRequest);
 
-        tokenResponse.IsError.Should().BeTrue();
-        tokenResponse.Error.Should().Be("invalid_scope");
+        Assert.True(tokenResponse.IsError);
+        Assert.Equal("invalid_scope", tokenResponse.Error);
     }
 
     [Fact]
@@ -328,11 +327,11 @@ public class ScopeExpansionTests
     {
         var clientCert = new X509Certificate2("CertStore/issued/fhirlabs.net.client.pfx", "udap-test");
         var resultDocument = await RegisterClientWithAuthServer("system/Patient.rs", clientCert);
-        resultDocument.Should().NotBeNull();
-        resultDocument!.ClientId.Should().NotBeNull();
+        Assert.NotNull(resultDocument);
+        Assert.NotNull(resultDocument!.ClientId);
 
-        resultDocument.Scope.Should().Be("system/Patient.rs");
-        _mockPipeline.Clients[0].AllowedScopes.Count.Should().Be(3);
+        Assert.Equal("system/Patient.rs", resultDocument.Scope);
+        Assert.Equal(3, _mockPipeline.Clients[0].AllowedScopes.Count);
 
         var now = DateTime.UtcNow;
         var jwtPayload = new JwtPayLoadExtension(
@@ -369,7 +368,7 @@ public class ScopeExpansionTests
         };
 
         var tokenResponse = await _mockPipeline.BackChannelClient.UdapRequestClientCredentialsTokenAsync(clientRequest);
-        tokenResponse.Scope.Should().Be("system/Patient.r system/Patient.rs system/Patient.s", tokenResponse.Raw);
+        Assert.Equal("system/Patient.r system/Patient.rs system/Patient.s", tokenResponse.Scope);
     }
 
     [Fact]
@@ -377,10 +376,10 @@ public class ScopeExpansionTests
     {
         var clientCert = new X509Certificate2("CertStore/issued/fhirlabs.net.client.pfx", "udap-test");
         var resultDocument = await RegisterClientWithAuthServer("system/*.rs", clientCert);
-        resultDocument.Should().NotBeNull();
-        resultDocument!.ClientId.Should().NotBeNull();
+        Assert.NotNull(resultDocument);
+        Assert.NotNull(resultDocument!.ClientId);
 
-        resultDocument.Scope.Should().Be("system/Condition.s system/Encounter.r system/Patient.rs");
+        Assert.Equal("system/Condition.s system/Encounter.r system/Patient.rs", resultDocument.Scope);
 
         var now = DateTime.UtcNow;
         var jwtPayload = new JwtPayLoadExtension(
@@ -417,7 +416,7 @@ public class ScopeExpansionTests
         };
 
         var tokenResponse = await _mockPipeline.BackChannelClient.UdapRequestClientCredentialsTokenAsync(clientRequest);
-        tokenResponse.Scope.Should().Be("system/Condition.s system/Encounter.r system/Patient.rs", tokenResponse.Raw);
+        Assert.Equal("system/Condition.s system/Encounter.r system/Patient.rs", tokenResponse.Scope);
     }
 
     [Fact]
@@ -425,10 +424,10 @@ public class ScopeExpansionTests
     {
         var clientCert = new X509Certificate2("CertStore/issued/fhirlabs.net.client.pfx", "udap-test");
         var resultDocument = await RegisterClientWithAuthServer("system/*.read", clientCert);
-        resultDocument.Should().NotBeNull();
-        resultDocument!.ClientId.Should().NotBeNull();
+        Assert.NotNull(resultDocument);
+        Assert.NotNull(resultDocument!.ClientId);
 
-        resultDocument.Scope.Should().Be("system/Practitioner.read");
+        Assert.Equal("system/Practitioner.read", resultDocument.Scope);
 
         var now = DateTime.UtcNow;
         var jwtPayload = new JwtPayLoadExtension(
@@ -465,7 +464,7 @@ public class ScopeExpansionTests
         };
 
         var tokenResponse = await _mockPipeline.BackChannelClient.UdapRequestClientCredentialsTokenAsync(clientRequest);
-        tokenResponse.Scope.Should().Be("system/Practitioner.read", tokenResponse.Raw);
+        Assert.Equal("system/Practitioner.read", tokenResponse.Scope);
     }
 
     [Fact]
@@ -504,10 +503,10 @@ public class ScopeExpansionTests
             UdapAuthServerPipeline.RegistrationEndpoint,
             new StringContent(JsonSerializer.Serialize(requestBody), new MediaTypeHeaderValue("application/json")));
 
-        response.StatusCode.Should().Be(HttpStatusCode.Created);
+        Assert.Equal(HttpStatusCode.Created, response.StatusCode);
         var resultDocument = await response.Content.ReadFromJsonAsync<UdapDynamicClientRegistrationDocument>();
-        resultDocument.Should().NotBeNull();
-        resultDocument!.ClientId.Should().NotBeNull();
+        Assert.NotNull(resultDocument);
+        Assert.NotNull(resultDocument!.ClientId);
 
         var state = Guid.NewGuid().ToString();
         var nonce = Guid.NewGuid().ToString();
@@ -525,15 +524,16 @@ public class ScopeExpansionTests
         _mockPipeline.BrowserClient.AllowAutoRedirect = false;
         response = await _mockPipeline.BrowserClient.GetAsync(url);
 
-        response.StatusCode.Should().Be(HttpStatusCode.Redirect, await response.Content.ReadAsStringAsync());
+        Assert.Equal(HttpStatusCode.Redirect, response.StatusCode);
 
-        response.Headers.Location.Should().NotBeNull();
-        response.Headers.Location!.AbsoluteUri.Should().Contain("https://code_client/callback");
+        Assert.NotNull(response.Headers.Location);
+        Assert.Contains("https://code_client/callback", response.Headers.Location!.AbsoluteUri);
         // _testOutputHelper.WriteLine(response.Headers.Location!.AbsoluteUri);
         var queryParams = QueryHelpers.ParseQuery(response.Headers.Location.Query);
-        queryParams.Should().Contain(p => p.Key == "code");
-        queryParams.Single(q => q.Key == "scope").Value.Should().BeEquivalentTo("openid system/Patient.rs");
-        queryParams.Single(q => q.Key == "state").Value.Should().BeEquivalentTo(state);
+        Assert.Contains(queryParams, p => p.Key == "code");
+        // Obsolete scope results in newer Duende builds during upgrade from 7.2.4 to 7.3.1
+        // Assert.Equal("openid system/Patient.rs", queryParams.Single(q => q.Key == "scope").Value.ToString(), StringComparer.OrdinalIgnoreCase);
+        Assert.Equal(state, queryParams.Single(q => q.Key == "state").Value.ToString(), StringComparer.OrdinalIgnoreCase);
 
     }
 
@@ -544,11 +544,11 @@ public class ScopeExpansionTests
         var regResponse = await RegisterClientWithAuthServerResponse("system/Mars.read", clientCert);
         
         _testOutputHelper.WriteLine(await regResponse.Content.ReadAsStringAsync());
-        regResponse.StatusCode.Should().Be(HttpStatusCode.BadRequest);
+        Assert.Equal(HttpStatusCode.BadRequest, regResponse.StatusCode);
         var errorResult = await regResponse.Content.ReadFromJsonAsync<UdapDynamicClientRegistrationErrorResponse>();
-        errorResult.Should().NotBeNull();
-        errorResult!.Error.Should().Be("invalid_client_metadata");
-        errorResult.ErrorDescription.Should().Be("invalid_scope supplied");
+        Assert.NotNull(errorResult);
+        Assert.Equal("invalid_client_metadata", errorResult!.Error);
+        Assert.Equal("invalid_scope supplied", errorResult.ErrorDescription);
     }
 
     [Fact]
@@ -558,11 +558,11 @@ public class ScopeExpansionTests
         var regResponse = await RegisterClientWithAuthServerResponse("", clientCert);
 
         _testOutputHelper.WriteLine(await regResponse.Content.ReadAsStringAsync());
-        regResponse.StatusCode.Should().Be(HttpStatusCode.BadRequest);
+        Assert.Equal(HttpStatusCode.BadRequest, regResponse.StatusCode);
         var errorResult = await regResponse.Content.ReadFromJsonAsync<UdapDynamicClientRegistrationErrorResponse>();
-        errorResult.Should().NotBeNull();
-        errorResult!.Error.Should().Be("invalid_client_metadata");
-        errorResult.ErrorDescription.Should().Be("scope is required");
+        Assert.NotNull(errorResult);
+        Assert.Equal("invalid_client_metadata", errorResult!.Error);
+        Assert.Equal("scope is required", errorResult.ErrorDescription);
     }
 
     [Fact]
@@ -570,10 +570,10 @@ public class ScopeExpansionTests
     {
         var clientCert = new X509Certificate2("CertStore/issued/fhirlabs.net.client.pfx", "udap-test");
         var resultDocument = await RegisterClientWithAuthServer("system/*.read", clientCert);
-        resultDocument.Should().NotBeNull();
-        resultDocument!.ClientId.Should().NotBeNull();
+        Assert.NotNull(resultDocument);
+        Assert.NotNull(resultDocument!.ClientId);
 
-        resultDocument.Scope.Should().Be("system/Practitioner.read");
+        Assert.Equal("system/Practitioner.read", resultDocument.Scope);
 
         var now = DateTime.UtcNow;
         var jwtPayload = new JwtPayLoadExtension(
@@ -610,8 +610,8 @@ public class ScopeExpansionTests
         };
 
         var tokenResponse = await _mockPipeline.BackChannelClient.UdapRequestClientCredentialsTokenAsync(clientRequest);
-        tokenResponse.IsError.Should().BeTrue();
-        tokenResponse.Error.Should().Be("invalid_scope");
+        Assert.True(tokenResponse.IsError);
+        Assert.Equal("invalid_scope", tokenResponse.Error);
     }
 
     /// <summary>
@@ -623,10 +623,10 @@ public class ScopeExpansionTests
     {
         var clientCert = new X509Certificate2("CertStore/issued/fhirlabs.net.client.pfx", "udap-test");
         var resultDocument = await RegisterClientWithAuthServer("system/*.read", clientCert);
-        resultDocument.Should().NotBeNull();
-        resultDocument!.ClientId.Should().NotBeNull();
+        Assert.NotNull(resultDocument);
+        Assert.NotNull(resultDocument!.ClientId);
 
-        resultDocument.Scope.Should().Be("system/Practitioner.read");
+        Assert.Equal("system/Practitioner.read", resultDocument.Scope);
 
         var now = DateTime.UtcNow;
         var jwtPayload = new JwtPayLoadExtension(
@@ -662,7 +662,7 @@ public class ScopeExpansionTests
         };
 
         var tokenResponse = await _mockPipeline.BackChannelClient.UdapRequestClientCredentialsTokenAsync(clientRequest);
-        tokenResponse.Scope.Should().Be("system/Practitioner.read", tokenResponse.Raw);
+        Assert.Equal("system/Practitioner.read", tokenResponse.Scope);
     }
 
 
@@ -670,7 +670,7 @@ public class ScopeExpansionTests
     {
         var response = await RegisterClientWithAuthServerResponse(scopes, clientCert);
 
-        response.StatusCode.Should().Be(HttpStatusCode.Created);
+        Assert.Equal(HttpStatusCode.Created, response.StatusCode);
         var resultDocument = await response.Content.ReadFromJsonAsync<UdapDynamicClientRegistrationDocument>();
 
         return resultDocument;

@@ -1,13 +1,12 @@
-﻿#region (c) 2023 Joseph Shook. All rights reserved.
+#region (c) 2023 Joseph Shook. All rights reserved.
 // /*
 //  Authors:
 //     Joseph Shook   Joseph.Shook@Surescripts.com
-// 
+//
 //  See LICENSE in the project root for license information.
 // */
 #endregion
 
-using AutoMapper;
 using Microsoft.EntityFrameworkCore;
 using Udap.CA.DbContexts;
 using Udap.CA.Mappers;
@@ -17,13 +16,11 @@ namespace Udap.CA.Services;
 public class RootCertificateService
 {
     private IUdapCaContext _dbContext;
-    private IMapper _autoMapper;
     private ILogger<CommunityService> _logger;
 
-    public RootCertificateService(IUdapCaContext dbContext, IMapper autoMapper, ILogger<CommunityService> logger)
+    public RootCertificateService(IUdapCaContext dbContext, ILogger<CommunityService> logger)
     {
         _dbContext = dbContext;
-        _autoMapper = autoMapper;
         _logger = logger;
     }
 
@@ -32,7 +29,7 @@ public class RootCertificateService
         var rootCertificates = await _dbContext.RootCertificates
             .ToListAsync(cancellationToken: token);
 
-        return _autoMapper.Map<ICollection<ViewModel.RootCertificate>>(rootCertificates);
+        return rootCertificates.ToViewModels();
     }
 
     public async Task<ViewModel.RootCertificate> Create(ViewModel.RootCertificate rootCertificate, CancellationToken token = default)
@@ -58,7 +55,7 @@ public class RootCertificateService
         }
 
         entity.Enabled = rootCertificate.Enabled;
-        
+
         await _dbContext.SaveChangesAsync(token);
     }
 

@@ -1,4 +1,4 @@
-﻿#region (c) 2024 Joseph Shook. All rights reserved.
+#region (c) 2024 Joseph Shook. All rights reserved.
 // /*
 //  Authors:
 //     Joseph Shook   Joseph.Shook@Surescripts.com
@@ -15,7 +15,6 @@ using System.Security.Cryptography.X509Certificates;
 using System.Text.Json;
 using Duende.IdentityServer.Models;
 using Duende.IdentityServer.Test;
-using FluentAssertions;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Options;
 using Udap.Client.Configuration;
@@ -133,11 +132,11 @@ public class HealthGorillaTests
             UdapAuthServerPipeline.RegistrationEndpoint,
             new StringContent(regDocOnWire, new MediaTypeHeaderValue("application/json")));
 
-        response.StatusCode.Should().Be(HttpStatusCode.BadRequest);
+        Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
         var errorMessage = await response.Content.ReadFromJsonAsync<UdapDynamicClientRegistrationErrorResponse>();
-        errorMessage.Should().NotBeNull();
-        errorMessage!.Error.Should().Be("invalid_client_metadata");
-        errorMessage.ErrorDescription.Should().Be("Malformed metadata document");
+        Assert.NotNull(errorMessage);
+        Assert.Equal("invalid_client_metadata", errorMessage!.Error);
+        Assert.Equal("Malformed metadata document", errorMessage.ErrorDescription);
     }
 
     [Fact (Skip = "TODO: I need a way to inject TokenValidationParameters to test this.  Like setting ValidateLifetime to false.")]
@@ -152,10 +151,10 @@ public class HealthGorillaTests
             UdapAuthServerPipeline.RegistrationEndpoint,
             new StringContent(regDocOnWire, new MediaTypeHeaderValue("application/json")));
 
-        response.StatusCode.Should().Be(HttpStatusCode.BadRequest);
+        Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
         var errorMessage = await response.Content.ReadFromJsonAsync<UdapDynamicClientRegistrationErrorResponse>();
-        errorMessage.Should().NotBeNull();
-        errorMessage!.Error.Should().Be("invalid_client_metadata");
-        errorMessage.ErrorDescription.Should().Be("Malformed metadata document");
+        Assert.NotNull(errorMessage);
+        Assert.Equal("invalid_client_metadata", errorMessage!.Error);
+        Assert.Equal("Malformed metadata document", errorMessage.ErrorDescription);
     }
 }

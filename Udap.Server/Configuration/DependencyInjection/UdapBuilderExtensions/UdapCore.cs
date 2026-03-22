@@ -24,9 +24,10 @@ using Udap.Common.Certificates;
 using Udap.Common.Extensions;
 using Udap.Server;
 using Udap.Server.Configuration.DependencyInjection;
-using Udap.Server.DbContexts;
-using Udap.Server.Options;
 using Udap.Server.ResponseHandling;
+using Udap.Server.Storage.DbContexts;
+using Udap.Server.Storage.Options;
+using Udap.Server.Storage.Stores;
 using Udap.Server.Stores;
 using Udap.Server.Validation;
 using Constants = Udap.Server.Constants;
@@ -76,12 +77,7 @@ public static  class UdapServiceBuilderExtensionsCore
         return builder;
     }
 
-    public static IUdapServiceBuilder AddUdapConfigurationStore(
-        this IUdapServiceBuilder builder,
-        Action<UdapConfigurationStoreOptions>? storeOptionAction = null)
-    {
-        return builder.AddUdapConfigurationStore<UdapDbContext>(storeOptionAction);
-    }
+    
 
     public static IUdapServiceBuilder AddUdapConfigurationStore<TContext>(
         this IUdapServiceBuilder builder,

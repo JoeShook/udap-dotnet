@@ -7,20 +7,24 @@
 // */
 #endregion
 
-using System.Security.Cryptography.X509Certificates;
-using System.Text.Json;
 using Duende.IdentityServer;
 using Duende.IdentityServer.Configuration;
 using Duende.IdentityServer.Models;
 using Duende.IdentityServer.Services;
 using Duende.IdentityServer.Validation;
+using Microsoft.AspNetCore.Http;
+using Microsoft.AspNetCore.Http.Extensions;
 using Microsoft.Extensions.Logging;
 using Microsoft.IdentityModel.JsonWebTokens;
 using Microsoft.IdentityModel.Tokens;
+using System.Security.Cryptography.X509Certificates;
+using System.Text.Json;
 using Udap.Common.Certificates;
 using Udap.Common.Extensions;
 using Udap.Model;
 using Udap.Server.Extensions;
+using Udap.Server.Storage;
+using Udap.Server.Storage.Extensions;
 using Udap.Server.Storage.Stores;
 using Udap.Util.Extensions;
 
@@ -37,6 +41,7 @@ public class UdapJwtSecretValidator : ISecretValidator
     private readonly IdentityServerOptions _options;
     private readonly TrustChainValidator _trustChainValidator;
     private readonly IUdapClientRegistrationStore _clientStore;
+    private readonly IHttpContextAccessor _httpContextAccessor;
     private readonly ILogger _logger;
 
     private const string Purpose = nameof(UdapJwtSecretValidator);
@@ -48,6 +53,7 @@ public class UdapJwtSecretValidator : ISecretValidator
         IdentityServerOptions options,
         TrustChainValidator trustChainValidator,
         IUdapClientRegistrationStore clientStore,
+        IHttpContextAccessor httpContextAccessor,
         ILogger<UdapJwtSecretValidator> logger)
     {
         _issuerNameService = issuerNameService;
@@ -56,13 +62,11 @@ public class UdapJwtSecretValidator : ISecretValidator
         _options = options;
         _trustChainValidator = trustChainValidator;
         _clientStore = clientStore;
+        _httpContextAccessor = httpContextAccessor;
 
         _logger = logger;
     }
-
-
-    //Todo: Write workflow diagrams to describe this process
-
+    
     /// <summary>Validates a secret</summary>
     /// <param name="secrets">The stored secrets.</param>
     /// <param name="parsedSecret">The received secret.</param>
@@ -71,35 +75,22 @@ public class UdapJwtSecretValidator : ISecretValidator
     {
         var fail = new SecretValidationResult { Success = false };
         var success = new SecretValidationResult { Success = true };
-
-        await Task.Delay(50);
-
+        
         _logger.LogDebug("Parsed secret: {ParsedSecret}", JsonSerializer.Serialize(parsedSecret));
-
-        // return success;
 
         if (parsedSecret.Type != IdentityServerConstants.ParsedSecretTypes.JwtBearer)
         {
             return fail;
         }
 
-        if (!(parsedSecret.Credential is string jwtTokenString))
+        if (parsedSecret.Credential is not string clientAssertion)
         {
             _logger.LogError("ParsedSecret.Credential is not a string.");
             return fail;
         }
 
-        var validAudiences = new[]
-        {
-                // token endpoint URL
-                string.Concat(_urls.BaseUrl.EnsureTrailingSlash(), Constants.ProtocolRoutePaths.Token),
-                // TODO: remove the issuer URL in a future major release?
-                // issuer URL
-                string.Concat((await _issuerNameService.GetCurrentAsync()).EnsureTrailingSlash(), Constants.ProtocolRoutePaths.Token)
-        }.Distinct();
-
         var tokenHandler = new JsonWebTokenHandler() { MaximumTokenSizeInBytes = _options.InputLengthRestrictions.Jwt };
-        
+
         var tokenValidationParameters = new TokenValidationParameters
         {
             IssuerSigningKeys = parsedSecret.GetUdapKeys(),
@@ -108,28 +99,30 @@ public class UdapJwtSecretValidator : ISecretValidator
             ValidIssuer = parsedSecret.Id,
             ValidateIssuer = true,
 
-            ValidAudiences = validAudiences,
             ValidateAudience = true,
-
+            ValidAudience = _httpContextAccessor.HttpContext?.Request.GetDisplayUrl(),
+            
             RequireSignedTokens = true,
             RequireExpirationTime = true,
-
-            ValidAlgorithms =  [ 
+            
+            ValidAlgorithms =
+            [
                 UdapConstants.SupportedAlgorithm.RS256, UdapConstants.SupportedAlgorithm.RS384,
-                UdapConstants.SupportedAlgorithm.ES256, UdapConstants.SupportedAlgorithm.ES384 ],
+                UdapConstants.SupportedAlgorithm.ES256, UdapConstants.SupportedAlgorithm.ES384
+            ],
 
             ClockSkew = TimeSpan.FromMinutes(5),
 
             ValidateSignatureLast = true
         };
         
-        var result = await tokenHandler.ValidateTokenAsync(jwtTokenString, tokenValidationParameters);
+        var result = await tokenHandler.ValidateTokenAsync(clientAssertion, tokenValidationParameters);
         
         if (!result.IsValid)
         {
             _logger.LogError(result.Exception, "JWT token validation error for client_id: {ClientId}", parsedSecret.Id);
 
-            var jsonWebToken = tokenHandler.ReadJsonWebToken(jwtTokenString);
+            var jsonWebToken = tokenHandler.ReadJsonWebToken(clientAssertion);
 
             if (!jsonWebToken!.TryGetHeaderValue(JwtHeaderParameterNames.Alg, out string _))
             {
@@ -141,23 +134,24 @@ public class UdapJwtSecretValidator : ISecretValidator
                 _logger.LogError("Missing jwt x5c claim in header for client_id: {ClientId}", parsedSecret.Id);
             }
 
+            SetErrorDescription("Client assertion JWT validation failed");
             return fail;
         }
 
         var jwtToken = (JsonWebToken)result.SecurityToken;
 
-        
         if (jwtToken.Subject != jwtToken.Issuer)
         {
             _logger.LogError("Both 'sub' and 'iss' in the client assertion token must have a value of client_id.");
+            SetErrorDescription("Both 'sub' and 'iss' in the client assertion token must have a value of client_id");
             return fail;
         }
-            
 
         var exp = jwtToken.ValidTo;
         if (exp == DateTime.MinValue)
         {
             _logger.LogError("exp is missing.");
+            SetErrorDescription("exp claim is missing from client assertion");
             return fail;
         }
 
@@ -165,12 +159,14 @@ public class UdapJwtSecretValidator : ISecretValidator
         if (jti.IsMissing())
         {
             _logger.LogError("jti is missing.");
+            SetErrorDescription("jti claim is missing from client assertion");
             return fail;
         }
 
         if (await _replayCache.ExistsAsync(Purpose, jti))
         {
             _logger.LogError("jti is found in replay cache. Possible replay attack.");
+            SetErrorDescription("jti is found in replay cache. Possible replay attack");
             return fail;
         }
         else
@@ -187,12 +183,13 @@ public class UdapJwtSecretValidator : ISecretValidator
 
             if (certChainList == null && secretList.Count == 0)
             {
-                var rolledSecrets = await _clientStore.RolloverClientSecrets(parsedSecret);
+                var rolledSecrets = await _clientStore.RolloverClientSecrets(parsedSecret.ToModel());
                 if (rolledSecrets == null || rolledSecrets.Count == 0)
                 {
                     _logger.LogWarning("Could not roll secret for client id: {ClientId}", parsedSecret.Id);
                 }
-                else{
+                else
+                {
                     certChainList = await rolledSecrets.GetUdapChainsAsync(_clientStore);
                 }
             }
@@ -206,25 +203,32 @@ public class UdapJwtSecretValidator : ISecretValidator
         if (certChainList == null || !certChainList.Any())
         {
             _logger.LogError("There are no anchors available to validate client assertion for client_id: {ClientId}", parsedSecret.Id);
-
+            SetErrorDescription("No trust anchors available to validate client assertion");
             return fail;
         }
 
         //
         // PKI chain validation, including CRL checking
         //
-        if (_trustChainValidator.IsTrustedCertificate(
+        if (!await _trustChainValidator.IsTrustedCertificateAsync(
                 parsedSecret.Id,
-                parsedSecret.GetUdapEndCert()!,
+                parsedSecret.ToModel().GetUdapEndCert()!,
                 new X509Certificate2Collection(certChainList.ToArray()),
-                new X509Certificate2Collection(certChainList.ToRootCertArray()),
-                out X509ChainElementCollection? _,
-                out _))
+                new X509Certificate2Collection(certChainList.ToRootCertArray())))
         {
-            return success;
+            SetErrorDescription("Certificate chain validation failed");
+            return fail;
         }
 
-        
-        return fail;
+        return success;
+    }
+
+    private void SetErrorDescription(string description)
+    {
+        var httpContext = _httpContextAccessor.HttpContext;
+        if (httpContext != null)
+        {
+            httpContext.Items[UdapServerConstants.HttpContextItems.UdapErrorDescription] = description;
+        }
     }
 }

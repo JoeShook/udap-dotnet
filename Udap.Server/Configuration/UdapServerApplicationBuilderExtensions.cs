@@ -24,7 +24,6 @@ public static class UdapServerApplicationBuilderExtensions
         app.UseMiddleware<UdapTokenResponseMiddleware>();
         app.UseMiddleware<UdapScopeEnrichmentMiddleware>();
         app.UseMiddleware<UdapAuthorizationResponseMiddleware>();
-        // app.UseMiddleware<UdapTieredOAuthMiddleware>();
 
         app.MapPost("/connect/register",
                 async (
@@ -43,39 +42,6 @@ public static class UdapServerApplicationBuilderExtensions
     }
 
     public static IApplicationBuilder UseUdapServer(this IApplicationBuilder app)
-    {
-        app.UseMiddleware<UdapTokenResponseMiddleware>();
-        app.UseMiddleware<UdapScopeEnrichmentMiddleware>();
-        app.UseMiddleware<UdapAuthorizationResponseMiddleware>();
-        // app.UseMiddleware<UdapTieredOAuthMiddleware>();
-
-        return app;
-    }
-
-    public static IApplicationBuilder UseUdapIdPServer(this WebApplication app)
-    {
-        app.UseMiddleware<UdapTokenResponseMiddleware>();
-        app.UseMiddleware<UdapScopeEnrichmentMiddleware>();
-        app.UseMiddleware<UdapAuthorizationResponseMiddleware>();
-        
-
-        app.MapPost("/connect/register",
-                async (
-                    HttpContext httpContext,
-                    [FromServices] UdapDynamicClientRegistrationEndpoint endpoint,
-                    CancellationToken token) =>
-                {
-                    await endpoint.Process(httpContext, token);
-                })
-            .AllowAnonymous()
-            .Produces(StatusCodes.Status200OK)
-            .Produces(StatusCodes.Status204NoContent)
-            .Produces(StatusCodes.Status400BadRequest);
-
-        return app;
-    }
-
-    public static IApplicationBuilder UseUdapIdPServer(this IApplicationBuilder app)
     {
         app.UseMiddleware<UdapTokenResponseMiddleware>();
         app.UseMiddleware<UdapScopeEnrichmentMiddleware>();

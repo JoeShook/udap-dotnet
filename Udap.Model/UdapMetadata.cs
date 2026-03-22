@@ -334,16 +334,25 @@ public class UdapMetadata
         var sb = new StringBuilder();
 
         sb.AppendLine("<!DOCTYPE html>");
-        sb.AppendLine("<HTML><head><title>Supported UDAP Communities</title></head>");
-        sb.AppendLine("<Body>");
+        sb.AppendLine("<html><head>");
+        sb.AppendLine("<title>Supported UDAP Communities</title>");
+        sb.AppendLine("<style>");
+        sb.AppendLine("  body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; max-width: 960px; margin: 2rem auto; padding: 0 1rem; color: #1a1a1a; }");
+        sb.AppendLine("  h1 { font-size: 1.4rem; border-bottom: 2px solid #0078d4; padding-bottom: 0.4rem; }");
+        sb.AppendLine("  .community { margin-bottom: 0.5rem; }");
+        sb.AppendLine("  .community a { color: #0078d4; text-decoration: none; font-size: 0.9rem; }");
+        sb.AppendLine("  .community a:hover { text-decoration: underline; }");
+        sb.AppendLine("</style>");
+        sb.AppendLine("</head><body>");
+        sb.AppendLine("<h1>Supported UDAP Communities</h1>");
 
         foreach (var community in Communities())
         {
-            sb.AppendLine($"<a href=\"{path.TrimEnd('/')}/.well-known/udap?community={community}\" target=\"_blank\">{community}</a><br/>");
+            var href = $"{path.TrimEnd('/')}/.well-known/udap?community={community}";
+            sb.AppendLine($"<div class=\"community\"><a href=\"{href}\" target=\"_blank\">{community}</a></div>");
         }
 
-        sb.AppendLine("</Body>");
-        sb.AppendLine("</HTML>");
+        sb.AppendLine("</body></html>");
         return sb.ToString();
     }
 

@@ -1,13 +1,12 @@
-﻿#region (c) 2023 Joseph Shook. All rights reserved.
+#region (c) 2023 Joseph Shook. All rights reserved.
 // /*
 //  Authors:
 //     Joseph Shook   Joseph.Shook@Surescripts.com
-// 
+//
 //  See LICENSE in the project root for license information.
 // */
 #endregion
 
-using AutoMapper;
 using Microsoft.EntityFrameworkCore;
 using Udap.CA.DbContexts;
 using Udap.CA.Mappers;
@@ -17,13 +16,11 @@ namespace Udap.CA.Services;
 public class CommunityService
 {
     private IUdapCaContext _dbContext;
-    private IMapper _autoMapper;
     private ILogger<CommunityService> _logger;
 
-    public CommunityService(IUdapCaContext dbContext, IMapper autoMapper, ILogger<CommunityService> logger)
+    public CommunityService(IUdapCaContext dbContext, ILogger<CommunityService> logger)
     {
         _dbContext = dbContext;
-        _autoMapper = autoMapper;
         _logger = logger;
     }
 
@@ -33,7 +30,7 @@ public class CommunityService
             .Include(c => c.RootCertificates)
             .ToListAsync(cancellationToken: token);
 
-        return _autoMapper.Map<ICollection<ViewModel.Community>>(communties);
+        return communties.ToViewModels();
     }
 
     public async Task<ViewModel.Community> Create(ViewModel.Community community, CancellationToken token = default)
@@ -41,7 +38,7 @@ public class CommunityService
         var entity = community.ToEntity();
         _dbContext.Communities.Add(entity);
         await _dbContext.SaveChangesAsync(token);
-        
+
         return entity.ToViewModel();
     }
 
@@ -60,7 +57,7 @@ public class CommunityService
 
         entity.Enabled = community.Enabled;
         entity.Name = community.Name;
-        
+
         await _dbContext.SaveChangesAsync(token);
     }
 

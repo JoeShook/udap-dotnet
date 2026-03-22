@@ -14,13 +14,22 @@ using Udap.Common.Models;
 
 namespace Udap.Common.Certificates;
 
+/// <summary>
+/// File-based implementation of <see cref="ITrustAnchorStore"/> that loads trust anchor
+/// certificates from CER files specified in the <see cref="UdapFileCertStoreManifest"/>.
+/// Supports hot-reload via <see cref="IOptionsMonitor{T}"/>.
+/// </summary>
 public class TrustAnchorFileStore : ITrustAnchorStore
 {
     private readonly IOptionsMonitor<UdapFileCertStoreManifest> _manifest;
     private readonly ILogger<TrustAnchorFileStore> _logger;
     private bool _resolved;
 
-
+    /// <summary>
+    /// Initializes a new instance of the <see cref="TrustAnchorFileStore"/>.
+    /// </summary>
+    /// <param name="manifest">The monitored certificate store manifest configuration.</param>
+    /// <param name="logger">The logger instance.</param>
     public TrustAnchorFileStore(
         IOptionsMonitor<UdapFileCertStoreManifest> manifest,
         ILogger<TrustAnchorFileStore> logger)
@@ -34,6 +43,7 @@ public class TrustAnchorFileStore : ITrustAnchorStore
         });
     }
 
+    /// <inheritdoc />
     public Task<ITrustAnchorStore> Resolve()
     {
         if (_resolved == false)
@@ -45,6 +55,7 @@ public class TrustAnchorFileStore : ITrustAnchorStore
         return Task.FromResult(this as ITrustAnchorStore);
     }
 
+    /// <inheritdoc />
     public ICollection<Anchor> AnchorCertificates { get; set; } = new HashSet<Anchor>();
 
     // TODO convert to Lazy<T> to protect from race conditions
@@ -69,7 +80,7 @@ public class TrustAnchorFileStore : ITrustAnchorStore
             {
                 if (communityAnchor.FilePath == null)
                 {
-                    throw new Exception($"Missing file path in on of the anchors {nameof(community.Anchors)}");
+                    throw new InvalidOperationException($"Missing file path in one of the anchors in {nameof(community.Anchors)}");
                 }
 
                 var path = Path.Combine(AppContext.BaseDirectory, communityAnchor.FilePath);

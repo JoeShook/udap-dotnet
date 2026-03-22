@@ -51,6 +51,7 @@ public class UdapDynamicClientRegistrationDocument : Dictionary<string, object>,
     private string? _tokenEndpointAuthMethod;
     private string? _scope;
     private Dictionary<string, object>? _extensions = [];
+    private bool? _dpopEnabled;
 
     /// <summary>
     /// Array of redirection URI strings for use in redirect-based flows
@@ -509,6 +510,33 @@ public class UdapDynamicClientRegistrationDocument : Dictionary<string, object>,
         }
     }
 
+    /// <summary>
+    /// Boolean indicator of whether the client is requesting DPoP
+    /// (Demonstrating Proof-of-Possession) token binding.
+    /// When true, the authorization server will require DPoP for this client.
+    /// </summary>
+    [JsonPropertyName(UdapConstants.RegistrationDocumentValues.DPoPEnabled)]
+    public bool? DPoPEnabled
+    {
+        get
+        {
+            _dpopEnabled ??= GetStandardBoolClaim(UdapConstants.RegistrationDocumentValues.DPoPEnabled);
+            return _dpopEnabled;
+        }
+        set
+        {
+            _dpopEnabled = value;
+            if (value.HasValue)
+            {
+                this[UdapConstants.RegistrationDocumentValues.DPoPEnabled] = value.Value;
+            }
+            else
+            {
+                this.Remove(UdapConstants.RegistrationDocumentValues.DPoPEnabled);
+            }
+        }
+    }
+
     public string? GetError()
     {
         return GetStandardClaim("error");
@@ -682,6 +710,29 @@ public class UdapDynamicClientRegistrationDocument : Dictionary<string, object>,
 
         return 0;
     }
+
+    internal bool? GetStandardBoolClaim(string claimType)
+    {
+        if (TryGetValue(claimType, out object? value))
+        {
+            if (value is bool boolVal)
+                return boolVal;
+
+            if (value is JsonElement element)
+            {
+                if (element.ValueKind == JsonValueKind.True)
+                    return true;
+                if (element.ValueKind == JsonValueKind.False)
+                    return false;
+            }
+
+            if (value is string str && bool.TryParse(str, out bool parsed))
+                return parsed;
+        }
+
+        return null;
+    }
+
     internal static object GetClaimValueUsingValueType(Claim claim)
     {
         if (claim.ValueType == ClaimValueTypes.String)

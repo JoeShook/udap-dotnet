@@ -6,7 +6,7 @@ using Duende.IdentityServer.Services;
 using Duende.IdentityServer.Stores;
 using Microsoft.AspNetCore.Mvc.Filters;
 using Microsoft.AspNetCore.Mvc.RazorPages;
-using Udap.Server;
+using Udap.Server.Storage;
 
 namespace Udap.Identity.Provider.Pages;
 

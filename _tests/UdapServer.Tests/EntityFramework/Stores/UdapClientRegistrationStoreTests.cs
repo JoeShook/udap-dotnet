@@ -1,4 +1,4 @@
-﻿#region (c) 2023 Joseph Shook. All rights reserved.
+﻿#region (c) 2023-2025 Joseph Shook. All rights reserved.
 // /*
 //  Authors:
 //     Joseph Shook   Joseph.Shook@Surescripts.com
@@ -8,14 +8,14 @@
 #endregion
 
 using Duende.IdentityServer.Models;
-using FluentAssertions;
+using Xunit;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
 using NSubstitute;
-using Udap.Server;
-using Udap.Server.DbContexts;
-using Udap.Server.Options;
-using Udap.Server.Stores;
+using Udap.Server.Storage;
+using Udap.Server.Storage.DbContexts;
+using Udap.Server.Storage.Options;
+using Udap.Server.Storage.Stores;
 
 namespace UdapServer.Tests.EntityFramework.Stores;
 
@@ -25,7 +25,7 @@ public class UdapClientRegistrationStoreTests : StorageFixture<UdapClientRegistr
     {
         foreach (var options in TestDatabaseProviders)
         {
-            using var context = new UdapDbContext((DbContextOptions<UdapDbContext>)options, true);
+            using var context = new UdapDbContext(options, true);
             context.Database.EnsureCreated();
         }
     }
@@ -47,29 +47,34 @@ public class UdapClientRegistrationStoreTests : StorageFixture<UdapClientRegistr
             {
                 new Secret("http://localhost"){ Type = UdapServerConstants.SecretTypes.UDAP_SAN_URI_ISS_NAME},
                 new Secret("http://community_1"){ Type = UdapServerConstants.SecretTypes.UDAP_COMMUNITY}
+            },
+            Properties = new Dictionary<string, string>
+            {
+                {UdapServerConstants.ClientPropertyConstants.Organization, UdapServerConstants.ClientPropertyConstants.DefaultOrgMap},
+                {UdapServerConstants.ClientPropertyConstants.DataHolder, UdapServerConstants.ClientPropertyConstants.DefaultOrgMap}
             }
         };
 
         await using var context = new UdapDbContext(options);
         var store = new UdapClientRegistrationStore(context, Substitute.For<ILogger<UdapClientRegistrationStore>>());
-        var result = await store.UpsertClient(testClient, default);
-        result.Should().BeFalse();
+        var result = await store.UpsertClient(testClient);
+        Assert.False(result);
 
         var client = await store.GetClient(testClient);
-        client.Should().NotBeNull();
-        client!.ClientId.Should().Be(testClient.ClientId);
-        client.RedirectUris.Single().Should().Be("http://localhost");
+        Assert.NotNull(client);
+        Assert.Equal(testClient.ClientId, client.ClientId);
+        Assert.Equal("http://localhost", client.RedirectUris.Single());
 
         //
         // Re-register with different RedirectUrl
         //
         testClient.RedirectUris = ["http://localhost2"];
-        result = await store.UpsertClient(testClient, default);
-        result.Should().BeTrue();
+        result = await store.UpsertClient(testClient);
+        Assert.True(result);
         client = await store.GetClient(testClient);
-        client.Should().NotBeNull();
-        client!.ClientId.Should().Be(testClient.ClientId);
-        client.RedirectUris.Single().Should().Be("http://localhost2");
+        Assert.NotNull(client);
+        Assert.Equal(testClient.ClientId, client.ClientId);
+        Assert.Equal("http://localhost2", client.RedirectUris.Single());
     }
 
     [Theory]
@@ -89,6 +94,11 @@ public class UdapClientRegistrationStoreTests : StorageFixture<UdapClientRegistr
             {
                 new Secret("http://localhost") { Type = UdapServerConstants.SecretTypes.UDAP_SAN_URI_ISS_NAME },
                 new Secret("http://community_1") { Type = UdapServerConstants.SecretTypes.UDAP_COMMUNITY }
+            },
+            Properties = new Dictionary<string, string>
+            {
+                {UdapServerConstants.ClientPropertyConstants.Organization, UdapServerConstants.ClientPropertyConstants.DefaultOrgMap},
+                {UdapServerConstants.ClientPropertyConstants.DataHolder, UdapServerConstants.ClientPropertyConstants.DefaultOrgMap}
             }
         };
 
@@ -105,6 +115,11 @@ public class UdapClientRegistrationStoreTests : StorageFixture<UdapClientRegistr
             {
                 new Secret("http://localhost"){ Type = UdapServerConstants.SecretTypes.UDAP_SAN_URI_ISS_NAME},
                 new Secret("http://community_2"){ Type = UdapServerConstants.SecretTypes.UDAP_COMMUNITY}
+            },
+            Properties = new Dictionary<string, string>
+            {
+                {UdapServerConstants.ClientPropertyConstants.Organization, UdapServerConstants.ClientPropertyConstants.DefaultOrgMap},
+                {UdapServerConstants.ClientPropertyConstants.DataHolder, UdapServerConstants.ClientPropertyConstants.DefaultOrgMap}
             }
         };
 
@@ -113,26 +128,26 @@ public class UdapClientRegistrationStoreTests : StorageFixture<UdapClientRegistr
         {
             var store = new UdapClientRegistrationStore(context,
                 Substitute.For<ILogger<UdapClientRegistrationStore>>());
-            var result = await store.UpsertClient(testClient_community1, default);
-            result.Should().BeFalse();
+            var result = await store.UpsertClient(testClient_community1);
+            Assert.False(result);
 
             var client = await store.GetClient(testClient_community1);
-            client.Should().NotBeNull();
-            client!.ClientId.Should().Be(testClient_community1.ClientId);
-            client.RedirectUris.Single().Should().Be("http://localhost");
+            Assert.NotNull(client);
+            Assert.Equal(testClient_community1.ClientId, client.ClientId);
+            Assert.Equal("http://localhost", client.RedirectUris.Single());
         }
 
         // Second Register
         await using (var context = new UdapDbContext(options))
         {
             var store = new UdapClientRegistrationStore(context, Substitute.For<ILogger<UdapClientRegistrationStore>>());
-            var result = await store.UpsertClient(testClient_community2, default);
-            result.Should().BeFalse();
+            var result = await store.UpsertClient(testClient_community2);
+            Assert.False(result);
 
             var client = await store.GetClient(testClient_community2);
-            client.Should().NotBeNull();
-            client!.ClientId.Should().Be(testClient_community2.ClientId);
-            client.RedirectUris.Single().Should().Be("http://localhost2");
+            Assert.NotNull(client);
+            Assert.Equal(testClient_community2.ClientId, client.ClientId);
+            Assert.Equal("http://localhost2", client.RedirectUris.Single());
         }
 
 
@@ -143,16 +158,16 @@ public class UdapClientRegistrationStoreTests : StorageFixture<UdapClientRegistr
 
             var store = new UdapClientRegistrationStore(context,
                 Substitute.For<ILogger<UdapClientRegistrationStore>>());
-            var result = await store.CancelRegistration(testClient_community1, default);
-            // result.Should().Be(1);
+            var result = await store.CancelRegistration(testClient_community1);
+            Assert.Equal(1, result);
 
             // Client 1 is deleted
             var client = await store.GetClient(testClient_community1);
-            client.Should().BeNull();
+            Assert.Null(client);
 
             // Client 2 still exists
             client = await store.GetClient(testClient_community2);
-            client.Should().NotBeNull();
+            Assert.NotNull(client);
         }
     }
 }

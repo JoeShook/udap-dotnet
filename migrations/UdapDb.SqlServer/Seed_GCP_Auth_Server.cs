@@ -1,4 +1,4 @@
-﻿#region (c) 2023 Joseph Shook. All rights reserved.
+﻿#region (c) 2023-2025 Joseph Shook. All rights reserved.
 // /*
 //  Authors:
 //     Joseph Shook   Joseph.Shook@Surescripts.com
@@ -19,11 +19,10 @@ using Microsoft.EntityFrameworkCore;
 using Serilog;
 using Udap.Common.Extensions;
 using Udap.Model;
-using Udap.Server.DbContexts;
-using Udap.Server.Entities;
+using Udap.Server.Storage.Entities;
 using Udap.Server.Models;
+using Udap.Server.Storage.DbContexts;
 using Udap.Server.Storage.Stores;
-using Udap.Server.Stores;
 using Udap.Util.Extensions;
 using ILogger = Serilog.ILogger;
 

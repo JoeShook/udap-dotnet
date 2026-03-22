@@ -17,13 +17,22 @@ using Udap.Util.Extensions;
 
 namespace Udap.Common.Certificates;
 
+/// <summary>
+/// File-based implementation of <see cref="ICertificateStore"/> that loads trust anchors and
+/// issued certificates from PFX/CER files specified in the <see cref="UdapFileCertStoreManifest"/>.
+/// Supports hot-reload via <see cref="IOptionsMonitor{T}"/>.
+/// </summary>
 public class FileCertificateStore : ICertificateStore
 {
     private readonly IOptionsMonitor<UdapFileCertStoreManifest> _manifest;
     private readonly ILogger<FileCertificateStore> _logger;
     private bool _resolved;
 
-
+    /// <summary>
+    /// Initializes a new instance of the <see cref="FileCertificateStore"/>.
+    /// </summary>
+    /// <param name="manifest">The monitored certificate store manifest configuration.</param>
+    /// <param name="logger">The logger instance.</param>
     public FileCertificateStore(
         IOptionsMonitor<UdapFileCertStoreManifest> manifest,
         ILogger<FileCertificateStore> logger)
@@ -37,6 +46,7 @@ public class FileCertificateStore : ICertificateStore
         });
     }
 
+    /// <inheritdoc />
     public Task<ICertificateStore> Resolve()
     {
         if (_resolved == false)
@@ -48,9 +58,10 @@ public class FileCertificateStore : ICertificateStore
         return Task.FromResult(this as ICertificateStore);
     }
 
+    /// <inheritdoc />
     public ICollection<Anchor> AnchorCertificates { get; set; } = new HashSet<Anchor>();
 
-
+    /// <inheritdoc />
     public ICollection<IssuedCertificate> IssuedCertificates { get; set; } = new HashSet<IssuedCertificate>();
 
     // TODO convert to Lazy<T> to protect from race conditions
@@ -76,7 +87,7 @@ public class FileCertificateStore : ICertificateStore
             {
                 if (communityAnchor.FilePath == null)
                 {
-                    throw new Exception($"Missing file path in on of the anchors {nameof(community.Anchors)}");
+                    throw new InvalidOperationException($"Missing file path in one of the anchors in {nameof(community.Anchors)}");
                 }
 
                 var path = Path.Combine(AppContext.BaseDirectory, communityAnchor.FilePath);

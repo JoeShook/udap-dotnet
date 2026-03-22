@@ -1,7 +1,7 @@
 ﻿<Project Sdk="Microsoft.NET.Sdk">
 
   <PropertyGroup>
-    <TargetFrameworks>net8.0;net9.0</TargetFrameworks>
+    <TargetFrameworks>net8.0;net9.0;net10.0</TargetFrameworks>
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
 
@@ -26,7 +26,6 @@
 
   <ItemGroup>    
     <PackageReference Include="Firely.Fhir.Packages" />
-    <PackageReference Include="FluentAssertions" />
     <PackageReference Include="MartinCostello.Logging.XUnit" />
     <PackageReference Include="Meziantou.Extensions.Logging.Xunit" />
     <PackageReference Include="Microsoft.Data.SqlClient" />

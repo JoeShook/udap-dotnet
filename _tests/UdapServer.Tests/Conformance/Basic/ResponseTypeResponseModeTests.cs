@@ -1,4 +1,4 @@
-﻿#region (c) 2023 Joseph Shook. All rights reserved.
+#region (c) 2023 Joseph Shook. All rights reserved.
 // /*
 //  Authors:
 //     Joseph Shook   Joseph.Shook@Surescripts.com
@@ -19,7 +19,6 @@
 using System.Security.Claims;
 using Duende.IdentityServer.Models;
 using Duende.IdentityServer.Test;
-using FluentAssertions;
 using UdapServer.Tests.Common;
 
 namespace UdapServer.Tests.Conformance.Basic;
@@ -101,6 +100,6 @@ public class ResponseTypeResponseModeTests
         _mockPipeline.BrowserClient.AllowAutoRedirect = true;
         await _mockPipeline.BrowserClient.GetAsync(url);
 
-        _mockPipeline.ErrorMessage.Error.Should().Be("invalid_request");
+        Assert.Equal("invalid_request", _mockPipeline.ErrorMessage.Error);
     }
 }

@@ -10,6 +10,7 @@
 using System.Globalization;
 using System.IdentityModel.Tokens.Jwt;
 using System.Security.Claims;
+using System.Security.Cryptography;
 using System.Security.Cryptography.X509Certificates;
 using System.Text;
 using System.Text.Encodings.Web;
@@ -79,14 +80,19 @@ public class TieredOAuthAuthenticationHandler : OAuthHandler<TieredOAuthAuthenti
         AddQueryString(queryStrings, properties, "client_id", true);
         AddQueryString(queryStrings, properties, OAuthChallengeProperties.ScopeKey, FormatScope, Options.Scope);
 
+        // PKCE - generate code_verifier and code_challenge
+        var codeVerifier = CryptoRandom.CreateUniqueId(32);
+        properties.Items[OidcConstants.TokenRequest.CodeVerifier] = codeVerifier;
+
+        using var sha256 = SHA256.Create();
+        var challengeBytes = sha256.ComputeHash(Encoding.ASCII.GetBytes(codeVerifier));
+        var codeChallenge = WebEncoders.Base64UrlEncode(challengeBytes);
+
+        queryStrings.Add(OidcConstants.AuthorizeRequest.CodeChallenge, codeChallenge);
+        queryStrings.Add(OidcConstants.AuthorizeRequest.CodeChallengeMethod, OidcConstants.CodeChallengeMethods.Sha256);
+
         var state = Options.StateDataFormat.Protect(properties);
         queryStrings.Add("state", state);
-
-        // Static configured Options
-        // if (!Options.AuthorizationEndpoint.IsNullOrEmpty())
-        // {
-        //     return QueryHelpers.AddQueryString(Options.AuthorizationEndpoint, queryStrings!);
-        // }
 
         var authEndpoint = properties.Parameters[UdapConstants.Discovery.AuthorizationEndpoint] as string ??
                            throw new InvalidOperationException("Missing IdP authorization endpoint.");
@@ -442,6 +448,12 @@ public class TieredOAuthAuthenticationHandler : OAuthHandler<TieredOAuthAuthenti
         //TODO algorithm selectable.
         var tokenRequest = tokenRequestBuilder.Build();
 
+        // PKCE - send the code_verifier stored during BuildChallengeUrl
+        if (context.Properties.Items.TryGetValue(OidcConstants.TokenRequest.CodeVerifier, out var codeVerifier))
+        {
+            tokenRequest.CodeVerifier = codeVerifier;
+        }
+
         var authTokenResponse = await _udapClient.ExchangeCodeForAuthTokenResponse(tokenRequest, Context.RequestAborted);
 
         return  authTokenResponse.ToMSAuthTokenResponse();
@@ -475,7 +487,7 @@ public class TieredOAuthAuthenticationHandler : OAuthHandler<TieredOAuthAuthenti
             }
         }
         
-        _udapClient.Problem += element => properties.Parameters.Add("Problem", element.ChainElementStatus.Summarize(TrustChainValidator.DefaultProblemFlags));
+        _udapClient.Problem += element => properties.Parameters.Add("Problem", element.Problems.Summarize(TrustChainValidator.DefaultProblemFlags));
         _udapClient.Untrusted += certificate2 => properties.Parameters.Add("Untrusted", certificate2.Subject);
         _udapClient.TokenError += message => properties.Parameters.Add("TokenError", message);
         

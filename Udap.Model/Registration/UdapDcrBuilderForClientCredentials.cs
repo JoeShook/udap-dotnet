@@ -202,6 +202,12 @@ public class UdapDcrBuilderForClientCredentials
         return this;
     }
 
+    public UdapDcrBuilderForClientCredentials WithDPoPEnabled(bool dpopEnabled)
+    {
+        _document.DPoPEnabled = dpopEnabled;
+        return this;
+    }
+
     public UdapDcrBuilderForClientCredentials WithLogoUri(string logoUri)
     {
         if (string.IsNullOrEmpty(logoUri))

@@ -10,11 +10,13 @@
 
 namespace Udap.Common.Metadata;
 
+/// <summary>
+/// Configuration model for a trust anchor certificate file reference in the certificate store manifest.
+/// </summary>
 public class AnchoFile
 {
     /// <summary>
-    /// Relative path
+    /// Gets or sets the file path relative to the application base directory (e.g., <c>CertStore/anchors/CA.cer</c>).
     /// </summary>
     public string? FilePath { get; set; }
-
 }

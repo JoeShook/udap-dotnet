@@ -2,14 +2,13 @@
 // /*
 //  Authors:
 //     Joseph Shook   Joseph.Shook@Surescripts.com
-// 
+//
 //  See LICENSE in the project root for license information.
 // */
 #endregion
 
 using System.Security.Cryptography.X509Certificates;
 using Udap.Common.Models;
-using Udap.Model.Registration;
 
 
 namespace Udap.Server.Registration;
@@ -23,13 +22,13 @@ public interface IUdapDynamicClientRegistrationValidator
     /// The validator is an implementation of <a href="https://www.udap.org/udap-dynamic-client-registration-stu1.html">
     /// UDAP Dynamic Client Registration section 4, Authorization Server validates request</a>
     /// </remarks>
-    /// <param name="request"></param>
+    /// <param name="context">The context carrying the registration request and state through the pipeline.</param>
     /// <param name="intermediateCertificates"></param>
     /// <param name="anchorCertificates"></param>
     /// <param name="anchors"></param>
     /// <returns></returns>
     Task<UdapDynamicClientRegistrationValidationResult> ValidateAsync(
-        UdapRegisterRequest request, 
+        UdapDynamicClientRegistrationContext context,
         X509Certificate2Collection? intermediateCertificates,
         X509Certificate2Collection anchorCertificates,
         IEnumerable<Anchor>? anchors);

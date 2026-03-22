@@ -76,7 +76,7 @@ public class UdapTokenResponseGenerator : TokenResponseGenerator
             };
 
             var idToken = await TokenService.CreateIdentityTokenAsync(tokenRequest);
-            AugmentClaims(idToken, request.ValidatedRequest);
+            await AugmentClaimsAsync(idToken, request.ValidatedRequest);
             var jwt = await TokenService.CreateSecurityTokenAsync(idToken);
             response.IdentityToken = jwt;
         }
@@ -84,8 +84,8 @@ public class UdapTokenResponseGenerator : TokenResponseGenerator
         return response;
     }
 
-    //TODO: Configure propagated claims and test with AspNetIdentity persistence.  
-    private void AugmentClaims(Token idToken, ValidatedRequest validationResult)
+    //TODO: Configure propagated claims and test with AspNetIdentity persistence.
+    private async Task AugmentClaimsAsync(Token idToken, ValidatedRequest validationResult)
     {
         var context = new ProfileDataRequestContext(
             validationResult.Subject!,
@@ -94,7 +94,7 @@ public class UdapTokenResponseGenerator : TokenResponseGenerator
             new List<string>() { UdapConstants.JwtClaimTypes.Hl7Identifier });
         // context.RequestedResources = validatedResources;
 
-        _profile.GetProfileDataAsync(context);
+        await _profile.GetProfileDataAsync(context);
 
         foreach (var contextIssuedClaim in context.IssuedClaims)
         {
