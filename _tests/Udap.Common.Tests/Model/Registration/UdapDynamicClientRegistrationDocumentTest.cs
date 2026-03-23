@@ -416,7 +416,6 @@ public class UdapDynamicClientRegistrationDocumentTest
         {
             UserInformation = relatedPersonElement,
             PatientInformation = patientElement,
-            IalVetted = identityTokenElement,
             IdToken = identityTokenElement
         };
 
@@ -444,10 +443,6 @@ public class UdapDynamicClientRegistrationDocumentTest
         Assert.DoesNotContain("https://udaped.fhirlabs.net/Policy/Consent/99", tefcaIas.SerializeToJson());
         tefcaIas = JsonSerializer.Deserialize<TEFCAIASAuthorizationExtension>(tefcaIas.SerializeToJson());
         Assert.Equal(0, tefcaIas!.ConsentPolicy!.Count);
-
-        Assert.Equal(identityTokenElement.GetRawText()
-            .Replace("\n", "").Replace("\r", "").Replace(": ", ":").Replace(",  ", ","),
-            tefcaIas.IalVetted?.GetRawText(), StringComparer.OrdinalIgnoreCase);
 
         Assert.Equal(identityTokenElement.GetRawText()
             .Replace("\n", "").Replace("\r", "").Replace(": ", ":").Replace(",  ", ","),

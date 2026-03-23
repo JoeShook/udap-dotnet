@@ -28,7 +28,6 @@ public class TEFCAIASAuthorizationExtension : IAuthorizationExtensionObject
     private ICollection<string>? _consentPolicy;
     private ICollection<string>? _consentReference;
     private JsonElement? _idToken;
-    private JsonElement? _ialVetted;
 
     public TEFCAIASAuthorizationExtension()
     {
@@ -119,28 +118,19 @@ public class TEFCAIASAuthorizationExtension : IAuthorizationExtensionObject
     }
 
     /// <summary>
-    /// id_token optional:
+    /// id_token required:
     ///
-    /// Additional token as per relevant SOP
+    /// The CSP-provided OpenID Connect token as further defined in
+    /// the Exchange Purpose (XP) Implementation SOP: Individual Access Services (IAS).
+    /// Responding server SHOULD respond with invalid_grant if missing.
+    ///
+    /// <a href="https://rce.sequoiaproject.org/wp-content/uploads/2026/02/SOP-Facilitated-FHIR-Implementation-2.0-Draft-508.pdf#page=16">SOP v2.0 — Table 4</a>
     /// </summary>
     [JsonPropertyName(TefcaConstants.TEFCAIASAuthorizationExtension.IdToken)]
     public JsonElement? IdToken
     {
         get => _idToken;
         set => _idToken = value;
-    }
-
-    /// <summary>
-    /// ial_vetted conditional:
-    ///
-    /// OIDC token provided by Identity Verifier when the Identity Verifier is not
-    /// the Responding Node. Responding server MAY respond with invalid_grant if missing.
-    /// </summary>
-    [JsonPropertyName(TefcaConstants.TEFCAIASAuthorizationExtension.IalVetted)]
-    public JsonElement? IalVetted
-    {
-        get => _ialVetted;
-        set => _ialVetted = value;
     }
 
     /// <inheritdoc />

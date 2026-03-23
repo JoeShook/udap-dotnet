@@ -48,8 +48,6 @@ public static class TefcaConstants
         public const string UserInformation = "user_information";
         /// <summary>FHIR US Core Patient Resource with all known demographics. <a href="https://rce.sequoiaproject.org/wp-content/uploads/2026/02/SOP-Facilitated-FHIR-Implementation-2.0-Draft-508.pdf#page=16">Table 4</a></summary>
         public const string PatientInformation = "patient_information";
-        /// <summary>OIDC token from Identity Verifier when not the Responding Node. <a href="https://rce.sequoiaproject.org/wp-content/uploads/2026/02/SOP-Facilitated-FHIR-Implementation-2.0-Draft-508.pdf#page=16">Table 4</a></summary>
-        public const string IalVetted = "ial_vetted";
         /// <summary>Access Consent Policy Identifier for identity proofing level of assurance. <a href="https://rce.sequoiaproject.org/wp-content/uploads/2026/02/SOP-Facilitated-FHIR-Implementation-2.0-Draft-508.pdf#page=17">Table 4</a></summary>
         public const string ConsentPolicy = "consent_policy";
         /// <summary>Array of FHIR DocumentReference or Consent resource URLs. <a href="https://rce.sequoiaproject.org/wp-content/uploads/2026/02/SOP-Facilitated-FHIR-Implementation-2.0-Draft-508.pdf#page=17">Table 4</a></summary>
