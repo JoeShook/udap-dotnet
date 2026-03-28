@@ -1213,7 +1213,7 @@ public class DefaultUdapAuthorizationExtensionValidatorTests
         var optionsMonitor = new OptionsMonitorForTests<ServerSettings>(settings);
         clientStore ??= Substitute.For<IUdapClientRegistrationStore>();
 
-        return new DefaultUdapAuthorizationExtensionValidator(optionsMonitor, clientStore, _logger);
+        return new DefaultUdapAuthorizationExtensionValidator(optionsMonitor, clientStore, Enumerable.Empty<ICommunityTokenValidator>(), _logger);
     }
 
     private static UdapAuthorizationExtensionValidationContext CreateContext(

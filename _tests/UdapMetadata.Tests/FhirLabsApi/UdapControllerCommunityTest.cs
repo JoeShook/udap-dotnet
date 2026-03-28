@@ -144,7 +144,7 @@ public class UdapControllerCommunityTest : IClassFixture<ApiForCommunityTestFixt
         var response = await client.GetAsync("fhir/r4/.well-known/udap/communities");
         response.EnsureSuccessStatusCode();
         var communities = await response.Content.ReadFromJsonAsync<List<string>>();
-        Assert.Equal(7, communities!.Count);
+        Assert.Equal(8, communities!.Count);
         Assert.Contains("udap://fhirlabs1/", communities);
         Assert.Contains("udap://Provider2", communities);
 

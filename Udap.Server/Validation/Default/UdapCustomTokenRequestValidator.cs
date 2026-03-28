@@ -85,13 +85,18 @@ public class UdapCustomTokenRequestValidator : ICustomTokenRequestValidator
             .FirstOrDefault(s => s.Type == UdapServerConstants.SecretTypes.UDAP_COMMUNITY)
             ?.Value;
 
+        var sanUri = request.Client.ClientSecrets
+            .FirstOrDefault(s => s.Type == UdapServerConstants.SecretTypes.UDAP_SAN_URI_ISS_NAME)
+            ?.Value;
+
         var extensionContext = new UdapAuthorizationExtensionValidationContext
         {
             ClientAssertionToken = jwtToken,
             ClientId = request.ClientId ?? string.Empty,
             Extensions = extensions,
             CommunityId = communityId,
-            GrantType = request.GrantType
+            GrantType = request.GrantType,
+            SanUri = sanUri
         };
 
         var result = await _extensionValidator.ValidateAsync(extensionContext);

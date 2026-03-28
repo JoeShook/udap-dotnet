@@ -162,7 +162,8 @@ public class TEFCAIASAuthorizationExtension : IAuthorizationExtensionObject
     }
 
     /// <inheritdoc />
-    public ICollection<string>? GetPurposeOfUse() => null;
+    public ICollection<string>? GetPurposeOfUse() =>
+        string.IsNullOrEmpty(PurposeOfUse) ? null : new[] { PurposeOfUse };
 
     /// <summary>
     /// Serializes this instance to JSON.

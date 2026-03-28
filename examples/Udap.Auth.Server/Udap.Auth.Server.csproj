@@ -45,6 +45,8 @@
 
   <ItemGroup Condition="'$(GCPDeploy)' == '' OR '$(GCPDeploy)' != 'true' ">
     <ProjectReference Include="../../Udap.Server/Udap.Server.csproj" />
+    <ProjectReference Include="../../Udap.Tefca.Model/Udap.Tefca.Model.csproj" />
+    <ProjectReference Include="../../Udap.Tefca.Server/Udap.Tefca.Server.csproj" />
     <ProjectReference Include="../../Udap.UI/Udap.UI.csproj" />
   </ItemGroup>
 

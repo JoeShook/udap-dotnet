@@ -25,15 +25,18 @@ public class DefaultUdapAuthorizationExtensionValidator : IUdapAuthorizationExte
 {
     private readonly IOptionsMonitor<ServerSettings> _serverSettings;
     private readonly IUdapClientRegistrationStore _clientStore;
+    private readonly IEnumerable<ICommunityTokenValidator> _communityTokenValidators;
     private readonly ILogger<DefaultUdapAuthorizationExtensionValidator> _logger;
 
     public DefaultUdapAuthorizationExtensionValidator(
         IOptionsMonitor<ServerSettings> serverSettings,
         IUdapClientRegistrationStore clientStore,
+        IEnumerable<ICommunityTokenValidator> communityTokenValidators,
         ILogger<DefaultUdapAuthorizationExtensionValidator> logger)
     {
         _serverSettings = serverSettings;
         _clientStore = clientStore;
+        _communityTokenValidators = communityTokenValidators;
         _logger = logger;
     }
 
@@ -99,6 +102,24 @@ public class DefaultUdapAuthorizationExtensionValidator : IUdapAuthorizationExte
             }
         }
 
+        // Community-specific token validation
+        if (!string.IsNullOrEmpty(resolved.CommunityName))
+        {
+            context.CommunityName = resolved.CommunityName;
+
+            foreach (var communityValidator in _communityTokenValidators)
+            {
+                if (communityValidator.AppliesToCommunity(resolved.CommunityName))
+                {
+                    var communityResult = await communityValidator.ValidateAsync(context);
+                    if (!communityResult.IsValid)
+                    {
+                        return communityResult;
+                    }
+                }
+            }
+        }
+
         return AuthorizationExtensionValidationResult.Success();
     }
 
@@ -117,6 +138,7 @@ public class DefaultUdapAuthorizationExtensionValidator : IUdapAuthorizationExte
                     return new ResolvedSettings
                     {
                         IsCommunityResolved = true,
+                        CommunityName = commSettings.Community,
                         RequiredExtensions = ResolveRequiredExtensions(
                             grantType,
                             commSettings.ClientCredentialsExtensionsRequired,
@@ -244,6 +266,7 @@ public class DefaultUdapAuthorizationExtensionValidator : IUdapAuthorizationExte
     private class ResolvedSettings
     {
         public bool IsCommunityResolved { get; init; }
+        public string? CommunityName { get; init; }
         public HashSet<string>? RequiredExtensions { get; init; }
         public HashSet<string>? AllowedPurposeOfUse { get; init; }
         public int? MaxPurposeOfUseCount { get; init; }
