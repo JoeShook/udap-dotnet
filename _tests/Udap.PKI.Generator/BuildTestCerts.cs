@@ -603,6 +603,7 @@ public partial class BuildTestCerts : CertificateBase
             $"{BaseDir}/../../examples/FhirLabsApi/CertStore/issued/fhirlabs.net.client.pfx",
             true);
            
+
             
         //
         // Udap.Common.Tests

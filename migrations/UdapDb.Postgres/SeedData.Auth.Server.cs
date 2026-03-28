@@ -391,6 +391,45 @@ public static class SeedDataAuthServer
         }
 
 
+        //
+        // Community: TEFCA (urn:oid:2.16.840.1.113883.3.7204.1.5)
+        //
+        if (!udapContext.Communities.Any(c => c.Name == "urn:oid:2.16.840.1.113883.3.7204.1.5"))
+        {
+            var community = new Community { Name = "urn:oid:2.16.840.1.113883.3.7204.1.5" };
+            community.Enabled = true;
+            community.Default = false;
+            udapContext.Communities.Add(community);
+            await udapContext.SaveChangesAsync();
+        }
+
+        //
+        // Anchor TEFCA_Community
+        //
+        var tefcaAnchor = new X509Certificate2(
+            Path.Combine(assemblyPath!, certStoreBasePath, "TEFCA_Community_Desk/TEFCA_Test_CA.cer"));
+
+        if ((await clientRegistrationStore.GetAnchors("urn:oid:2.16.840.1.113883.3.7204.1.5"))
+            .All(a => a.Thumbprint != tefcaAnchor.Thumbprint))
+        {
+            var community = udapContext.Communities.Single(c => c.Name == "urn:oid:2.16.840.1.113883.3.7204.1.5");
+
+            anchor = new Anchor
+            {
+                BeginDate = tefcaAnchor.NotBefore.ToUniversalTime(),
+                EndDate = tefcaAnchor.NotAfter.ToUniversalTime(),
+                Name = tefcaAnchor.Subject,
+                Community = community,
+                X509Certificate = tefcaAnchor.ToPemFormat(),
+                Thumbprint = tefcaAnchor.Thumbprint,
+                Enabled = true
+            };
+
+            udapContext.Anchors.Add(anchor);
+            await udapContext.SaveChangesAsync();
+        }
+
+        
         Func<string, bool> treatmentSpecification = r => r is "Patient" or "AllergyIntolerance" or "Condition" or "Encounter";
         var scopeProperties = new Dictionary<string, string>();
         scopeProperties.Add("smart_version", "v1");   
@@ -464,7 +503,7 @@ public static class SeedDataAuthServer
         //
         // launch/Patient
         //
-        if (configDbContext.IdentityResources.All(i => i.Name != "launch/patient"))
+        if (configDbContext.ApiScopes.All(i => i.Name != "launch/patient"))
         {
             var apiScope = new ApiScope("launch/patient");
             apiScope.ShowInDiscoveryDocument = false;
@@ -499,76 +538,78 @@ public static class SeedDataAuthServer
     private static async Task SeedFhirScopes(
         NpgsqlConfigurationDbContext configDbContext, 
         HashSet<string>? seedScopes, 
-        Dictionary<string,string> scopeProperties)
+        Dictionary<string, string> scopeProperties)
     {
-        var apiScopes = configDbContext.ApiScopes
-            .Include(s => s.Properties)
-            .Select(s => s)
-            .ToList();
+        if (seedScopes is null || seedScopes.Count == 0)
+        {
+            return;
+        }
+
+        var existingScopeNames = configDbContext.ApiScopes
+            .Select(s => s.Name)
+            .ToHashSet(StringComparer.Ordinal);
 
         foreach (var scopeName in seedScopes.Where(s => s.StartsWith("system")))
         {
-            if (!apiScopes.Any(s =>
-                    s.Name == scopeName && s.Properties.Exists(p => p.Key == "udap_prefix" && p.Value == "system")))
+            if (existingScopeNames.Add(scopeName))
             {
                 var apiScope = new ApiScope(scopeName);
                 apiScope.ShowInDiscoveryDocument = false;
-                
+
                 if (apiScope.Name.StartsWith("system/*."))
                 {
                     apiScope.ShowInDiscoveryDocument = true;
                     apiScope.Enabled = false;
                 }
-                
+
                 apiScope.Properties.Add("udap_prefix", "system");
-                
+
                 foreach (var scopeProperty in scopeProperties)
                 {
                     apiScope.Properties.Add(scopeProperty.Key, scopeProperty.Value);
                 }
-                
+
                 configDbContext.ApiScopes.Add(apiScope.ToEntity());
             }
         }
 
         foreach (var scopeName in seedScopes.Where(s => s.StartsWith("user")))
         {
-            if (!apiScopes.Any(s =>
-                    s.Name == scopeName && s.Properties.Exists(p => p.Key == "udap_prefix" && p.Value == "user")))
+            if (existingScopeNames.Add(scopeName))
             {
                 var apiScope = new ApiScope(scopeName);
                 apiScope.ShowInDiscoveryDocument = false;
-                
+
                 if (apiScope.Name.StartsWith("user/*."))
                 {
                     apiScope.ShowInDiscoveryDocument = true;
                     apiScope.Enabled = false;
                 }
-                
+
                 apiScope.Properties.Add("udap_prefix", "user");
-                
+
                 foreach (var scopeProperty in scopeProperties)
                 {
                     apiScope.Properties.Add(scopeProperty.Key, scopeProperty.Value);
                 }
-                
+
                 configDbContext.ApiScopes.Add(apiScope.ToEntity());
             }
         }
 
-        foreach (var scopeName in seedScopes.Where(s => s.StartsWith("patient")).ToList())
+        foreach (var scopeName in seedScopes.Where(s => s.StartsWith("patient")))
         {
-            if (!apiScopes.Any(s => s.Name == scopeName && s.Properties.Exists(p => p.Key == "udap_prefix" && p.Value == "patient")))
+            if (existingScopeNames.Add(scopeName))
             {
                 var apiScope = new ApiScope(scopeName);
                 apiScope.ShowInDiscoveryDocument = false;
-                
+
                 if (apiScope.Name.StartsWith("patient/*."))
                 {
                     apiScope.ShowInDiscoveryDocument = true;
                     apiScope.Enabled = false;
                 }
-                
+
                 apiScope.Properties.Add("udap_prefix", "patient");
 
                 foreach (var scopeProperty in scopeProperties)
