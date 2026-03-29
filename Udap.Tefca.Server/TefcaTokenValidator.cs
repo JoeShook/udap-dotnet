@@ -14,14 +14,17 @@ using Udap.Tefca.Model;
 namespace Udap.Tefca.Server;
 
 /// <summary>
-/// Validates that the <c>purpose_of_use</c> in the hl7-b2b Authorization Extension Object
-/// matches the exchange purpose coded in the client's registered SAN URI.
+/// Validates TEFCA-specific token request rules:
 ///
-/// Per SOP v2.0 Section 6.11 #4, each client registration is scoped to one exchange purpose.
-/// The <c>purpose_of_use</c> in a token request must match that registered purpose.
+/// 1. The <c>purpose_of_use</c> in the hl7-b2b AEO must match the exchange purpose
+///    coded in the client's registered SAN URI (SOP v2.0 Section 6.11 #4).
+///
+/// 2. If the registered exchange purpose is <c>T-IAS</c> and the grant type is
+///    <c>client_credentials</c>, the <c>tefca_ias</c> AEO must be present
+///    (SOP v2.0 Section 6.11, IAS Queries #3).
 ///
 /// <a href="https://rce.sequoiaproject.org/wp-content/uploads/2026/02/SOP-Facilitated-FHIR-Implementation-2.0-Draft-508.pdf#page=15">
-/// SOP v2.0 — Table 2: TEFCA Specific HL7-B2B Extension Requirements</a>
+/// SOP v2.0 — Table 2 and IAS Queries</a>
 /// </summary>
 public class TefcaTokenValidator : ICommunityTokenValidator
 {
@@ -49,6 +52,19 @@ public class TefcaTokenValidator : ICommunityTokenValidator
         }
 
         var registeredXp = context.SanUri.Substring(hashIndex + 1);
+
+        // IAS + client_credentials requires tefca_ias AEO (SOP v2.0 Section 6.11, IAS Queries #3)
+        if (string.Equals(registeredXp, TefcaConstants.ExchangePurposeCodes.IndividualAccessServices, StringComparison.Ordinal)
+            && string.Equals(context.GrantType, "client_credentials", StringComparison.OrdinalIgnoreCase))
+        {
+            if (context.Extensions == null
+                || !context.Extensions.ContainsKey(TefcaConstants.UdapAuthorizationExtensions.TEFCAIAS))
+            {
+                return Task.FromResult(AuthorizationExtensionValidationResult.Failure(
+                    "invalid_grant",
+                    "TEFCA IAS client_credentials token request requires the 'tefca_ias' authorization extension"));
+            }
+        }
 
         if (context.Extensions == null || context.Extensions.Count == 0)
         {

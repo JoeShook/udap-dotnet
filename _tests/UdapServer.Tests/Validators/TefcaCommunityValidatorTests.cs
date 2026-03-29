@@ -225,6 +225,72 @@ public class TefcaCommunityValidatorTests
 
     #endregion
 
+    #region TefcaIAS conditional requirement
+
+    [Fact]
+    public async Task Token_IAS_ClientCredentials_WithTefcaIas_Succeeds()
+    {
+        var validator = new TefcaTokenValidator();
+        var context = CreateTokenContext(
+            sanUri: "urn:oid:2.999#T-IAS",
+            purposeOfUse: "T-IAS",
+            grantType: "client_credentials",
+            includeTefcaIas: true);
+
+        var result = await validator.ValidateAsync(context);
+
+        Assert.True(result.IsValid);
+    }
+
+    [Fact]
+    public async Task Token_IAS_ClientCredentials_WithoutTefcaIas_IsRejected()
+    {
+        var validator = new TefcaTokenValidator();
+        var context = CreateTokenContext(
+            sanUri: "urn:oid:2.999#T-IAS",
+            purposeOfUse: "T-IAS",
+            grantType: "client_credentials",
+            includeTefcaIas: false);
+
+        var result = await validator.ValidateAsync(context);
+
+        Assert.False(result.IsValid);
+        Assert.Equal("invalid_grant", result.Error);
+        Assert.Contains("tefca_ias", result.ErrorDescription);
+    }
+
+    [Fact]
+    public async Task Token_IAS_AuthorizationCode_WithoutTefcaIas_Succeeds()
+    {
+        var validator = new TefcaTokenValidator();
+        var context = CreateTokenContext(
+            sanUri: "urn:oid:2.999#T-IAS",
+            purposeOfUse: "T-IAS",
+            grantType: "authorization_code",
+            includeTefcaIas: false);
+
+        var result = await validator.ValidateAsync(context);
+
+        Assert.True(result.IsValid);
+    }
+
+    [Fact]
+    public async Task Token_NonIAS_ClientCredentials_WithoutTefcaIas_Succeeds()
+    {
+        var validator = new TefcaTokenValidator();
+        var context = CreateTokenContext(
+            sanUri: "urn:oid:2.999#T-TREAT",
+            purposeOfUse: "T-TREAT",
+            grantType: "client_credentials",
+            includeTefcaIas: false);
+
+        var result = await validator.ValidateAsync(context);
+
+        Assert.True(result.IsValid);
+    }
+
+    #endregion
+
     #region Helpers
 
     private static UdapDynamicClientRegistrationContext CreateRegistrationContext(string? issuer)
@@ -239,7 +305,9 @@ public class TefcaCommunityValidatorTests
 
     private static UdapAuthorizationExtensionValidationContext CreateTokenContext(
         string? sanUri,
-        string? purposeOfUse)
+        string? purposeOfUse,
+        string grantType = "client_credentials",
+        bool includeTefcaIas = false)
     {
         var handler = new JsonWebTokenHandler();
         var jwt = handler.ReadJsonWebToken(
@@ -264,6 +332,12 @@ public class TefcaCommunityValidatorTests
             {
                 [UdapConstants.UdapAuthorizationExtensions.Hl7B2B] = b2b
             };
+
+            if (includeTefcaIas)
+            {
+                extensions[TefcaConstants.UdapAuthorizationExtensions.TEFCAIAS] =
+                    new TEFCAIASAuthorizationExtension();
+            }
         }
 
         return new UdapAuthorizationExtensionValidationContext
@@ -273,7 +347,7 @@ public class TefcaCommunityValidatorTests
             Extensions = extensions,
             CommunityId = "1",
             CommunityName = TefcaConstants.CommunityUri,
-            GrantType = "client_credentials",
+            GrantType = grantType,
             SanUri = sanUri
         };
     }
