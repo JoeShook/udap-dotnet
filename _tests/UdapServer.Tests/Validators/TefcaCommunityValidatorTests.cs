@@ -7,6 +7,7 @@
 // */
 #endregion
 
+using Microsoft.Extensions.Options;
 using Microsoft.IdentityModel.JsonWebTokens;
 using Microsoft.IdentityModel.Tokens;
 using Udap.Model;
@@ -22,6 +23,8 @@ namespace UdapServer.Tests.Validators;
 
 public class TefcaCommunityValidatorTests
 {
+    private static readonly IOptions<TefcaValidationOptions> DefaultOptions =
+        Options.Create(new TefcaValidationOptions());
     #region TefcaRegistrationValidator
 
     [Theory]
@@ -39,7 +42,7 @@ public class TefcaCommunityValidatorTests
     [InlineData("T-GOVDTRM")]
     public async Task Registration_ValidExchangePurpose_Succeeds(string xpCode)
     {
-        var validator = new TefcaRegistrationValidator();
+        var validator = new TefcaRegistrationValidator(DefaultOptions);
         var context = CreateRegistrationContext($"urn:oid:2.999#{xpCode}");
 
         var result = await validator.ValidateAsync(context);
@@ -50,7 +53,7 @@ public class TefcaCommunityValidatorTests
     [Fact]
     public async Task Registration_InvalidExchangePurpose_IsRejected()
     {
-        var validator = new TefcaRegistrationValidator();
+        var validator = new TefcaRegistrationValidator(DefaultOptions);
         var context = CreateRegistrationContext("urn:oid:2.999#INVALID");
 
         var result = await validator.ValidateAsync(context);
@@ -63,7 +66,7 @@ public class TefcaCommunityValidatorTests
     [Fact]
     public async Task Registration_SanUriWithoutFragment_IsRejected()
     {
-        var validator = new TefcaRegistrationValidator();
+        var validator = new TefcaRegistrationValidator(DefaultOptions);
         var context = CreateRegistrationContext("urn:oid:2.999");
 
         var result = await validator.ValidateAsync(context);
@@ -76,7 +79,7 @@ public class TefcaCommunityValidatorTests
     [Fact]
     public async Task Registration_EmptyIssuer_IsRejected()
     {
-        var validator = new TefcaRegistrationValidator();
+        var validator = new TefcaRegistrationValidator(DefaultOptions);
         var context = CreateRegistrationContext(null);
 
         var result = await validator.ValidateAsync(context);
@@ -88,7 +91,7 @@ public class TefcaCommunityValidatorTests
     [Fact]
     public async Task Registration_TrailingHash_IsRejected()
     {
-        var validator = new TefcaRegistrationValidator();
+        var validator = new TefcaRegistrationValidator(DefaultOptions);
         var context = CreateRegistrationContext("urn:oid:2.999#");
 
         var result = await validator.ValidateAsync(context);
@@ -100,7 +103,7 @@ public class TefcaCommunityValidatorTests
     [Fact]
     public void Registration_AppliesToTefcaCommunity()
     {
-        var validator = new TefcaRegistrationValidator();
+        var validator = new TefcaRegistrationValidator(DefaultOptions);
 
         Assert.True(validator.AppliesToCommunity(TefcaConstants.CommunityUri));
         Assert.False(validator.AppliesToCommunity("udap://fhirlabs1/"));
@@ -114,7 +117,7 @@ public class TefcaCommunityValidatorTests
     [Fact]
     public async Task Token_MatchingPurposeOfUse_Succeeds()
     {
-        var validator = new TefcaTokenValidator();
+        var validator = new TefcaTokenValidator(DefaultOptions);
         var context = CreateTokenContext(
             sanUri: "urn:oid:2.999#T-TREAT",
             purposeOfUse: $"urn:oid:{TefcaConstants.ExchangePurposeCodes.Oid}#T-TREAT");
@@ -127,7 +130,7 @@ public class TefcaCommunityValidatorTests
     [Fact]
     public async Task Token_MatchingPurposeOfUse_BareCode_Succeeds()
     {
-        var validator = new TefcaTokenValidator();
+        var validator = new TefcaTokenValidator(DefaultOptions);
         var context = CreateTokenContext(
             sanUri: "urn:oid:2.999#T-TRTMNT",
             purposeOfUse: "T-TRTMNT");
@@ -140,7 +143,7 @@ public class TefcaCommunityValidatorTests
     [Fact]
     public async Task Token_MismatchedPurposeOfUse_IsRejected()
     {
-        var validator = new TefcaTokenValidator();
+        var validator = new TefcaTokenValidator(DefaultOptions);
         var context = CreateTokenContext(
             sanUri: "urn:oid:2.999#T-TREAT",
             purposeOfUse: $"urn:oid:{TefcaConstants.ExchangePurposeCodes.Oid}#T-PYMNT");
@@ -156,7 +159,7 @@ public class TefcaCommunityValidatorTests
     [Fact]
     public async Task Token_NoRegisteredSanUri_IsRejected()
     {
-        var validator = new TefcaTokenValidator();
+        var validator = new TefcaTokenValidator(DefaultOptions);
         var context = CreateTokenContext(
             sanUri: null,
             purposeOfUse: "T-TREAT");
@@ -170,7 +173,7 @@ public class TefcaCommunityValidatorTests
     [Fact]
     public async Task Token_SanUriWithoutFragment_IsRejected()
     {
-        var validator = new TefcaTokenValidator();
+        var validator = new TefcaTokenValidator(DefaultOptions);
         var context = CreateTokenContext(
             sanUri: "urn:oid:2.999",
             purposeOfUse: "T-TREAT");
@@ -183,7 +186,7 @@ public class TefcaCommunityValidatorTests
     [Fact]
     public async Task Token_NoExtensions_Succeeds()
     {
-        var validator = new TefcaTokenValidator();
+        var validator = new TefcaTokenValidator(DefaultOptions);
         var context = CreateTokenContext(
             sanUri: "urn:oid:2.999#T-TREAT",
             purposeOfUse: null); // no extensions at all
@@ -196,7 +199,7 @@ public class TefcaCommunityValidatorTests
     [Fact]
     public void Token_AppliesToTefcaCommunity()
     {
-        var validator = new TefcaTokenValidator();
+        var validator = new TefcaTokenValidator(DefaultOptions);
 
         Assert.True(validator.AppliesToCommunity(TefcaConstants.CommunityUri));
         Assert.False(validator.AppliesToCommunity("udap://fhirlabs1/"));
@@ -209,7 +212,7 @@ public class TefcaCommunityValidatorTests
     [Fact]
     public void Registration_NonTefcaCommunity_NotApplicable()
     {
-        var validator = new TefcaRegistrationValidator();
+        var validator = new TefcaRegistrationValidator(DefaultOptions);
 
         // Validator should not apply, so it would never be called
         Assert.False(validator.AppliesToCommunity("udap://fhirlabs1/"));
@@ -218,7 +221,7 @@ public class TefcaCommunityValidatorTests
     [Fact]
     public void Token_NonTefcaCommunity_NotApplicable()
     {
-        var validator = new TefcaTokenValidator();
+        var validator = new TefcaTokenValidator(DefaultOptions);
 
         Assert.False(validator.AppliesToCommunity("udap://fhirlabs1/"));
     }
@@ -230,7 +233,7 @@ public class TefcaCommunityValidatorTests
     [Fact]
     public async Task Token_IAS_ClientCredentials_WithTefcaIas_Succeeds()
     {
-        var validator = new TefcaTokenValidator();
+        var validator = new TefcaTokenValidator(DefaultOptions);
         var context = CreateTokenContext(
             sanUri: "urn:oid:2.999#T-IAS",
             purposeOfUse: "T-IAS",
@@ -245,7 +248,7 @@ public class TefcaCommunityValidatorTests
     [Fact]
     public async Task Token_IAS_ClientCredentials_WithoutTefcaIas_IsRejected()
     {
-        var validator = new TefcaTokenValidator();
+        var validator = new TefcaTokenValidator(DefaultOptions);
         var context = CreateTokenContext(
             sanUri: "urn:oid:2.999#T-IAS",
             purposeOfUse: "T-IAS",
@@ -262,7 +265,7 @@ public class TefcaCommunityValidatorTests
     [Fact]
     public async Task Token_IAS_AuthorizationCode_WithoutTefcaIas_Succeeds()
     {
-        var validator = new TefcaTokenValidator();
+        var validator = new TefcaTokenValidator(DefaultOptions);
         var context = CreateTokenContext(
             sanUri: "urn:oid:2.999#T-IAS",
             purposeOfUse: "T-IAS",
@@ -277,7 +280,7 @@ public class TefcaCommunityValidatorTests
     [Fact]
     public async Task Token_NonIAS_ClientCredentials_WithoutTefcaIas_Succeeds()
     {
-        var validator = new TefcaTokenValidator();
+        var validator = new TefcaTokenValidator(DefaultOptions);
         var context = CreateTokenContext(
             sanUri: "urn:oid:2.999#T-TREAT",
             purposeOfUse: "T-TREAT",

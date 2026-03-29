@@ -7,6 +7,7 @@
 // */
 #endregion
 
+using Microsoft.Extensions.Options;
 using Udap.Model.UdapAuthenticationExtensions;
 using Udap.Server.Validation;
 using Udap.Tefca.Model;
@@ -28,9 +29,16 @@ namespace Udap.Tefca.Server;
 /// </summary>
 public class TefcaTokenValidator : ICommunityTokenValidator
 {
+    private readonly TefcaValidationOptions _options;
+
+    public TefcaTokenValidator(IOptions<TefcaValidationOptions> options)
+    {
+        _options = options.Value;
+    }
+
     /// <inheritdoc />
     public bool AppliesToCommunity(string communityName)
-        => communityName == TefcaConstants.CommunityUri;
+        => _options.Communities.Contains(communityName);
 
     /// <inheritdoc />
     public Task<AuthorizationExtensionValidationResult> ValidateAsync(

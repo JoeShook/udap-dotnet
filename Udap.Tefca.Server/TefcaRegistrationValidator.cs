@@ -7,6 +7,7 @@
 // */
 #endregion
 
+using Microsoft.Extensions.Options;
 using Udap.Model.Registration;
 using Udap.Server.Registration;
 using Udap.Tefca.Model;
@@ -22,6 +23,13 @@ namespace Udap.Tefca.Server;
 /// </summary>
 public class TefcaRegistrationValidator : ICommunityRegistrationValidator
 {
+    private readonly TefcaValidationOptions _options;
+
+    public TefcaRegistrationValidator(IOptions<TefcaValidationOptions> options)
+    {
+        _options = options.Value;
+    }
+
     private static readonly HashSet<string> ValidExchangePurposes = new(StringComparer.Ordinal)
     {
         TefcaConstants.ExchangePurposeCodes.Treatment,
@@ -40,7 +48,7 @@ public class TefcaRegistrationValidator : ICommunityRegistrationValidator
 
     /// <inheritdoc />
     public bool AppliesToCommunity(string communityName)
-        => communityName == TefcaConstants.CommunityUri;
+        => _options.Communities.Contains(communityName);
 
     /// <inheritdoc />
     public Task<UdapDynamicClientRegistrationValidationResult?> ValidateAsync(

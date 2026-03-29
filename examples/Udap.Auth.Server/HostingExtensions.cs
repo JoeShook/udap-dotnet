@@ -110,7 +110,10 @@ internal static class HostingExtensions
             .AddSmartV2Expander();
 
         builder.Services.AddUdapTefcaExtensions();
-        builder.Services.AddUdapTefcaValidation();
+        builder.Services.AddUdapTefcaValidation(options =>
+        {
+            options.Communities.Add("tefca://test-community");
+        });
 
         builder.Services.Configure<UdapFileCertStoreManifest>(builder.Configuration.GetSection(Constants.UdapFileCertStoreManifestSectionName));
 
