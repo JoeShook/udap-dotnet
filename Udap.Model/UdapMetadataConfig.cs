@@ -7,6 +7,8 @@
 // */
 #endregion
 
+using System.Collections.Generic;
+
 namespace Udap.Model;
 
 public class UdapMetadataConfig
@@ -17,6 +19,17 @@ public class UdapMetadataConfig
     /// </summary>
     public string Community { get; set; } = string.Empty;
 
+    /// <summary>
+    /// Per-community override for udap_certifications_supported.
+    /// When set, replaces the root-level <see cref="UdapMetadataOptions.UdapCertificationsSupported"/>.
+    /// </summary>
+    public HashSet<string>? UdapCertificationsSupported { get; set; }
+
+    /// <summary>
+    /// Per-community override for udap_certifications_required.
+    /// When set, replaces the root-level <see cref="UdapMetadataOptions.UdapCertificationsRequired"/>.
+    /// </summary>
+    public HashSet<string>? UdapCertificationsRequired { get; set; }
 
     /// <summary>
     /// See <a href="http://hl7.org/fhir/us/udap-security/discovery.html#signed-metadata-elements">Signed metadata elements</a>

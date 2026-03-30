@@ -76,8 +76,6 @@ udap.metadata.options.json:
 {
   "UdapVersionsSupported": [ "1" ],
     "UdapProfilesSupported": [ "udap_dcr", "udap_authn", "udap_authz", "udap_to" ],
-    "UdapAuthorizationExtensionsSupported": [ "hl7-b2b" ],
-    "UdapAuthorizationExtensionsRequired": [ "hl7-b2b" ],
     "ScopesSupported": [ "openid", "system/*.read", "user/*.read", "patient/*.read" ],
     "UdapCertificationsSupported": [ "http://MyUdapCertification", "http://MyUdapCertification2" ],
     "UdapCertificationsRequired": [ "http://MyUdapCertification" ],
