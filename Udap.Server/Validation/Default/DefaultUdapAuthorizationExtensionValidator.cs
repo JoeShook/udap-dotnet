@@ -9,7 +9,6 @@
 
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
-using Udap.Model;
 using Udap.Model.UdapAuthenticationExtensions;
 using Udap.Server.Configuration;
 using Udap.Server.Storage.Stores;
@@ -19,7 +18,16 @@ namespace Udap.Server.Validation.Default;
 /// <summary>
 /// Default implementation of <see cref="IUdapAuthorizationExtensionValidator"/> that
 /// enforces required authorization extensions based on <see cref="ServerSettings"/>
-/// with optional per-community overrides via <see cref="CommunityServerSettings"/>.
+/// with community-specific overrides provided by <see cref="ICommunityTokenValidator"/>
+/// implementations.
+///
+/// When a community validator provides rules via <see cref="ICommunityTokenValidator.GetValidationRules"/>,
+/// those rules (required extensions, allowed POU codes, max count) take precedence and the
+/// community validator owns POU enforcement in its <see cref="ICommunityTokenValidator.ValidateAsync"/>.
+///
+/// When no community validator applies, the base validator enforces the global
+/// <see cref="ServerSettings.AllowedPurposeOfUse"/> and <see cref="ServerSettings.MaxPurposeOfUseCount"/>
+/// for standard SSRAA communities.
 /// </summary>
 public class DefaultUdapAuthorizationExtensionValidator : IUdapAuthorizationExtensionValidator
 {
@@ -43,66 +51,70 @@ public class DefaultUdapAuthorizationExtensionValidator : IUdapAuthorizationExte
     public async Task<AuthorizationExtensionValidationResult> ValidateAsync(
         UdapAuthorizationExtensionValidationContext context)
     {
-        var resolved = await ResolveCommunitySettingsAsync(context.CommunityId, context.GrantType);
+        var resolved = await ResolveSettingsAsync(context.CommunityId, context.GrantType);
 
         var requiredExtensions = resolved.RequiredExtensions;
 
-        if (requiredExtensions == null || requiredExtensions.Count == 0)
+        if (requiredExtensions != null && requiredExtensions.Count > 0)
         {
-            return AuthorizationExtensionValidationResult.Success();
-        }
-
-        if (context.Extensions == null || context.Extensions.Count == 0)
-        {
-            _logger.LogError(
-                "Client {ClientId} did not include required authorization extensions: {Required}",
-                context.ClientId, string.Join(", ", requiredExtensions));
-
-            return AuthorizationExtensionValidationResult.Failure(
-                "invalid_grant",
-                $"Required authorization extension(s) missing: {string.Join(", ", requiredExtensions)}");
-        }
-
-        foreach (var required in requiredExtensions)
-        {
-            if (!context.Extensions.ContainsKey(required))
+            if (context.Extensions == null || context.Extensions.Count == 0)
             {
                 _logger.LogError(
-                    "Client {ClientId} missing required authorization extension '{Extension}'",
-                    context.ClientId, required);
+                    "Client {ClientId} did not include required authorization extensions: {Required}",
+                    context.ClientId, string.Join(", ", requiredExtensions));
 
                 return AuthorizationExtensionValidationResult.Failure(
                     "invalid_grant",
-                    $"Required authorization extension '{required}' not found");
+                    $"Required authorization extension(s) missing: {string.Join(", ", requiredExtensions)}");
+            }
+
+            foreach (var required in requiredExtensions)
+            {
+                if (!context.Extensions.ContainsKey(required))
+                {
+                    _logger.LogError(
+                        "Client {ClientId} missing required authorization extension '{Extension}'",
+                        context.ClientId, required);
+
+                    return AuthorizationExtensionValidationResult.Failure(
+                        "invalid_grant",
+                        $"Required authorization extension '{required}' not found");
+                }
             }
         }
 
-        foreach (var (key, value) in context.Extensions)
+        // Structural validation of extension objects
+        if (context.Extensions != null)
         {
-            var errors = ValidateExtensionObject(key, value);
-
-            if (errors.Count > 0)
+            foreach (var (key, value) in context.Extensions)
             {
-                _logger.LogError(
-                    "Client {ClientId} authorization extension '{Extension}' validation failed: {Errors}",
-                    context.ClientId, key, string.Join("; ", errors));
+                var errors = ValidateExtensionObject(key, value);
 
-                return AuthorizationExtensionValidationResult.Failure(
-                    "invalid_grant",
-                    $"Authorization extension '{key}' validation failed: {string.Join("; ", errors)}");
-            }
+                if (errors.Count > 0)
+                {
+                    _logger.LogError(
+                        "Client {ClientId} authorization extension '{Extension}' validation failed: {Errors}",
+                        context.ClientId, key, string.Join("; ", errors));
 
-            var pouResult = ValidatePurposeOfUse(
-                key, value, resolved.AllowedPurposeOfUse, resolved.MaxPurposeOfUseCount,
-                resolved.IsCommunityResolved, context.ClientId);
+                    return AuthorizationExtensionValidationResult.Failure(
+                        "invalid_grant",
+                        $"Authorization extension '{key}' validation failed: {string.Join("; ", errors)}");
+                }
 
-            if (!pouResult.IsValid)
-            {
-                return pouResult;
+                var pouResult = ValidatePurposeOfUse(
+                    key, value, resolved.AllowedPurposeOfUse, resolved.MaxPurposeOfUseCount,
+                    context.ClientId);
+
+                if (!pouResult.IsValid)
+                {
+                    return pouResult;
+                }
             }
         }
 
-        // Community-specific token validation
+        // Community-specific token validation — always runs regardless of whether
+        // extensions are required, so community validators can enforce additional
+        // rules (e.g., TEFCA purpose_of_use matching against registered SAN URI).
         if (!string.IsNullOrEmpty(resolved.CommunityName))
         {
             context.CommunityName = resolved.CommunityName;
@@ -123,44 +135,48 @@ public class DefaultUdapAuthorizationExtensionValidator : IUdapAuthorizationExte
         return AuthorizationExtensionValidationResult.Success();
     }
 
-    private async Task<ResolvedSettings> ResolveCommunitySettingsAsync(string? communityId, string? grantType)
+    private async Task<ResolvedSettings> ResolveSettingsAsync(string? communityId, string? grantType)
     {
         var settings = _serverSettings.CurrentValue;
+        string? communityName = null;
 
-        if (communityId != null && settings.CommunitySettings is { Count: > 0 })
+        // Resolve community name from store
+        if (communityId != null)
         {
-            foreach (var commSettings in settings.CommunitySettings)
-            {
-                var resolvedId = await _clientStore.GetCommunityId(commSettings.Community);
+            communityName = await _clientStore.GetCommunityName(communityId);
+        }
 
-                if (resolvedId?.ToString() == communityId)
+        // Check if a community validator provides rules for this community
+        if (communityName != null)
+        {
+            foreach (var validator in _communityTokenValidators)
+            {
+                if (validator.AppliesToCommunity(communityName))
                 {
-                    return new ResolvedSettings
+                    var rules = validator.GetValidationRules(grantType);
+                    if (rules != null)
                     {
-                        IsCommunityResolved = true,
-                        CommunityName = commSettings.Community,
-                        RequiredExtensions = ResolveRequiredExtensions(
-                            grantType,
-                            commSettings.ClientCredentialsExtensionsRequired,
-                            commSettings.AuthorizationCodeExtensionsRequired,
-                            commSettings.AuthorizationExtensionsRequired
-                                ?? settings.AuthorizationExtensionsRequired),
-                        AllowedPurposeOfUse = commSettings.AllowedPurposeOfUse,
-                        MaxPurposeOfUseCount = commSettings.MaxPurposeOfUseCount
-                    };
+                        return new ResolvedSettings
+                        {
+                            CommunityName = communityName,
+                            RequiredExtensions = rules.RequiredExtensions,
+                            AllowedPurposeOfUse = rules.AllowedPurposeOfUse,
+                            MaxPurposeOfUseCount = rules.MaxPurposeOfUseCount
+                        };
+                    }
                 }
             }
         }
 
+        // Fall back to global ServerSettings (no POU validation without a community validator)
         return new ResolvedSettings
         {
+            CommunityName = communityName,
             RequiredExtensions = ResolveRequiredExtensions(
                 grantType,
                 settings.ClientCredentialsExtensionsRequired,
                 settings.AuthorizationCodeExtensionsRequired,
-                settings.AuthorizationExtensionsRequired),
-            AllowedPurposeOfUse = settings.AllowedPurposeOfUse,
-            MaxPurposeOfUseCount = settings.MaxPurposeOfUseCount
+                settings.AuthorizationExtensionsRequired)
         };
     }
 
@@ -189,7 +205,6 @@ public class DefaultUdapAuthorizationExtensionValidator : IUdapAuthorizationExte
         object extensionValue,
         HashSet<string>? allowedCodes,
         int? maxCount,
-        bool isCommunityResolved,
         string clientId)
     {
         var purposeOfUse = GetPurposeOfUse(extensionKey, extensionValue);
@@ -212,17 +227,6 @@ public class DefaultUdapAuthorizationExtensionValidator : IUdapAuthorizationExte
 
         if (allowedCodes == null)
         {
-            if (isCommunityResolved)
-            {
-                _logger.LogError(
-                    "Client {ClientId} extension '{Extension}' contains purpose_of_use but AllowedPurposeOfUse is not configured for the matched community",
-                    clientId, extensionKey);
-
-                return AuthorizationExtensionValidationResult.Failure(
-                    "server_error",
-                    $"AllowedPurposeOfUse is not configured for the matched community; extension '{extensionKey}' cannot be validated");
-            }
-
             return AuthorizationExtensionValidationResult.Success();
         }
 
@@ -265,7 +269,6 @@ public class DefaultUdapAuthorizationExtensionValidator : IUdapAuthorizationExte
 
     private class ResolvedSettings
     {
-        public bool IsCommunityResolved { get; init; }
         public string? CommunityName { get; init; }
         public HashSet<string>? RequiredExtensions { get; init; }
         public HashSet<string>? AllowedPurposeOfUse { get; init; }

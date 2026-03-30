@@ -109,6 +109,11 @@ internal static class HostingExtensions
             .AddUdapResponseGenerators()
             .AddSmartV2Expander();
 
+        builder.Services.AddUdapSsraaValidation(options =>
+        {
+            options.Communities.Add("udap://fhirlabs.net");
+        });
+
         builder.Services.AddUdapTefcaExtensions();
         builder.Services.AddUdapTefcaValidation(options =>
         {

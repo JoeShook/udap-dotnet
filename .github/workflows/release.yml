@@ -44,6 +44,8 @@ jobs:
         dotnet pack -v normal -c Release --include-source -p:PackageVersion=${VERSION} ./Udap.Tefca.Model/Udap.Tefca.Model.csproj
         dotnet pack -v normal -c Release --include-source -p:PackageVersion=${VERSION} ./Udap.Tefca.Server/Udap.Tefca.Server.csproj
 
+        dotnet pack -v normal -c Release --include-source -p:PackageVersion=${VERSION} ./Udap.Ssraa.Server/Udap.Ssraa.Server.csproj
+
     - name: Push
       run: |
         dotnet nuget push ./Udap.Model/bin/Release/*.symbols.nupkg --source https://api.nuget.org/v3/index.json --api-key ${{ secrets.NUGET_API_KEY }}
@@ -63,6 +65,8 @@ jobs:
 
         dotnet nuget push ./Udap.Tefca.Model/bin/Release/*.symbols.nupkg --source https://api.nuget.org/v3/index.json --api-key ${{ secrets.NUGET_API_KEY }}
         dotnet nuget push ./Udap.Tefca.Server/bin/Release/*.symbols.nupkg --source https://api.nuget.org/v3/index.json --api-key ${{ secrets.NUGET_API_KEY }}
+
+        dotnet nuget push ./Udap.Ssraa.Server/bin/Release/*.symbols.nupkg --source https://api.nuget.org/v3/index.json --api-key ${{ secrets.NUGET_API_KEY }}
 
 
       

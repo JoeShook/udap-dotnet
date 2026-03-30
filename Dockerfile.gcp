@@ -54,6 +54,7 @@ COPY ["Udap.CdsHooks.Model/Udap.CdsHooks.Model.csproj", "Udap.CdsHooks.Model/"]
 COPY ["Udap.CdsHooks.Endpoint/Udap.CdsHooks.Endpoint.csproj", "Udap.CdsHooks.Endpoint/"]
 COPY ["Udap.Tefca.Model/Udap.Tefca.Model.csproj", "Udap.Tefca.Model/"]
 COPY ["Udap.Tefca.Server/Udap.Tefca.Server.csproj", "Udap.Tefca.Server/"]
+COPY ["Udap.Ssraa.Server/Udap.Ssraa.Server.csproj", "Udap.Ssraa.Server/"]
 # -- Examples --
 COPY ["examples/FhirLabsApi/FhirLabsApi.csproj", "examples/FhirLabsApi/"]
 COPY ["examples/Udap.Auth.Server/Udap.Auth.Server.csproj", "examples/Udap.Auth.Server/"]

@@ -51,5 +51,10 @@ public interface IUdapClientRegistrationStore
     Task<X509Certificate2Collection?> GetAnchorsCertificates(string? community, CancellationToken token = default);
     Task<int?> GetCommunityId(string community, CancellationToken token = default);
 
+    /// <summary>
+    /// Reverse lookup: resolves a community name (URI) from a community ID.
+    /// </summary>
+    Task<string?> GetCommunityName(string communityId, CancellationToken token = default);
+
     Task<ICollection<Duende.IdentityServer.Models.Secret>?> RolloverClientSecrets(ParsedSecret secret, CancellationToken token = default);
 }

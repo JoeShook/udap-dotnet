@@ -94,10 +94,10 @@ public class ServerSettings
 
     /// <summary>
     /// Authorization extension key names required by this server in every token request
-    /// regardless of grant type (e.g., ["hl7-b2b"]). This is the global default;
-    /// per-community overrides can be specified in <see cref="CommunitySettings"/>.
+    /// regardless of grant type (e.g., ["hl7-b2b"]). This is the global default.
     /// When grant-type-specific settings (<see cref="ClientCredentialsExtensionsRequired"/>
     /// or <see cref="AuthorizationCodeExtensionsRequired"/>) are set, they take precedence.
+    /// Community-specific validators can override via <see cref="ICommunityTokenValidator.GetValidationRules"/>.
     /// Validated by <see cref="IUdapAuthorizationExtensionValidator"/>.
     /// </summary>
     [JsonPropertyName("AuthorizationExtensionsRequired")]
@@ -106,7 +106,7 @@ public class ServerSettings
     /// <summary>
     /// Authorization extension key names required for client_credentials token requests
     /// (e.g., ["hl7-b2b"]). When set, takes precedence over <see cref="AuthorizationExtensionsRequired"/>
-    /// for client_credentials grants. Per-community overrides in <see cref="CommunitySettings"/>.
+    /// for client_credentials grants.
     /// </summary>
     [JsonPropertyName("ClientCredentialsExtensionsRequired")]
     public HashSet<string>? ClientCredentialsExtensionsRequired { get; set; }
@@ -114,34 +114,11 @@ public class ServerSettings
     /// <summary>
     /// Authorization extension key names required for authorization_code token requests
     /// (e.g., ["hl7-b2b-user"]). When set, takes precedence over <see cref="AuthorizationExtensionsRequired"/>
-    /// for authorization_code grants. Per-community overrides in <see cref="CommunitySettings"/>.
+    /// for authorization_code grants.
     /// </summary>
     [JsonPropertyName("AuthorizationCodeExtensionsRequired")]
     public HashSet<string>? AuthorizationCodeExtensionsRequired { get; set; }
 
-    /// <summary>
-    /// Allowed purpose_of_use codes (global default).  When set, every code
-    /// in the extension's purpose_of_use array must appear in this set.
-    /// Null means no restriction.  Per-community overrides in <see cref="CommunitySettings"/>.
-    /// </summary>
-    [JsonPropertyName("AllowedPurposeOfUse")]
-    public HashSet<string>? AllowedPurposeOfUse { get; set; }
-
-    /// <summary>
-    /// Maximum number of purpose_of_use entries allowed (global default).
-    /// Null means no limit.  TEFCA communities would set this to 1.
-    /// Per-community overrides in <see cref="CommunitySettings"/>.
-    /// </summary>
-    [JsonPropertyName("MaxPurposeOfUseCount")]
-    public int? MaxPurposeOfUseCount { get; set; }
-
-    /// <summary>
-    /// Per-community overrides for server settings. When a client belongs to a community
-    /// that has a matching entry here, the community-specific settings take precedence
-    /// over the global defaults.
-    /// </summary>
-    [JsonPropertyName("CommunitySettings")]
-    public List<CommunityServerSettings>? CommunitySettings { get; set; }
 }
 
 

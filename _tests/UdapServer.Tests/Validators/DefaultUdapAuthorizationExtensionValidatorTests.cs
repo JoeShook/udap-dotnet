@@ -331,26 +331,21 @@ public class DefaultUdapAuthorizationExtensionValidatorTests
     #region Community Settings
 
     [Fact]
-    public async Task CommunityOverride_MatchingCommunity_UsesOverrideSettings()
+    public async Task CommunityValidator_MatchingCommunity_UsesValidatorRules()
     {
         var clientStore = Substitute.For<IUdapClientRegistrationStore>();
-        clientStore.GetCommunityId("udap://community-a")
-            .Returns(Task.FromResult<int?>(1));
+        clientStore.GetCommunityName("1").Returns(Task.FromResult<string?>("udap://community-a"));
 
-        var settings = new ServerSettings
+        var communityValidator = Substitute.For<ICommunityTokenValidator>();
+        communityValidator.AppliesToCommunity("udap://community-a").Returns(true);
+        communityValidator.GetValidationRules("client_credentials").Returns(new CommunityValidationRules
         {
-            AuthorizationExtensionsRequired = null,
-            CommunitySettings =
-            [
-                new CommunityServerSettings
-                {
-                    Community = "udap://community-a",
-                    AuthorizationExtensionsRequired = [UdapConstants.UdapAuthorizationExtensions.Hl7B2B]
-                }
-            ]
-        };
+            RequiredExtensions = new HashSet<string> { UdapConstants.UdapAuthorizationExtensions.Hl7B2B }
+        });
+        communityValidator.ValidateAsync(Arg.Any<UdapAuthorizationExtensionValidationContext>())
+            .Returns(Task.FromResult(AuthorizationExtensionValidationResult.Success()));
 
-        var validator = CreateValidator(settings, clientStore);
+        var validator = CreateValidator(new ServerSettings { AuthorizationExtensionsRequired = null }, clientStore, [communityValidator]);
         var context = CreateContext(communityId: "1");
 
         var result = await validator.ValidateAsync(context);
@@ -360,27 +355,22 @@ public class DefaultUdapAuthorizationExtensionValidatorTests
     }
 
     [Fact]
-    public async Task CommunityOverride_MatchingCommunity_WithValidExtension_Succeeds()
+    public async Task CommunityValidator_MatchingCommunity_WithValidExtension_Succeeds()
     {
         var clientStore = Substitute.For<IUdapClientRegistrationStore>();
-        clientStore.GetCommunityId("udap://community-a")
-            .Returns(Task.FromResult<int?>(1));
+        clientStore.GetCommunityName("1").Returns(Task.FromResult<string?>("udap://community-a"));
 
-        var settings = new ServerSettings
+        var communityValidator = Substitute.For<ICommunityTokenValidator>();
+        communityValidator.AppliesToCommunity("udap://community-a").Returns(true);
+        communityValidator.GetValidationRules("client_credentials").Returns(new CommunityValidationRules
         {
-            AuthorizationExtensionsRequired = null,
-            CommunitySettings =
-            [
-                new CommunityServerSettings
-                {
-                    Community = "udap://community-a",
-                    AuthorizationExtensionsRequired = [UdapConstants.UdapAuthorizationExtensions.Hl7B2B],
-                    AllowedPurposeOfUse = ["urn:oid:2.16.840.1.113883.5.8#TREAT"]
-                }
-            ]
-        };
+            RequiredExtensions = new HashSet<string> { UdapConstants.UdapAuthorizationExtensions.Hl7B2B },
+            AllowedPurposeOfUse = new HashSet<string> { "urn:oid:2.16.840.1.113883.5.8#TREAT" }
+        });
+        communityValidator.ValidateAsync(Arg.Any<UdapAuthorizationExtensionValidationContext>())
+            .Returns(Task.FromResult(AuthorizationExtensionValidationResult.Success()));
 
-        var validator = CreateValidator(settings, clientStore);
+        var validator = CreateValidator(new ServerSettings { AuthorizationExtensionsRequired = null }, clientStore, [communityValidator]);
         var context = CreateContext(communityId: "1", extensions: CreateValidB2BExtensions());
 
         var result = await validator.ValidateAsync(context);
@@ -389,27 +379,21 @@ public class DefaultUdapAuthorizationExtensionValidatorTests
     }
 
     [Fact]
-    public async Task CommunityOverride_NonMatchingCommunity_FallsBackToGlobal()
+    public async Task CommunityValidator_NonMatchingCommunity_FallsBackToGlobal()
     {
         var clientStore = Substitute.For<IUdapClientRegistrationStore>();
-        clientStore.GetCommunityId("udap://community-a")
-            .Returns(Task.FromResult<int?>(1));
+        // Community "2" resolves to a name that no validator matches
+        clientStore.GetCommunityName("2").Returns(Task.FromResult<string?>("udap://community-b"));
+
+        var communityValidator = Substitute.For<ICommunityTokenValidator>();
+        communityValidator.AppliesToCommunity("udap://community-b").Returns(false);
 
         var settings = new ServerSettings
         {
-            AuthorizationExtensionsRequired = [UdapConstants.UdapAuthorizationExtensions.Hl7B2B],
-            CommunitySettings =
-            [
-                new CommunityServerSettings
-                {
-                    Community = "udap://community-a",
-                    AuthorizationExtensionsRequired = null
-                }
-            ]
+            AuthorizationExtensionsRequired = [UdapConstants.UdapAuthorizationExtensions.Hl7B2B]
         };
 
-        var validator = CreateValidator(settings, clientStore);
-        // Client is in community 2, which doesn't match any CommunitySettings
+        var validator = CreateValidator(settings, clientStore, [communityValidator]);
         var context = CreateContext(communityId: "2");
 
         var result = await validator.ValidateAsync(context);
@@ -420,19 +404,11 @@ public class DefaultUdapAuthorizationExtensionValidatorTests
     }
 
     [Fact]
-    public async Task CommunityOverride_NullCommunityId_FallsBackToGlobal()
+    public async Task CommunityValidator_NullCommunityId_FallsBackToGlobal()
     {
         var settings = new ServerSettings
         {
-            AuthorizationExtensionsRequired = [UdapConstants.UdapAuthorizationExtensions.Hl7B2B],
-            CommunitySettings =
-            [
-                new CommunityServerSettings
-                {
-                    Community = "udap://community-a",
-                    AuthorizationExtensionsRequired = []
-                }
-            ]
+            AuthorizationExtensionsRequired = [UdapConstants.UdapAuthorizationExtensions.Hl7B2B]
         };
 
         var validator = CreateValidator(settings);
@@ -445,97 +421,92 @@ public class DefaultUdapAuthorizationExtensionValidatorTests
     }
 
     [Fact]
-    public async Task CommunityOverride_OverrideHasNoRequired_GlobalHasRequired_UsesOverride()
+    public async Task CommunityValidator_RulesOverrideGlobal_EmptyRequired_Succeeds()
     {
         var clientStore = Substitute.For<IUdapClientRegistrationStore>();
-        clientStore.GetCommunityId("udap://community-a")
-            .Returns(Task.FromResult<int?>(1));
+        clientStore.GetCommunityName("1").Returns(Task.FromResult<string?>("udap://community-a"));
+
+        var communityValidator = Substitute.For<ICommunityTokenValidator>();
+        communityValidator.AppliesToCommunity("udap://community-a").Returns(true);
+        communityValidator.GetValidationRules("client_credentials").Returns(new CommunityValidationRules
+        {
+            RequiredExtensions = new HashSet<string>() // empty — no extensions required
+        });
+        communityValidator.ValidateAsync(Arg.Any<UdapAuthorizationExtensionValidationContext>())
+            .Returns(Task.FromResult(AuthorizationExtensionValidationResult.Success()));
 
         var settings = new ServerSettings
         {
-            AuthorizationExtensionsRequired = [UdapConstants.UdapAuthorizationExtensions.Hl7B2B],
-            CommunitySettings =
-            [
-                new CommunityServerSettings
-                {
-                    Community = "udap://community-a",
-                    AuthorizationExtensionsRequired = []
-                }
-            ]
+            AuthorizationExtensionsRequired = [UdapConstants.UdapAuthorizationExtensions.Hl7B2B]
         };
 
-        var validator = CreateValidator(settings, clientStore);
+        var validator = CreateValidator(settings, clientStore, [communityValidator]);
         var context = CreateContext(communityId: "1");
 
         var result = await validator.ValidateAsync(context);
 
-        // Community override has empty required list — no extensions needed
+        // Community validator's empty required set overrides global requirement
         Assert.True(result.IsValid);
     }
 
     [Fact]
-    public async Task CommunityOverride_NullOverrideRequired_FallsBackToGlobal()
+    public async Task CommunityValidator_NullRules_FallsBackToGlobal()
     {
         var clientStore = Substitute.For<IUdapClientRegistrationStore>();
-        clientStore.GetCommunityId("udap://community-a")
-            .Returns(Task.FromResult<int?>(1));
+        clientStore.GetCommunityName("1").Returns(Task.FromResult<string?>("udap://community-a"));
+
+        var communityValidator = Substitute.For<ICommunityTokenValidator>();
+        communityValidator.AppliesToCommunity("udap://community-a").Returns(true);
+        communityValidator.GetValidationRules("client_credentials").Returns((CommunityValidationRules?)null);
+        communityValidator.ValidateAsync(Arg.Any<UdapAuthorizationExtensionValidationContext>())
+            .Returns(Task.FromResult(AuthorizationExtensionValidationResult.Success()));
 
         var settings = new ServerSettings
         {
-            AuthorizationExtensionsRequired = [UdapConstants.UdapAuthorizationExtensions.Hl7B2B],
-            CommunitySettings =
-            [
-                new CommunityServerSettings
-                {
-                    Community = "udap://community-a",
-                    AuthorizationExtensionsRequired = null
-                }
-            ]
+            AuthorizationExtensionsRequired = [UdapConstants.UdapAuthorizationExtensions.Hl7B2B]
         };
 
-        var validator = CreateValidator(settings, clientStore);
+        var validator = CreateValidator(settings, clientStore, [communityValidator]);
         var context = CreateContext(communityId: "1");
 
         var result = await validator.ValidateAsync(context);
 
-        // Community override has null required — falls back to global
+        // Community validator returned null rules — falls back to global
         Assert.False(result.IsValid);
         Assert.Contains("hl7-b2b", result.ErrorDescription);
     }
 
     [Fact]
-    public async Task CommunityOverride_MultipleCommunities_CorrectOneSelected()
+    public async Task CommunityValidator_MultipleCommunities_CorrectOneSelected()
     {
         var clientStore = Substitute.For<IUdapClientRegistrationStore>();
-        clientStore.GetCommunityId("udap://community-a")
-            .Returns(Task.FromResult<int?>(1));
-        clientStore.GetCommunityId("udap://community-b")
-            .Returns(Task.FromResult<int?>(2));
+        clientStore.GetCommunityName("1").Returns(Task.FromResult<string?>("udap://community-a"));
+        clientStore.GetCommunityName("2").Returns(Task.FromResult<string?>("udap://community-b"));
 
-        var settings = new ServerSettings
+        var validatorA = Substitute.For<ICommunityTokenValidator>();
+        validatorA.AppliesToCommunity("udap://community-a").Returns(true);
+        validatorA.AppliesToCommunity("udap://community-b").Returns(false);
+        validatorA.GetValidationRules("client_credentials").Returns(new CommunityValidationRules
         {
-            AuthorizationExtensionsRequired = null,
-            CommunitySettings =
-            [
-                new CommunityServerSettings
-                {
-                    Community = "udap://community-a",
-                    AuthorizationExtensionsRequired = [UdapConstants.UdapAuthorizationExtensions.Hl7B2B]
-                },
-                new CommunityServerSettings
-                {
-                    Community = "udap://community-b",
-                    AuthorizationExtensionsRequired =
-                    [
-                        UdapConstants.UdapAuthorizationExtensions.Hl7B2B,
-                        TefcaConstants.UdapAuthorizationExtensions.TEFCAIAS
-                    ]
-                }
-            ]
-        };
+            RequiredExtensions = new HashSet<string> { UdapConstants.UdapAuthorizationExtensions.Hl7B2B }
+        });
+
+        var validatorB = Substitute.For<ICommunityTokenValidator>();
+        validatorB.AppliesToCommunity("udap://community-a").Returns(false);
+        validatorB.AppliesToCommunity("udap://community-b").Returns(true);
+        validatorB.GetValidationRules("client_credentials").Returns(new CommunityValidationRules
+        {
+            RequiredExtensions = new HashSet<string>
+            {
+                UdapConstants.UdapAuthorizationExtensions.Hl7B2B,
+                TefcaConstants.UdapAuthorizationExtensions.TEFCAIAS
+            }
+        });
+        validatorB.ValidateAsync(Arg.Any<UdapAuthorizationExtensionValidationContext>())
+            .Returns(Task.FromResult(AuthorizationExtensionValidationResult.Success()));
 
         // Client in community-b should need both hl7-b2b and tefca-ias
-        var validator = CreateValidator(settings, clientStore);
+        var validator = CreateValidator(new ServerSettings(), clientStore, [validatorA, validatorB]);
         var context = CreateContext(communityId: "2", extensions: CreateValidB2BExtensions());
 
         var result = await validator.ValidateAsync(context);
@@ -545,23 +516,14 @@ public class DefaultUdapAuthorizationExtensionValidatorTests
     }
 
     [Fact]
-    public async Task CommunityOverride_CommunityNotFoundInStore_FallsBackToGlobal()
+    public async Task CommunityValidator_CommunityNameNotResolved_FallsBackToGlobal()
     {
         var clientStore = Substitute.For<IUdapClientRegistrationStore>();
-        clientStore.GetCommunityId("udap://community-a")
-            .Returns(Task.FromResult<int?>(null));
+        clientStore.GetCommunityName("1").Returns(Task.FromResult<string?>(null));
 
         var settings = new ServerSettings
         {
-            AuthorizationExtensionsRequired = [UdapConstants.UdapAuthorizationExtensions.Hl7B2B],
-            CommunitySettings =
-            [
-                new CommunityServerSettings
-                {
-                    Community = "udap://community-a",
-                    AuthorizationExtensionsRequired = []
-                }
-            ]
+            AuthorizationExtensionsRequired = [UdapConstants.UdapAuthorizationExtensions.Hl7B2B]
         };
 
         var validator = CreateValidator(settings, clientStore);
@@ -569,7 +531,7 @@ public class DefaultUdapAuthorizationExtensionValidatorTests
 
         var result = await validator.ValidateAsync(context);
 
-        // Community name didn't resolve to an ID that matches "1", falls back to global
+        // Community name didn't resolve, falls back to global
         Assert.False(result.IsValid);
         Assert.Contains("hl7-b2b", result.ErrorDescription);
     }
@@ -727,27 +689,19 @@ public class DefaultUdapAuthorizationExtensionValidatorTests
     public async Task GrantTypeSpecific_Community_ClientCredentials_RequiresB2B()
     {
         var clientStore = Substitute.For<IUdapClientRegistrationStore>();
-        clientStore.GetCommunityId("urn:oid:2.16.840.1.113883.3.7204.1.5")
-            .Returns(Task.FromResult<int?>(10));
+        clientStore.GetCommunityName("10").Returns(Task.FromResult<string?>("urn:oid:2.16.840.1.113883.3.7204.1.5"));
 
-        var settings = new ServerSettings
+        var communityValidator = Substitute.For<ICommunityTokenValidator>();
+        communityValidator.AppliesToCommunity("urn:oid:2.16.840.1.113883.3.7204.1.5").Returns(true);
+        communityValidator.GetValidationRules("client_credentials").Returns(new CommunityValidationRules
         {
-            CommunitySettings =
-            [
-                new CommunityServerSettings
-                {
-                    Community = "urn:oid:2.16.840.1.113883.3.7204.1.5",
-                    ClientCredentialsExtensionsRequired = [UdapConstants.UdapAuthorizationExtensions.Hl7B2B],
-                    AuthorizationCodeExtensionsRequired = [UdapConstants.UdapAuthorizationExtensions.Hl7B2BUSER],
-                    AllowedPurposeOfUse =
-                    [
-                        "urn:oid:2.16.840.1.113883.3.7204.1.5.2.1#T-TREAT"
-                    ]
-                }
-            ]
-        };
+            RequiredExtensions = new HashSet<string> { UdapConstants.UdapAuthorizationExtensions.Hl7B2B },
+            AllowedPurposeOfUse = new HashSet<string> { "urn:oid:2.16.840.1.113883.3.7204.1.5.2.1#T-TREAT" }
+        });
+        communityValidator.ValidateAsync(Arg.Any<UdapAuthorizationExtensionValidationContext>())
+            .Returns(Task.FromResult(AuthorizationExtensionValidationResult.Success()));
 
-        var validator = CreateValidator(settings, clientStore);
+        var validator = CreateValidator(new ServerSettings(), clientStore, [communityValidator]);
 
         var b2b = new HL7B2BAuthorizationExtension
         {
@@ -771,23 +725,18 @@ public class DefaultUdapAuthorizationExtensionValidatorTests
     public async Task GrantTypeSpecific_Community_AuthorizationCode_RequiresB2BUser()
     {
         var clientStore = Substitute.For<IUdapClientRegistrationStore>();
-        clientStore.GetCommunityId("urn:oid:2.16.840.1.113883.3.7204.1.5")
-            .Returns(Task.FromResult<int?>(10));
+        clientStore.GetCommunityName("10").Returns(Task.FromResult<string?>("urn:oid:2.16.840.1.113883.3.7204.1.5"));
 
-        var settings = new ServerSettings
+        var communityValidator = Substitute.For<ICommunityTokenValidator>();
+        communityValidator.AppliesToCommunity("urn:oid:2.16.840.1.113883.3.7204.1.5").Returns(true);
+        communityValidator.GetValidationRules("authorization_code").Returns(new CommunityValidationRules
         {
-            CommunitySettings =
-            [
-                new CommunityServerSettings
-                {
-                    Community = "urn:oid:2.16.840.1.113883.3.7204.1.5",
-                    ClientCredentialsExtensionsRequired = [UdapConstants.UdapAuthorizationExtensions.Hl7B2B],
-                    AuthorizationCodeExtensionsRequired = [UdapConstants.UdapAuthorizationExtensions.Hl7B2BUSER]
-                }
-            ]
-        };
+            RequiredExtensions = new HashSet<string> { UdapConstants.UdapAuthorizationExtensions.Hl7B2BUSER }
+        });
+        communityValidator.ValidateAsync(Arg.Any<UdapAuthorizationExtensionValidationContext>())
+            .Returns(Task.FromResult(AuthorizationExtensionValidationResult.Success()));
 
-        var validator = CreateValidator(settings, clientStore);
+        var validator = CreateValidator(new ServerSettings(), clientStore, [communityValidator]);
 
         // Client sends hl7-b2b (wrong for authorization_code)
         var context = CreateContext(communityId: "10", extensions: CreateValidB2BExtensions(), grantType: "authorization_code");
@@ -799,49 +748,59 @@ public class DefaultUdapAuthorizationExtensionValidatorTests
     }
 
     [Fact]
-    public async Task GrantTypeSpecific_Community_FallsBackToGeneralCommunity()
+    public async Task GrantTypeSpecific_Community_NullGrantRules_FallsBackToGlobal()
     {
-        // Community has AuthorizationExtensionsRequired but no grant-specific
+        // Community validator applies but returns null rules for the grant type — falls back to global
         var clientStore = Substitute.For<IUdapClientRegistrationStore>();
-        clientStore.GetCommunityId("udap://community-a")
-            .Returns(Task.FromResult<int?>(1));
+        clientStore.GetCommunityName("1").Returns(Task.FromResult<string?>("udap://community-a"));
+
+        var communityValidator = Substitute.For<ICommunityTokenValidator>();
+        communityValidator.AppliesToCommunity("udap://community-a").Returns(true);
+        communityValidator.GetValidationRules("client_credentials").Returns((CommunityValidationRules?)null);
+        communityValidator.ValidateAsync(Arg.Any<UdapAuthorizationExtensionValidationContext>())
+            .Returns(Task.FromResult(AuthorizationExtensionValidationResult.Success()));
 
         var settings = new ServerSettings
         {
-            CommunitySettings =
-            [
-                new CommunityServerSettings
-                {
-                    Community = "udap://community-a",
-                    AuthorizationExtensionsRequired = [UdapConstants.UdapAuthorizationExtensions.Hl7B2B]
-                }
-            ]
+            AuthorizationExtensionsRequired = [UdapConstants.UdapAuthorizationExtensions.Hl7B2B]
         };
 
-        var validator = CreateValidator(settings, clientStore);
+        var validator = CreateValidator(settings, clientStore, [communityValidator]);
         var context = CreateContext(communityId: "1", grantType: "client_credentials");
 
         var result = await validator.ValidateAsync(context);
 
-        // Falls back to community's general AuthorizationExtensionsRequired
+        // Falls back to global's AuthorizationExtensionsRequired
         Assert.False(result.IsValid);
         Assert.Contains("hl7-b2b", result.ErrorDescription);
     }
 
     #endregion
 
-    #region Purpose of Use Validation
+    #region Purpose of Use Validation (via Community Validators)
+
+    // POU validation is the responsibility of community validators via GetValidationRules.
+    // The base validator enforces AllowedPurposeOfUse/MaxPurposeOfUseCount from the
+    // community validator's rules. Without a community validator, no POU validation occurs.
 
     [Fact]
-    public async Task AllowedPurposeOfUse_ValidCode_Succeeds()
+    public async Task CommunityValidator_AllowedPurposeOfUse_ValidCode_Succeeds()
     {
-        var settings = new ServerSettings
+        var clientStore = Substitute.For<IUdapClientRegistrationStore>();
+        clientStore.GetCommunityName("1").Returns(Task.FromResult<string?>("udap://community-a"));
+
+        var communityValidator = Substitute.For<ICommunityTokenValidator>();
+        communityValidator.AppliesToCommunity("udap://community-a").Returns(true);
+        communityValidator.GetValidationRules("client_credentials").Returns(new CommunityValidationRules
         {
-            AuthorizationExtensionsRequired = [UdapConstants.UdapAuthorizationExtensions.Hl7B2B],
-            AllowedPurposeOfUse = ["urn:oid:2.16.840.1.113883.5.8#TREAT", "urn:oid:2.16.840.1.113883.5.8#ETREAT"]
-        };
-        var validator = CreateValidator(settings);
-        var context = CreateContext(extensions: CreateValidB2BExtensions());
+            RequiredExtensions = new HashSet<string> { UdapConstants.UdapAuthorizationExtensions.Hl7B2B },
+            AllowedPurposeOfUse = new HashSet<string> { "urn:oid:2.16.840.1.113883.5.8#TREAT", "urn:oid:2.16.840.1.113883.5.8#ETREAT" }
+        });
+        communityValidator.ValidateAsync(Arg.Any<UdapAuthorizationExtensionValidationContext>())
+            .Returns(Task.FromResult(AuthorizationExtensionValidationResult.Success()));
+
+        var validator = CreateValidator(new ServerSettings(), clientStore, [communityValidator]);
+        var context = CreateContext(communityId: "1", extensions: CreateValidB2BExtensions());
 
         var result = await validator.ValidateAsync(context);
 
@@ -849,16 +808,24 @@ public class DefaultUdapAuthorizationExtensionValidatorTests
     }
 
     [Fact]
-    public async Task AllowedPurposeOfUse_DisallowedCode_Fails()
+    public async Task CommunityValidator_AllowedPurposeOfUse_DisallowedCode_Fails()
     {
-        var settings = new ServerSettings
+        var clientStore = Substitute.For<IUdapClientRegistrationStore>();
+        clientStore.GetCommunityName("1").Returns(Task.FromResult<string?>("udap://community-a"));
+
+        var communityValidator = Substitute.For<ICommunityTokenValidator>();
+        communityValidator.AppliesToCommunity("udap://community-a").Returns(true);
+        communityValidator.GetValidationRules("client_credentials").Returns(new CommunityValidationRules
         {
-            AuthorizationExtensionsRequired = [UdapConstants.UdapAuthorizationExtensions.Hl7B2B],
-            AllowedPurposeOfUse = ["urn:oid:2.16.840.1.113883.5.8#ETREAT"]
-        };
-        var validator = CreateValidator(settings);
+            RequiredExtensions = new HashSet<string> { UdapConstants.UdapAuthorizationExtensions.Hl7B2B },
+            AllowedPurposeOfUse = new HashSet<string> { "urn:oid:2.16.840.1.113883.5.8#ETREAT" }
+        });
+        communityValidator.ValidateAsync(Arg.Any<UdapAuthorizationExtensionValidationContext>())
+            .Returns(Task.FromResult(AuthorizationExtensionValidationResult.Success()));
+
+        var validator = CreateValidator(new ServerSettings(), clientStore, [communityValidator]);
         // CreateValidB2BExtensions uses TREAT, which is not in the allowed set
-        var context = CreateContext(extensions: CreateValidB2BExtensions());
+        var context = CreateContext(communityId: "1", extensions: CreateValidB2BExtensions());
 
         var result = await validator.ValidateAsync(context);
 
@@ -869,15 +836,23 @@ public class DefaultUdapAuthorizationExtensionValidatorTests
     }
 
     [Fact]
-    public async Task AllowedPurposeOfUse_NullAllowList_AnyCodeAccepted()
+    public async Task CommunityValidator_NullAllowList_AnyCodeAccepted()
     {
-        var settings = new ServerSettings
+        var clientStore = Substitute.For<IUdapClientRegistrationStore>();
+        clientStore.GetCommunityName("1").Returns(Task.FromResult<string?>("udap://community-a"));
+
+        var communityValidator = Substitute.For<ICommunityTokenValidator>();
+        communityValidator.AppliesToCommunity("udap://community-a").Returns(true);
+        communityValidator.GetValidationRules("client_credentials").Returns(new CommunityValidationRules
         {
-            AuthorizationExtensionsRequired = [UdapConstants.UdapAuthorizationExtensions.Hl7B2B],
+            RequiredExtensions = new HashSet<string> { UdapConstants.UdapAuthorizationExtensions.Hl7B2B },
             AllowedPurposeOfUse = null
-        };
-        var validator = CreateValidator(settings);
-        var context = CreateContext(extensions: CreateValidB2BExtensions());
+        });
+        communityValidator.ValidateAsync(Arg.Any<UdapAuthorizationExtensionValidationContext>())
+            .Returns(Task.FromResult(AuthorizationExtensionValidationResult.Success()));
+
+        var validator = CreateValidator(new ServerSettings(), clientStore, [communityValidator]);
+        var context = CreateContext(communityId: "1", extensions: CreateValidB2BExtensions());
 
         var result = await validator.ValidateAsync(context);
 
@@ -885,47 +860,22 @@ public class DefaultUdapAuthorizationExtensionValidatorTests
     }
 
     [Fact]
-    public async Task AllowedPurposeOfUse_EmptyAllowList_AllCodesRejected()
+    public async Task CommunityValidator_MaxPurposeOfUseCount_ExceedsLimit_Fails()
     {
-        var settings = new ServerSettings
+        var clientStore = Substitute.For<IUdapClientRegistrationStore>();
+        clientStore.GetCommunityName("1").Returns(Task.FromResult<string?>("udap://community-a"));
+
+        var communityValidator = Substitute.For<ICommunityTokenValidator>();
+        communityValidator.AppliesToCommunity("udap://community-a").Returns(true);
+        communityValidator.GetValidationRules("client_credentials").Returns(new CommunityValidationRules
         {
-            AuthorizationExtensionsRequired = [UdapConstants.UdapAuthorizationExtensions.Hl7B2B],
-            AllowedPurposeOfUse = []
-        };
-        var validator = CreateValidator(settings);
-        var context = CreateContext(extensions: CreateValidB2BExtensions());
-
-        var result = await validator.ValidateAsync(context);
-
-        Assert.False(result.IsValid);
-        Assert.Contains("disallowed", result.ErrorDescription);
-    }
-
-    [Fact]
-    public async Task MaxPurposeOfUseCount_WithinLimit_Succeeds()
-    {
-        var settings = new ServerSettings
-        {
-            AuthorizationExtensionsRequired = [UdapConstants.UdapAuthorizationExtensions.Hl7B2B],
-            MaxPurposeOfUseCount = 2
-        };
-        var validator = CreateValidator(settings);
-        var context = CreateContext(extensions: CreateValidB2BExtensions()); // has 1
-
-        var result = await validator.ValidateAsync(context);
-
-        Assert.True(result.IsValid);
-    }
-
-    [Fact]
-    public async Task MaxPurposeOfUseCount_ExceedsLimit_Fails()
-    {
-        var settings = new ServerSettings
-        {
-            AuthorizationExtensionsRequired = [UdapConstants.UdapAuthorizationExtensions.Hl7B2B],
+            RequiredExtensions = new HashSet<string> { UdapConstants.UdapAuthorizationExtensions.Hl7B2B },
             MaxPurposeOfUseCount = 1
-        };
-        var validator = CreateValidator(settings);
+        });
+        communityValidator.ValidateAsync(Arg.Any<UdapAuthorizationExtensionValidationContext>())
+            .Returns(Task.FromResult(AuthorizationExtensionValidationResult.Success()));
+
+        var validator = CreateValidator(new ServerSettings(), clientStore, [communityValidator]);
 
         var b2b = new HL7B2BAuthorizationExtension
         {
@@ -938,7 +888,7 @@ public class DefaultUdapAuthorizationExtensionValidatorTests
         {
             [UdapConstants.UdapAuthorizationExtensions.Hl7B2B] = b2b
         };
-        var context = CreateContext(extensions: extensions);
+        var context = CreateContext(communityId: "1", extensions: extensions);
 
         var result = await validator.ValidateAsync(context);
 
@@ -947,15 +897,16 @@ public class DefaultUdapAuthorizationExtensionValidatorTests
     }
 
     [Fact]
-    public async Task MaxPurposeOfUseCount_Null_NoLimit()
+    public async Task NoCommunityValidator_NoPOUValidation()
     {
+        // Without a community validator, no POU validation occurs
         var settings = new ServerSettings
         {
-            AuthorizationExtensionsRequired = [UdapConstants.UdapAuthorizationExtensions.Hl7B2B],
-            MaxPurposeOfUseCount = null
+            AuthorizationExtensionsRequired = [UdapConstants.UdapAuthorizationExtensions.Hl7B2B]
         };
         var validator = CreateValidator(settings);
 
+        // Any POU code is accepted when no community validator applies
         var b2b = new HL7B2BAuthorizationExtension
         {
             OrganizationId = "https://fhirlabs.net/fhir/r4/Organization/99"
@@ -973,178 +924,6 @@ public class DefaultUdapAuthorizationExtensionValidatorTests
         var result = await validator.ValidateAsync(context);
 
         Assert.True(result.IsValid);
-    }
-
-    [Fact]
-    public async Task TefcaStyle_MaxCount1_AllowedXPCodes_ValidRequest_Succeeds()
-    {
-        var clientStore = Substitute.For<IUdapClientRegistrationStore>();
-        clientStore.GetCommunityId("urn:oid:2.16.840.1.113883.3.7204.1.5")
-            .Returns(Task.FromResult<int?>(10));
-
-        var settings = new ServerSettings
-        {
-            AuthorizationExtensionsRequired = [UdapConstants.UdapAuthorizationExtensions.Hl7B2B],
-            CommunitySettings =
-            [
-                new CommunityServerSettings
-                {
-                    Community = "urn:oid:2.16.840.1.113883.3.7204.1.5",
-                    AuthorizationExtensionsRequired = [UdapConstants.UdapAuthorizationExtensions.Hl7B2B],
-                    MaxPurposeOfUseCount = 1,
-                    AllowedPurposeOfUse =
-                    [
-                        "urn:oid:2.16.840.1.113883.3.7204.1.5.2.1#T-TREAT",
-                        "urn:oid:2.16.840.1.113883.3.7204.1.5.2.1#T-TRTMNT",
-                        "urn:oid:2.16.840.1.113883.3.7204.1.5.2.1#T-PYMNT",
-                        "urn:oid:2.16.840.1.113883.3.7204.1.5.2.1#T-IAS"
-                    ]
-                }
-            ]
-        };
-
-        var validator = CreateValidator(settings, clientStore);
-
-        var b2b = new HL7B2BAuthorizationExtension
-        {
-            OrganizationId = "Organization/1.2.3",
-            OrganizationName = "Test QHIN"
-        };
-        b2b.PurposeOfUse!.Add("urn:oid:2.16.840.1.113883.3.7204.1.5.2.1#T-TREAT");
-
-        var extensions = new Dictionary<string, object>
-        {
-            [UdapConstants.UdapAuthorizationExtensions.Hl7B2B] = b2b
-        };
-        var context = CreateContext(communityId: "10", extensions: extensions);
-
-        var result = await validator.ValidateAsync(context);
-
-        Assert.True(result.IsValid);
-    }
-
-    [Fact]
-    public async Task TefcaStyle_MaxCount1_MultiplePurposes_Fails()
-    {
-        var clientStore = Substitute.For<IUdapClientRegistrationStore>();
-        clientStore.GetCommunityId("urn:oid:2.16.840.1.113883.3.7204.1.5")
-            .Returns(Task.FromResult<int?>(10));
-
-        var settings = new ServerSettings
-        {
-            CommunitySettings =
-            [
-                new CommunityServerSettings
-                {
-                    Community = "urn:oid:2.16.840.1.113883.3.7204.1.5",
-                    AuthorizationExtensionsRequired = [UdapConstants.UdapAuthorizationExtensions.Hl7B2B],
-                    MaxPurposeOfUseCount = 1,
-                    AllowedPurposeOfUse =
-                    [
-                        "urn:oid:2.16.840.1.113883.3.7204.1.5.2.1#T-TREAT",
-                        "urn:oid:2.16.840.1.113883.3.7204.1.5.2.1#T-PYMNT"
-                    ]
-                }
-            ]
-        };
-
-        var validator = CreateValidator(settings, clientStore);
-
-        var b2b = new HL7B2BAuthorizationExtension
-        {
-            OrganizationId = "Organization/1.2.3",
-            OrganizationName = "Test QHIN"
-        };
-        b2b.PurposeOfUse!.Add("urn:oid:2.16.840.1.113883.3.7204.1.5.2.1#T-TREAT");
-        b2b.PurposeOfUse!.Add("urn:oid:2.16.840.1.113883.3.7204.1.5.2.1#T-PYMNT");
-
-        var extensions = new Dictionary<string, object>
-        {
-            [UdapConstants.UdapAuthorizationExtensions.Hl7B2B] = b2b
-        };
-        var context = CreateContext(communityId: "10", extensions: extensions);
-
-        var result = await validator.ValidateAsync(context);
-
-        Assert.False(result.IsValid);
-        Assert.Contains("maximum allowed is 1", result.ErrorDescription);
-    }
-
-    [Fact]
-    public async Task TefcaStyle_WrongCodeSystem_Fails()
-    {
-        var clientStore = Substitute.For<IUdapClientRegistrationStore>();
-        clientStore.GetCommunityId("urn:oid:2.16.840.1.113883.3.7204.1.5")
-            .Returns(Task.FromResult<int?>(10));
-
-        var settings = new ServerSettings
-        {
-            CommunitySettings =
-            [
-                new CommunityServerSettings
-                {
-                    Community = "urn:oid:2.16.840.1.113883.3.7204.1.5",
-                    AuthorizationExtensionsRequired = [UdapConstants.UdapAuthorizationExtensions.Hl7B2B],
-                    AllowedPurposeOfUse =
-                    [
-                        "urn:oid:2.16.840.1.113883.3.7204.1.5.2.1#T-TREAT"
-                    ]
-                }
-            ]
-        };
-
-        var validator = CreateValidator(settings, clientStore);
-
-        // Client sends HL7 v3 PurposeOfUse code instead of TEFCA XP code
-        var b2b = new HL7B2BAuthorizationExtension
-        {
-            OrganizationId = "Organization/1.2.3",
-            OrganizationName = "Test QHIN"
-        };
-        b2b.PurposeOfUse!.Add("urn:oid:2.16.840.1.113883.5.8#TREAT");
-
-        var extensions = new Dictionary<string, object>
-        {
-            [UdapConstants.UdapAuthorizationExtensions.Hl7B2B] = b2b
-        };
-        var context = CreateContext(communityId: "10", extensions: extensions);
-
-        var result = await validator.ValidateAsync(context);
-
-        Assert.False(result.IsValid);
-        Assert.Contains("disallowed", result.ErrorDescription);
-        Assert.Contains("2.16.840.1.113883.5.8#TREAT", result.ErrorDescription);
-    }
-
-    [Fact]
-    public async Task CommunityOverride_PurposeOfUse_NullAllowList_FailsWithConfigError()
-    {
-        var clientStore = Substitute.For<IUdapClientRegistrationStore>();
-        clientStore.GetCommunityId("udap://community-a")
-            .Returns(Task.FromResult<int?>(1));
-
-        var settings = new ServerSettings
-        {
-            AuthorizationExtensionsRequired = [UdapConstants.UdapAuthorizationExtensions.Hl7B2B],
-            AllowedPurposeOfUse = ["urn:oid:2.16.840.1.113883.5.8#ETREAT"],
-            CommunitySettings =
-            [
-                new CommunityServerSettings
-                {
-                    Community = "udap://community-a",
-                    AllowedPurposeOfUse = null // no fallback to global — must be configured
-                }
-            ]
-        };
-
-        var validator = CreateValidator(settings, clientStore);
-        var context = CreateContext(communityId: "1", extensions: CreateValidB2BExtensions());
-
-        var result = await validator.ValidateAsync(context);
-
-        Assert.False(result.IsValid);
-        Assert.Equal("server_error", result.Error);
-        Assert.Contains("AllowedPurposeOfUse is not configured", result.ErrorDescription);
     }
 
     #endregion
@@ -1204,16 +983,105 @@ public class DefaultUdapAuthorizationExtensionValidatorTests
 
     #endregion
 
+    #region CommunityValidatorsAlwaysRun
+
+    [Fact]
+    public async Task CommunityValidators_RunEvenWhenNoExtensionsRequired_AuthorizationCode()
+    {
+        // Arrange: no AuthorizationCodeExtensionsRequired, but a community validator is registered
+        var clientStore = Substitute.For<IUdapClientRegistrationStore>();
+        clientStore.GetCommunityName("10").Returns(Task.FromResult<string?>("urn:oid:2.16.840.1.113883.3.7204.1.5"));
+
+        var settings = new ServerSettings
+        {
+            ClientCredentialsExtensionsRequired = [UdapConstants.UdapAuthorizationExtensions.Hl7B2B]
+            // AuthorizationCodeExtensionsRequired is null — no extension needed
+        };
+
+        var communityValidator = Substitute.For<ICommunityTokenValidator>();
+        communityValidator.AppliesToCommunity("urn:oid:2.16.840.1.113883.3.7204.1.5").Returns(true);
+        communityValidator.GetValidationRules("authorization_code").Returns((CommunityValidationRules?)null);
+        communityValidator.ValidateAsync(Arg.Any<UdapAuthorizationExtensionValidationContext>())
+            .Returns(Task.FromResult(AuthorizationExtensionValidationResult.Failure(
+                "invalid_grant", "community validator rejected")));
+
+        var validator = CreateValidator(settings, clientStore, [communityValidator]);
+        var context = CreateContext(communityId: "10", grantType: "authorization_code");
+
+        // Act
+        var result = await validator.ValidateAsync(context);
+
+        // Assert: community validator was invoked and its rejection is returned
+        Assert.False(result.IsValid);
+        Assert.Equal("invalid_grant", result.Error);
+        Assert.Contains("community validator rejected", result.ErrorDescription);
+    }
+
+    [Fact]
+    public async Task CommunityValidators_RunEvenWhenNoExtensionsRequired_Success()
+    {
+        // Arrange: community validator returns success
+        var clientStore = Substitute.For<IUdapClientRegistrationStore>();
+        clientStore.GetCommunityName("10").Returns(Task.FromResult<string?>("urn:oid:2.16.840.1.113883.3.7204.1.5"));
+
+        var settings = new ServerSettings();
+
+        var communityValidator = Substitute.For<ICommunityTokenValidator>();
+        communityValidator.AppliesToCommunity("urn:oid:2.16.840.1.113883.3.7204.1.5").Returns(true);
+        communityValidator.GetValidationRules("authorization_code").Returns((CommunityValidationRules?)null);
+        communityValidator.ValidateAsync(Arg.Any<UdapAuthorizationExtensionValidationContext>())
+            .Returns(Task.FromResult(AuthorizationExtensionValidationResult.Success()));
+
+        var validator = CreateValidator(settings, clientStore, [communityValidator]);
+        var context = CreateContext(communityId: "10", grantType: "authorization_code");
+
+        // Act
+        var result = await validator.ValidateAsync(context);
+
+        // Assert
+        Assert.True(result.IsValid);
+    }
+
+    [Fact]
+    public async Task CommunityValidators_NotInvokedForNonMatchingCommunity()
+    {
+        var clientStore = Substitute.For<IUdapClientRegistrationStore>();
+        clientStore.GetCommunityName("10").Returns(Task.FromResult<string?>("urn:oid:2.16.840.1.113883.3.7204.1.5"));
+
+        var settings = new ServerSettings();
+
+        var communityValidator = Substitute.For<ICommunityTokenValidator>();
+        communityValidator.AppliesToCommunity("urn:oid:2.16.840.1.113883.3.7204.1.5").Returns(false);
+
+        var validator = CreateValidator(settings, clientStore, [communityValidator]);
+        var context = CreateContext(communityId: "10", grantType: "authorization_code");
+
+        var result = await validator.ValidateAsync(context);
+
+        Assert.True(result.IsValid);
+        await communityValidator.DidNotReceive().ValidateAsync(Arg.Any<UdapAuthorizationExtensionValidationContext>());
+    }
+
+    #endregion
+
     #region Helpers
 
     private DefaultUdapAuthorizationExtensionValidator CreateValidator(
         ServerSettings settings,
         IUdapClientRegistrationStore? clientStore = null)
     {
+        return CreateValidator(settings, clientStore, null);
+    }
+
+    private DefaultUdapAuthorizationExtensionValidator CreateValidator(
+        ServerSettings settings,
+        IUdapClientRegistrationStore? clientStore,
+        IEnumerable<ICommunityTokenValidator>? communityValidators)
+    {
         var optionsMonitor = new OptionsMonitorForTests<ServerSettings>(settings);
         clientStore ??= Substitute.For<IUdapClientRegistrationStore>();
 
-        return new DefaultUdapAuthorizationExtensionValidator(optionsMonitor, clientStore, Enumerable.Empty<ICommunityTokenValidator>(), _logger);
+        return new DefaultUdapAuthorizationExtensionValidator(optionsMonitor, clientStore, communityValidators ?? Enumerable.Empty<ICommunityTokenValidator>(), _logger);
     }
 
     private static UdapAuthorizationExtensionValidationContext CreateContext(

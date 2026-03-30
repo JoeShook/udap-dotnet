@@ -13,9 +13,6 @@ namespace Udap.Server.Validation;
 /// Community-specific validation of authorization extensions at token time.
 /// Implementations are registered as a DI collection and invoked when
 /// the client belongs to a matching community.
-///
-/// Runs after default extension validation (required keys, allowed
-/// purpose_of_use codes, max count) completes successfully.
 /// </summary>
 public interface ICommunityTokenValidator
 {
@@ -26,6 +23,13 @@ public interface ICommunityTokenValidator
     /// The community URI string (e.g., <c>urn:oid:2.16.840.1.113883.3.7204.1.5</c>).
     /// </param>
     bool AppliesToCommunity(string communityName);
+
+    /// <summary>
+    /// Returns the validation rules this validator enforces for the given grant type,
+    /// or <c>null</c> to defer to global <c>ServerSettings</c> configuration.
+    /// When non-null, these rules override global settings for the matched community.
+    /// </summary>
+    CommunityValidationRules? GetValidationRules(string? grantType) => null;
 
     /// <summary>
     /// Validates community-specific token-time rules.
