@@ -8,41 +8,33 @@
 #endregion
 
 using Microsoft.Extensions.Logging;
-using Microsoft.Extensions.Options;
 using Udap.Model.UdapAuthenticationExtensions;
-using Udap.Server.Configuration;
 using Udap.Server.Storage.Stores;
 
 namespace Udap.Server.Validation.Default;
 
 /// <summary>
 /// Default implementation of <see cref="IUdapAuthorizationExtensionValidator"/> that
-/// enforces required authorization extensions based on <see cref="ServerSettings"/>
-/// with community-specific overrides provided by <see cref="ICommunityTokenValidator"/>
+/// enforces required authorization extensions via <see cref="ICommunityTokenValidator"/>
 /// implementations.
 ///
-/// When a community validator provides rules via <see cref="ICommunityTokenValidator.GetValidationRules"/>,
-/// those rules (required extensions, allowed POU codes, max count) take precedence and the
-/// community validator owns POU enforcement in its <see cref="ICommunityTokenValidator.ValidateAsync"/>.
+/// Community validators provide rules via <see cref="ICommunityTokenValidator.GetValidationRules"/>
+/// (required extensions, allowed POU codes, max count) and domain-specific validation
+/// via <see cref="ICommunityTokenValidator.ValidateAsync"/>.
 ///
-/// When no community validator applies, the base validator enforces the global
-/// <see cref="ServerSettings.AllowedPurposeOfUse"/> and <see cref="ServerSettings.MaxPurposeOfUseCount"/>
-/// for standard SSRAA communities.
+/// When no community validator applies, no extension or POU enforcement occurs.
 /// </summary>
 public class DefaultUdapAuthorizationExtensionValidator : IUdapAuthorizationExtensionValidator
 {
-    private readonly IOptionsMonitor<ServerSettings> _serverSettings;
     private readonly IUdapClientRegistrationStore _clientStore;
     private readonly IEnumerable<ICommunityTokenValidator> _communityTokenValidators;
     private readonly ILogger<DefaultUdapAuthorizationExtensionValidator> _logger;
 
     public DefaultUdapAuthorizationExtensionValidator(
-        IOptionsMonitor<ServerSettings> serverSettings,
         IUdapClientRegistrationStore clientStore,
         IEnumerable<ICommunityTokenValidator> communityTokenValidators,
         ILogger<DefaultUdapAuthorizationExtensionValidator> logger)
     {
-        _serverSettings = serverSettings;
         _clientStore = clientStore;
         _communityTokenValidators = communityTokenValidators;
         _logger = logger;
@@ -137,7 +129,6 @@ public class DefaultUdapAuthorizationExtensionValidator : IUdapAuthorizationExte
 
     private async Task<ResolvedSettings> ResolveSettingsAsync(string? communityId, string? grantType)
     {
-        var settings = _serverSettings.CurrentValue;
         string? communityName = null;
 
         // Resolve community name from store
@@ -168,36 +159,11 @@ public class DefaultUdapAuthorizationExtensionValidator : IUdapAuthorizationExte
             }
         }
 
-        // Fall back to global ServerSettings (no POU validation without a community validator)
+        // No community validator matched — no extension or POU enforcement
         return new ResolvedSettings
         {
-            CommunityName = communityName,
-            RequiredExtensions = ResolveRequiredExtensions(
-                grantType,
-                settings.ClientCredentialsExtensionsRequired,
-                settings.AuthorizationCodeExtensionsRequired,
-                settings.AuthorizationExtensionsRequired)
+            CommunityName = communityName
         };
-    }
-
-    /// <summary>
-    /// Resolves the required extensions for the given grant type.
-    /// Grant-type-specific settings take precedence over the general fallback.
-    /// </summary>
-    private static HashSet<string>? ResolveRequiredExtensions(
-        string? grantType,
-        HashSet<string>? clientCredentialsExtensions,
-        HashSet<string>? authorizationCodeExtensions,
-        HashSet<string>? fallback)
-    {
-        var grantSpecific = grantType switch
-        {
-            "client_credentials" => clientCredentialsExtensions,
-            "authorization_code" => authorizationCodeExtensions,
-            _ => null
-        };
-
-        return grantSpecific ?? fallback;
     }
 
     private AuthorizationExtensionValidationResult ValidatePurposeOfUse(

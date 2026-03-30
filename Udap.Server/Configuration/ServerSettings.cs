@@ -92,32 +92,6 @@ public class ServerSettings
     /// </summary>
     public bool ForceDPoP { get; set; }
 
-    /// <summary>
-    /// Authorization extension key names required by this server in every token request
-    /// regardless of grant type (e.g., ["hl7-b2b"]). This is the global default.
-    /// When grant-type-specific settings (<see cref="ClientCredentialsExtensionsRequired"/>
-    /// or <see cref="AuthorizationCodeExtensionsRequired"/>) are set, they take precedence.
-    /// Community-specific validators can override via <see cref="ICommunityTokenValidator.GetValidationRules"/>.
-    /// Validated by <see cref="IUdapAuthorizationExtensionValidator"/>.
-    /// </summary>
-    [JsonPropertyName("AuthorizationExtensionsRequired")]
-    public HashSet<string>? AuthorizationExtensionsRequired { get; set; }
-
-    /// <summary>
-    /// Authorization extension key names required for client_credentials token requests
-    /// (e.g., ["hl7-b2b"]). When set, takes precedence over <see cref="AuthorizationExtensionsRequired"/>
-    /// for client_credentials grants.
-    /// </summary>
-    [JsonPropertyName("ClientCredentialsExtensionsRequired")]
-    public HashSet<string>? ClientCredentialsExtensionsRequired { get; set; }
-
-    /// <summary>
-    /// Authorization extension key names required for authorization_code token requests
-    /// (e.g., ["hl7-b2b-user"]). When set, takes precedence over <see cref="AuthorizationExtensionsRequired"/>
-    /// for authorization_code grants.
-    /// </summary>
-    [JsonPropertyName("AuthorizationCodeExtensionsRequired")]
-    public HashSet<string>? AuthorizationCodeExtensionsRequired { get; set; }
 
 }
 
