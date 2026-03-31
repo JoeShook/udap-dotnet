@@ -298,7 +298,7 @@ public class TefcaBuild : CertificateBase
         string aiaUrl)
     {
         var distinguishedName =
-            $"CN={subjectAltNames.First()}, OU=TEFCA-TEST, O=Fhir Coding, L=Portland, S=Oregon, C=US";
+            "CN=TEFCA-Mock, OU=TEFCA-TEST, O=Fhir Coding, L=Portland, S=Oregon, C=US";
 
         var intermediateCertWithKey = intermediateCert.HasPrivateKey
             ? intermediateCert
