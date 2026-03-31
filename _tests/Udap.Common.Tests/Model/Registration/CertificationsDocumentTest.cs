@@ -542,7 +542,7 @@ namespace Udap.Common.Tests.Model.Registration
                 {
                     ["exchange_purposes"] = JsonSerializer.SerializeToElement(
                         new[] { "urn:oid:2.16.840.1.113883.3.7204.1.5.2.1#T-IAS" }),
-                    ["home_community_id"] = JsonSerializer.SerializeToElement("2.16.840.1.113883.3.2054.2.4")
+                    ["home_community_id"] = JsonSerializer.SerializeToElement("urn:oid:2.999")
                 }
             };
 
@@ -556,7 +556,7 @@ namespace Udap.Common.Tests.Model.Registration
             Assert.Equal("urn:oid:2.16.840.1.113883.3.7204.1.5.2.1#T-IAS", ep[0].GetString());
 
             Assert.True(parsed.RootElement.TryGetProperty("home_community_id", out var hc));
-            Assert.Equal("2.16.840.1.113883.3.2054.2.4", hc.GetString());
+            Assert.Equal("urn:oid:2.999", hc.GetString());
 
             // Deserialize back and verify additional claims survive
             var deserialized = JsonSerializer.Deserialize<UdapCertificationAndEndorsementDocument>(json);
@@ -580,28 +580,26 @@ namespace Udap.Common.Tests.Model.Registration
             var certificationCert =
                 new X509Certificate2(Path.Combine("CertStore/issued", "FhirLabsAdminCertification.pfx"), "udap-test");
 
-            var builder = UdapCertificationsAndEndorsementBuilder
-                .Create("TEFCA Basic App Certification", certificationCert);
-
-            builder
+            var signedJwt = UdapCertificationsAndEndorsementBuilder
+                .Create("TEFCA Basic App Certification", certificationCert)
                 .WithClampedExpiration(TimeSpan.FromMinutes(5))
                 .WithCertificationDescription("TEFCA Basic App Certification")
                 .WithCertificationUris(new List<string>
                     { "https://rce.sequoiaproject.org/udap/profiles/basic-app-certification" })
                 .WithScope("user/*.read")
-                .WithTokenEndpointAuthMethod("private_key_jwt");
+                .WithTokenEndpointAuthMethod("private_key_jwt")
+                .WithAdditionalClaims(new Dictionary<string, JsonElement>
+                {
+                    ["exchange_purposes"] = JsonSerializer.SerializeToElement(
+                        new[] { "urn:oid:2.16.840.1.113883.3.7204.1.5.2.1#T-IAS" }),
+                    ["home_community_id"] = JsonSerializer.SerializeToElement(
+                        "2.16.840.1.113883.3.2054.2.4")
+                })
+                .BuildSoftwareStatement();
 
-            var document = builder.Build();
-            document.AdditionalClaims = new Dictionary<string, JsonElement>
-            {
-                ["exchange_purposes"] = JsonSerializer.SerializeToElement(
-                    new[] { "urn:oid:2.16.840.1.113883.3.7204.1.5.2.1#T-IAS" })
-            };
-
-            var signedJwt = builder.BuildSoftwareStatement();
             Assert.NotNull(signedJwt);
 
-            // Decode payload and verify exchange_purposes is present
+            // Decode payload and verify additional claims are present
             var parts = signedJwt.Split('.');
             Assert.Equal(3, parts.Length);
 
@@ -611,6 +609,8 @@ namespace Udap.Common.Tests.Model.Registration
             var payload = JsonDocument.Parse(payloadJson);
             Assert.True(payload.RootElement.TryGetProperty("exchange_purposes", out var ep));
             Assert.Equal("urn:oid:2.16.840.1.113883.3.7204.1.5.2.1#T-IAS", ep[0].GetString());
+            Assert.True(payload.RootElement.TryGetProperty("home_community_id", out var hc));
+            Assert.Equal("2.16.840.1.113883.3.2054.2.4", hc.GetString());
         }
     }
 
