@@ -40,10 +40,6 @@ public static class TefcaConstants
     {
         /// <summary>Fixed string value: "1". <a href="https://rce.sequoiaproject.org/wp-content/uploads/2026/02/SOP-Facilitated-FHIR-Implementation-2.0-Draft-508.pdf#page=16">Table 4</a></summary>
         public const string Version = "version";
-        /// <summary>Fixed Value "T-IAS". <a href="https://rce.sequoiaproject.org/wp-content/uploads/2026/02/SOP-Facilitated-FHIR-Implementation-2.0-Draft-508.pdf#page=16">Table 4</a></summary>
-        public const string PurposeOfUse = "purpose_of_use";
-        /// <summary>Fixed purpose_of_use value for IAS. <a href="https://rce.sequoiaproject.org/wp-content/uploads/2026/02/SOP-Facilitated-FHIR-Implementation-2.0-Draft-508.pdf#page=16">Table 4</a></summary>
-        public const string PurposeOfUseCode = "T-IAS";
         /// <summary>FHIR RelatedPerson Resource with all known demographics. <a href="https://rce.sequoiaproject.org/wp-content/uploads/2026/02/SOP-Facilitated-FHIR-Implementation-2.0-Draft-508.pdf#page=16">Table 4</a></summary>
         public const string UserInformation = "user_information";
         /// <summary>FHIR US Core Patient Resource with all known demographics. <a href="https://rce.sequoiaproject.org/wp-content/uploads/2026/02/SOP-Facilitated-FHIR-Implementation-2.0-Draft-508.pdf#page=16">Table 4</a></summary>

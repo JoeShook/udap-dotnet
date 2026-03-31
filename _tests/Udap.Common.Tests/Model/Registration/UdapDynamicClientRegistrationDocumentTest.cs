@@ -429,13 +429,10 @@ public class UdapDynamicClientRegistrationDocumentTest
         // _testOutputHelper.WriteLine(serializeDocument);
 
 
-        Assert.Contains("T-IAS", serializeDocument);
         Assert.Contains("https://udaped.fhirlabs.net/Policy/Consent/99", serializeDocument);
         Assert.Contains("https://fhirlabs.net/fhir/r4/Consent/99", serializeDocument);
 
         tefcaIas = JsonSerializer.Deserialize<TEFCAIASAuthorizationExtension>(serializeDocument);
-
-        Assert.Equal("T-IAS", tefcaIas!.PurposeOfUse);
 
         tefcaIas.ConsentPolicy!.Remove("https://udaped.fhirlabs.net/Policy/Consent/99");
         Assert.Equal(0, tefcaIas.ConsentPolicy.Count);
@@ -748,14 +745,13 @@ public class UdapDynamicClientRegistrationDocumentTest
     {
         var hl7B2BUser = new TEFCAIASAuthorizationExtension()
         {
-            Version = null!,
-            PurposeOfUse = "Bad"
+            Version = null!
         };
 
         var notes = hl7B2BUser.Validate();
         Assert.NotNull(notes);
-        Assert.Equal(4, notes.Count);
-        Assert.Equal(new List<string> { "Missing required version", "Missing required user_information", "Missing required patient_information", "purpose_of_use must be T-IAS" }, notes);
+        Assert.Equal(3, notes.Count);
+        Assert.Equal(new List<string> { "Missing required version", "Missing required user_information", "Missing required patient_information" }, notes);
     }
 
     [Fact]

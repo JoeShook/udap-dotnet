@@ -24,7 +24,6 @@ public class TEFCAIASAuthorizationExtension : IAuthorizationExtensionObject
     private string _version = "1";
     private JsonElement? _userInformation;
     private JsonElement? _patientInformation;
-    private string _purposeOfUse = TefcaConstants.TEFCAIASAuthorizationExtension.PurposeOfUseCode;
     private ICollection<string>? _consentPolicy;
     private ICollection<string>? _consentReference;
     private JsonElement? _idToken;
@@ -46,18 +45,6 @@ public class TEFCAIASAuthorizationExtension : IAuthorizationExtensionObject
     {
         get => _version;
         set => _version = value;
-    }
-
-    /// <summary>
-    /// purpose_of_use required:
-    ///
-    /// Fixed Value "T-IAS".
-    /// </summary>
-    [JsonPropertyName(TefcaConstants.TEFCAIASAuthorizationExtension.PurposeOfUse)]
-    public string PurposeOfUse
-    {
-        get => _purposeOfUse;
-        set => _purposeOfUse = value;
     }
 
     /// <summary>
@@ -153,17 +140,11 @@ public class TEFCAIASAuthorizationExtension : IAuthorizationExtensionObject
             notes.Add($"Missing required {TefcaConstants.TEFCAIASAuthorizationExtension.PatientInformation}");
         }
 
-        if (PurposeOfUse != TefcaConstants.TEFCAIASAuthorizationExtension.PurposeOfUseCode)
-        {
-            notes.Add($"{TefcaConstants.TEFCAIASAuthorizationExtension.PurposeOfUse} must be {TefcaConstants.TEFCAIASAuthorizationExtension.PurposeOfUseCode}");
-        }
-
         return notes;
     }
 
     /// <inheritdoc />
-    public ICollection<string>? GetPurposeOfUse() =>
-        string.IsNullOrEmpty(PurposeOfUse) ? null : new[] { PurposeOfUse };
+    public ICollection<string>? GetPurposeOfUse() => null;
 
     /// <summary>
     /// Serializes this instance to JSON.
