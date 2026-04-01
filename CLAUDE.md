@@ -134,3 +134,7 @@ builder.Services.AddAuthentication().AddTieredOAuth(options => { ... });
 - **YARP 2.1.0** - Reverse proxy (for proxy examples)
 
 Package versions are centrally managed in `Directory.Packages.props`.
+
+## Specifications
+
+- **UDAP.org** is the base specification for this SDK. All 7 specs are in `docs/specifications/UDAP.org/` (see `README.md` there for index). SSRAA and TEFCA are profiles layered on top of UDAP.org.
