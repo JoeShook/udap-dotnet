@@ -17,6 +17,10 @@ The Unified Data Access Profiles (UDAP) published by UDAP.org increase confidenc
 | [Client Authorization Grants](udap-client-authorization-grants.md) | DRAFT | JWT-based client authorization assertions |
 | [Server Metadata](udap-server-metadata.md) | STU 1 | Publishing capabilities and endpoints for discovery |
 
+## Conversion Notes
+
+These markdown files are **raw automated conversions** from the original HTML source pages at https://www.udap.org using the Python `html2text` library. All normative text has been preserved verbatim. No content has been summarized, paraphrased, or editorially modified. Minor formatting artifacts from the HTML-to-markdown conversion may be present.
+
 ## Key Concepts
 
 - **Trust Communities**: Groups of organizations sharing common trust anchors (root CAs)
