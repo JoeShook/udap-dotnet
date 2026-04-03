@@ -1,0 +1,45 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFrameworks>net8.0;net9.0;net10.0</TargetFrameworks>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <LangVersion>latest</LangVersion>
+    <Nullable>enable</Nullable>
+
+    <RepositoryType>git</RepositoryType>
+    <RepositoryUrl>https://github.com/JoeShook/udap-dotnet</RepositoryUrl>
+    <PackageReadmeFile>README.md</PackageReadmeFile>
+    <Authors>Joseph Shook</Authors>
+    <Copyright>Copyright © Joseph.Shook@Surescripts.com 2026</Copyright>
+    <PackageLicenseExpression>MIT</PackageLicenseExpression>
+    <PackageRequireLicenseAcceptance>true</PackageRequireLicenseAcceptance>
+    <PackageIcon>UDAP_Ecosystem_Gears 48X48.jpg</PackageIcon>
+    <PackageTags>UDAP;FHIR;HL7;TEFCA</PackageTags>
+    <Description>TEFCA community-specific validators for UDAP registration and token issuance.</Description>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <None Include="..\artwork\UDAP_Ecosystem_Gears 48X48.jpg" Link="UDAP_Ecosystem_Gears 48X48.jpg">
+      <PackagePath>\</PackagePath>
+      <Pack>true</Pack>
+    </None>
+  </ItemGroup>
+
+  <ItemGroup>
+    <None Include="docs\README.md" Pack="true" PackagePath="\" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.Extensions.DependencyInjection.Abstractions" />
+    <PackageReference Include="Microsoft.SourceLink.GitHub">
+      <PrivateAssets>all</PrivateAssets>
+      <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
+    </PackageReference>
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\Udap.Server\Udap.Server.csproj" />
+    <ProjectReference Include="..\Udap.Tefca.Model\Udap.Tefca.Model.csproj" />
+  </ItemGroup>
+
+</Project>

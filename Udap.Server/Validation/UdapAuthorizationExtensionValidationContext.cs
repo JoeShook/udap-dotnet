@@ -44,4 +44,17 @@ public class UdapAuthorizationExtensionValidationContext
     /// Used to resolve grant-type-specific extension requirements.
     /// </summary>
     public string? GrantType { get; set; }
+
+    /// <summary>
+    /// The SAN URI the client registered with (from the UDAP_SAN_URI_ISS_NAME secret).
+    /// Community validators use this to enforce that the purpose_of_use matches
+    /// the exchange purpose embedded in the SAN.
+    /// </summary>
+    public string? SanUri { get; set; }
+
+    /// <summary>
+    /// The community name (URI) the client belongs to.
+    /// Used by <see cref="ICommunityTokenValidator"/> implementations to determine applicability.
+    /// </summary>
+    public string? CommunityName { get; set; }
 }

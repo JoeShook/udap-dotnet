@@ -255,6 +255,14 @@ public class UdapCertificationAndEndorsementDocument : ISoftwareStatementSeriali
     public string? Jwks { get; set; }
 
     /// <summary>
+    /// Additional claims not modeled as explicit properties.
+    /// Any unknown JSON properties will be captured here during deserialization
+    /// and included during serialization.
+    /// </summary>
+    [JsonExtensionData]
+    public Dictionary<string, JsonElement>? AdditionalClaims { get; set; }
+
+    /// <summary>
     /// Serializes this instance to JSON.
     /// </summary>
     /// <returns>This instance as JSON.</returns>
