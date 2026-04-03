@@ -105,7 +105,7 @@ public partial class BuildTestCerts : CertificateBase
     /// default community uri = udap://fhirlabs.net
     ///
     /// </summary>
-    [Fact]
+    [Fact(Skip = "Enabled on desktop when needed.")]
     public void MakeCaWithIntermediateUdapAndSSLForDefaultCommunity() // ordered by method name.  Notice ITestCaseOrderer
     {
         Console.WriteLine("*************************************");
@@ -211,6 +211,31 @@ public partial class BuildTestCerts : CertificateBase
 
             SureFhirlabsUdapIssued.EnsureDirectoryExists();
 
+            BuildEndCertsForDefaultCommunity(caCert, intermediateCertWithoutKey, intermediateCertWithKey, intermediateRSAKey);
+        }
+    }
+
+    /// <summary>
+    /// Regenerate all end-entity certificates (UDAP client, ECDSA, SSL, CRLs) for the default community
+    /// using the existing CA and intermediate from disk. Does NOT rebuild the PKI.
+    /// </summary>
+    [Fact]//(Skip = "Enabled on desktop when needed.")]
+    public void MakeEndCertsForDefaultCommunity()
+    {
+        using var caCert = new X509Certificate2($"{SureFhirLabsCertStore}/SureFhirLabs_CA.pfx", "udap-test", X509KeyStorageFlags.Exportable);
+        using var subCA = new X509Certificate2($"{SureFhirlabsUdapIntermediates}/SureFhirLabs_Intermediate.pfx", "udap-test", X509KeyStorageFlags.Exportable);
+
+        SureFhirlabsUdapIssued.EnsureDirectoryExists();
+
+        BuildEndCertsForDefaultCommunity(caCert, subCA, subCA, subCA.GetRSAPrivateKey()!);
+    }
+
+    private void BuildEndCertsForDefaultCommunity(
+        X509Certificate2 caCert,
+        X509Certificate2 intermediateCertWithoutKey,
+        X509Certificate2 intermediateCertWithKey,
+        RSA intermediateRSAKey)
+    {
             #region weatherapi.lab Client (Issued) Certificates
 
             BuildUdapClientCertificate(
@@ -291,66 +316,7 @@ public partial class BuildTestCerts : CertificateBase
                 SureFhirLabsIntermediatePublicCertHosted
             );
             #endregion
-
-            #region weatherapi.lab SSL
-
-            // using RSA rsaWeatherApiSsl = RSA.Create(2048);
-            // var sslReq = new CertificateRequest(
-            //     "CN=weatherapi.lab, OU=SSL, O=Fhir Coding, L=Portland, S=Oregon, C=US",
-            //     rsaWeatherApiSsl,
-            //     HashAlgorithmName.SHA256,
-            //     RSASignaturePadding.Pkcs1);
-            //
-            // sslReq.CertificateExtensions.Add(
-            //     new X509BasicConstraintsExtension(false, false, 0, true));
-            //
-            // sslReq.CertificateExtensions.Add(
-            //     new X509KeyUsageExtension(
-            //         X509KeyUsageFlags.DigitalSignature,
-            //         true));
-            //
-            // sslReq.CertificateExtensions.Add(
-            //     new X509SubjectKeyIdentifierExtension(sslReq.PublicKey, false));
-            //
-            // AddAuthorityKeyIdentifier(intermediateCertWithoutKey, sslReq, _testOutputHelper);
-            // sslReq.CertificateExtensions.Add(MakeCdp(SureFhirLabsIntermediateCrl));
-            //
-            // subAltNameBuilder = new SubjectAlternativeNameBuilder();
-            // subAltNameBuilder.AddDnsName("weatherapi.lab");
-            // x509Extension = subAltNameBuilder.Build();
-            // sslReq.CertificateExtensions.Add(x509Extension);
-            //
-            // sslReq.CertificateExtensions.Add(
-            //     new X509EnhancedKeyUsageExtension(
-            //         new OidCollection {
-            //             new Oid("1.3.6.1.5.5.7.3.2"), // TLS Client auth
-            //             new Oid("1.3.6.1.5.5.7.3.1"), // TLS Server auth
-            //         },
-            //         true));
-            //
-            // using (var clientCert = sslReq.Create(
-            //            intermediateCertWithKey,
-            //            DateTimeOffset.UtcNow.AddDays(-1),
-            //            DateTimeOffset.UtcNow.AddYears(2),
-            //            new ReadOnlySpan<byte>(RandomNumberGenerator.GetBytes(16))))
-            // {
-            //     // Do something with these certs, like export them to PFX,
-            //     // or add them to an X509Store, or whatever.
-            //     var sslCert = clientCert.CopyWithPrivateKey(rsaWeatherApiSsl);
-            //
-            //     SureFhirLabsSslWeatherApi.EnsureDirectoryExists();
-            //     var clientBytes = sslCert.Export(X509ContentType.Pkcs12, "udap-test");
-            //
-            //     Console.WriteLine("*************************************");
-            //     Console.WriteLine($"{SureFhirLabsSslWeatherApi}/weatherapi.lab.pfx");
-            //     Console.WriteLine("*************************************");
-            //
-            //     File.WriteAllBytes($"{SureFhirLabsSslWeatherApi}/weatherapi.lab.pfx", clientBytes);
-            //     char[] certificatePem = PemEncoding.Write("CERTIFICATE", clientCert.RawData);
-            //     File.WriteAllBytes($"{SureFhirLabsSslWeatherApi}/weatherapi.lab.cer", certificatePem.Select(c => (byte)c).ToArray());
-            // }
-            #endregion
-
+        
             #region fhirlabs.net SSL
 
             using RSA rsaFhirLabsSsl = RSA.Create(2048);
@@ -375,9 +341,9 @@ public partial class BuildTestCerts : CertificateBase
             AddAuthorityKeyIdentifier(intermediateCertWithoutKey, sureFhirSSLReq, _testOutputHelper);
             sureFhirSSLReq.CertificateExtensions.Add(MakeCdp(SureFhirLabsIntermediateCrl));
 
-            subAltNameBuilder = new SubjectAlternativeNameBuilder();
+            var subAltNameBuilder = new SubjectAlternativeNameBuilder();
             subAltNameBuilder.AddDnsName("fhirlabs.net");
-            x509Extension = subAltNameBuilder.Build();
+            var x509Extension = subAltNameBuilder.Build();
             sureFhirSSLReq.CertificateExtensions.Add(x509Extension);
 
             sureFhirSSLReq.CertificateExtensions.Add(
@@ -408,7 +374,7 @@ public partial class BuildTestCerts : CertificateBase
             #endregion
 
 
-            #region securedcontrols.net SSL  :: Identity Provider 
+            #region securedcontrols.net SSL  :: Identity Provider
 
             using RSA rsaSecuredControls = RSA.Create(2048);
 
@@ -556,7 +522,7 @@ public partial class BuildTestCerts : CertificateBase
                 new X509SubjectKeyIdentifierExtension(hostDockerInternal.PublicKey, false));
 
             AddAuthorityKeyIdentifier(caCert, hostDockerInternal, _testOutputHelper);
-            // hostDockerInternal.CertificateExtensions.Add(MakeCdp(SureFhirLabsRootCrl)); 
+            // hostDockerInternal.CertificateExtensions.Add(MakeCdp(SureFhirLabsRootCrl));
 
             subAltNameBuilder = new SubjectAlternativeNameBuilder();
             subAltNameBuilder.AddDnsName("host.docker.internal");
@@ -590,7 +556,6 @@ public partial class BuildTestCerts : CertificateBase
             }
 
             #endregion
-        }
 
         //Distribute
 
@@ -602,9 +567,9 @@ public partial class BuildTestCerts : CertificateBase
         File.Copy($"{SureFhirlabsUdapIssued}/fhirlabs.net.client.pfx",
             $"{BaseDir}/../../examples/FhirLabsApi/CertStore/issued/fhirlabs.net.client.pfx",
             true);
-           
 
-            
+
+
         //
         // Udap.Common.Tests
         //
@@ -626,12 +591,12 @@ public partial class BuildTestCerts : CertificateBase
 
 
 
-        // Copy CA to FhirLabsApi so it can be added to the Docker Container trust store. 
+        // Copy CA to FhirLabsApi so it can be added to the Docker Container trust store.
         File.Copy($"{SureFhirLabsCertStore}/SureFhirLabs_CA.cer",
             $"{BaseDir}/../../examples/FhirLabsApi/SureFhirLabs_CA.cer",
             true);
 
-        // Copy CA to Udap.Auth.Server so it can be added to the Docker Container trust store. 
+        // Copy CA to Udap.Auth.Server so it can be added to the Docker Container trust store.
         File.Copy($"{SureFhirLabsCertStore}/SureFhirLabs_CA.cer",
             $"{BaseDir}/../../examples/Udap.Auth.Server/SureFhirLabs_CA.cer",
             true);
