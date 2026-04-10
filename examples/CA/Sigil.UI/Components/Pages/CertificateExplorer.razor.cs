@@ -36,6 +36,8 @@ public partial class CertificateExplorer
     private bool selectedNodeHasPrivateKey;
     private List<string> subjectAltNames = new();
     private FluentTreeItem? selectedTreeItem;
+    private bool isRevalidating;
+    private Dictionary<string, ChainValidationResult> communityValidations = new();
 
     // Import state
     private bool showDropZone;
@@ -105,30 +107,12 @@ public partial class CertificateExplorer
             .OrderBy(ca => ca.Name)
             .ToListAsync();
 
-        var allCrls = await db.Crls
-            .Where(c => c.CaCertificate.CommunityId == communityId)
-            .Include(c => c.Revocations)
-            .ToListAsync();
-
-        // Pre-validate all certs
-        var validationResults = new Dictionary<string, ChainValidationResult>();
-        foreach (var ca in caCerts)
-        {
-            var result = await ChainValidator.ValidateChainAsync(ca.X509CertificatePem, ca.Name, caCerts, allCrls);
-            validationResults[ca.Thumbprint] = result;
-        }
-        foreach (var ca in caCerts)
-        {
-            foreach (var issued in ca.IssuedCertificates)
-            {
-                var result = await ChainValidator.ValidateChainAsync(issued.X509CertificatePem, issued.Name, caCerts, allCrls);
-                validationResults[issued.Thumbprint] = result;
-            }
-        }
+        // Validate all certs in one pass (parses CAs once, stored CRLs only)
+        communityValidations = await ChainValidator.ValidateCommunityAsync(communityId);
 
         treeNodes = caCerts
             .Where(ca => ca.ParentId == null)
-            .Select(rootCa => BuildTreeNode(rootCa, caCerts, validationResults))
+            .Select(rootCa => BuildTreeNode(rootCa, caCerts, communityValidations))
             .ToList();
 
         selectedNode = null;
@@ -321,11 +305,20 @@ public partial class CertificateExplorer
                 selectedCert = X509Certificate2.CreateFromPem(pem);
                 asn1Root = Asn1Parser.ParsePem(pem);
 
-                // Run chain validation
-                if (node.EntityType == "CaCertificate")
-                    chainValidation = await ChainValidator.ValidateCaCertificateAsync(node.Id);
+                // Use pre-computed result from tree load
+                if (!string.IsNullOrEmpty(node.Thumbprint)
+                    && communityValidations.TryGetValue(node.Thumbprint, out var cached))
+                {
+                    chainValidation = cached;
+                }
                 else
-                    chainValidation = await ChainValidator.ValidateIssuedCertificateAsync(node.Id);
+                {
+                    // Fallback: validate on demand
+                    if (node.EntityType == "CaCertificate")
+                        chainValidation = await ChainValidator.ValidateCaCertificateAsync(node.Id);
+                    else
+                        chainValidation = await ChainValidator.ValidateIssuedCertificateAsync(node.Id);
+                }
             }
             catch { }
         }
@@ -348,6 +341,36 @@ public partial class CertificateExplorer
                 }
                 catch { }
             }
+        }
+    }
+
+    private async Task RevalidateSelectedAsync()
+    {
+        if (selectedNode == null || selectedNode.EntityType == "Crl") return;
+
+        isRevalidating = true;
+        StateHasChanged();
+
+        try
+        {
+            // Full validation with online CRL resolution
+            if (selectedNode.EntityType == "CaCertificate")
+                chainValidation = await ChainValidator.ValidateCaCertificateAsync(selectedNode.Id);
+            else
+                chainValidation = await ChainValidator.ValidateIssuedCertificateAsync(selectedNode.Id);
+
+            // Update the stored results
+            if (!string.IsNullOrEmpty(selectedNode.Thumbprint) && chainValidation != null)
+                communityValidations[selectedNode.Thumbprint] = chainValidation;
+        }
+        catch (Exception ex)
+        {
+            ToastService.ShowError($"Validation failed: {ex.Message}");
+        }
+        finally
+        {
+            isRevalidating = false;
+            StateHasChanged();
         }
     }
 

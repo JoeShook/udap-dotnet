@@ -26,6 +26,67 @@ public class ChainValidationService
         _logger = logger;
     }
 
+    /// <summary>
+    /// Validates all certificates in a community in one pass (parses CAs once).
+    /// Uses stored CRLs only (no HTTP) for speed.
+    /// Returns a dictionary keyed by thumbprint.
+    /// </summary>
+    public async Task<Dictionary<string, ChainValidationResult>> ValidateCommunityAsync(
+        int communityId, CancellationToken ct = default)
+    {
+        await using var db = await _dbFactory.CreateDbContextAsync(ct);
+
+        var allCas = await db.CaCertificates
+            .Where(c => c.CommunityId == communityId)
+            .Include(c => c.IssuedCertificates)
+            .ToListAsync(ct);
+
+        var allCrls = await db.Crls
+            .Where(c => c.CaCertificate.CommunityId == communityId)
+            .Include(c => c.Revocations)
+            .ToListAsync(ct);
+
+        // Parse all CA certs once — the expensive part
+        var parser = new X509CertificateParser();
+        var bcCas = new List<(CaCertificate entity, BcX509Certificate bcCert)>();
+        foreach (var ca in allCas)
+        {
+            try
+            {
+                using var dotNetCa = X509Certificate2.CreateFromPem(ca.X509CertificatePem);
+                var bcCa = parser.ReadCertificate(dotNetCa.RawData);
+                bcCas.Add((ca, bcCa));
+            }
+            catch (Exception ex)
+            {
+                _logger.LogWarning(ex, "Cannot parse CA certificate {Name}", ca.Name);
+            }
+        }
+
+        var results = new Dictionary<string, ChainValidationResult>();
+
+        // Validate all CAs
+        foreach (var ca in allCas)
+        {
+            var result = await ValidateChainInternal(
+                ca.X509CertificatePem, ca.Name, bcCas, allCrls, skipOnlineCrl: true, ct);
+            results[ca.Thumbprint] = result;
+        }
+
+        // Validate all issued certs
+        foreach (var ca in allCas)
+        {
+            foreach (var issued in ca.IssuedCertificates)
+            {
+                var result = await ValidateChainInternal(
+                    issued.X509CertificatePem, issued.Name, bcCas, allCrls, skipOnlineCrl: true, ct);
+                results[issued.Thumbprint] = result;
+            }
+        }
+
+        return results;
+    }
+
     public async Task<ChainValidationResult> ValidateCaCertificateAsync(
         int caCertificateId, CancellationToken ct = default)
     {
@@ -84,20 +145,19 @@ public class ChainValidationService
         List<Crl> communityCrls,
         CancellationToken ct = default)
     {
+        return await ValidateChainAsync(leafPem, leafName, communityCas, communityCrls,
+            skipOnlineCrl: false, ct);
+    }
+
+    public async Task<ChainValidationResult> ValidateChainAsync(
+        string leafPem,
+        string leafName,
+        List<CaCertificate> communityCas,
+        List<Crl> communityCrls,
+        bool skipOnlineCrl,
+        CancellationToken ct = default)
+    {
         var parser = new X509CertificateParser();
-        var chainLinks = new List<ChainLink>();
-
-        BcX509Certificate bcLeaf;
-        try
-        {
-            using var dotNetLeaf = X509Certificate2.CreateFromPem(leafPem);
-            bcLeaf = parser.ReadCertificate(dotNetLeaf.RawData);
-        }
-        catch (Exception ex)
-        {
-            return ChainValidationResult.Failed($"Cannot parse certificate: {ex.Message}");
-        }
-
         var bcCas = new List<(CaCertificate entity, BcX509Certificate bcCert)>();
         foreach (var ca in communityCas)
         {
@@ -111,6 +171,31 @@ public class ChainValidationService
             {
                 _logger.LogWarning(ex, "Cannot parse CA certificate {Name}", ca.Name);
             }
+        }
+
+        return await ValidateChainInternal(leafPem, leafName, bcCas, communityCrls, skipOnlineCrl, ct);
+    }
+
+    private async Task<ChainValidationResult> ValidateChainInternal(
+        string leafPem,
+        string leafName,
+        List<(CaCertificate entity, BcX509Certificate bcCert)> bcCas,
+        List<Crl> communityCrls,
+        bool skipOnlineCrl,
+        CancellationToken ct)
+    {
+        var parser = new X509CertificateParser();
+        var chainLinks = new List<ChainLink>();
+
+        BcX509Certificate bcLeaf;
+        try
+        {
+            using var dotNetLeaf = X509Certificate2.CreateFromPem(leafPem);
+            bcLeaf = parser.ReadCertificate(dotNetLeaf.RawData);
+        }
+        catch (Exception ex)
+        {
+            return ChainValidationResult.Failed($"Cannot parse certificate: {ex.Message}");
         }
 
         var current = bcLeaf;
@@ -153,7 +238,7 @@ public class ChainValidationService
             // Check CRL revocation (skip for self-signed roots)
             if (!current.IssuerDN.Equivalent(current.SubjectDN))
             {
-                await CheckCrlRevocationAsync(current, link, bcCas, communityCrls, ct);
+                await CheckCrlRevocationAsync(current, link, bcCas, communityCrls, skipOnlineCrl, ct);
             }
 
             // Self-signed root
@@ -254,6 +339,7 @@ public class ChainValidationService
         ChainLink link,
         List<(CaCertificate entity, BcX509Certificate bcCert)> bcCas,
         List<Crl> communityCrls,
+        bool skipOnlineCrl,
         CancellationToken ct)
     {
         // Find issuer
@@ -291,22 +377,32 @@ public class ChainValidationService
 
             if (now <= latestCrl.NextUpdate)
             {
-                // Stored CRL is still valid — use it
                 CheckRevocationInCrl(cert, link, latestCrl, CrlSource.Stored);
                 return;
             }
 
-            // Stored CRL is expired — try online, fall back to expired
             _logger.LogInformation("Stored CRL #{Number} expired, attempting online resolution", latestCrl.CrlNumber);
         }
 
-        // No valid stored CRL — try online resolution via CDP extension
+        if (skipOnlineCrl)
+        {
+            if (storedCrls.Count > 0)
+            {
+                link.CrlStatus = CrlCheckStatus.CrlExpired;
+                link.Problems.Add($"CRL #{storedCrls[0].CrlNumber} expired (online check skipped)");
+            }
+            else
+            {
+                link.CrlStatus = CrlCheckStatus.NoCrlAvailable;
+            }
+            return;
+        }
+
         var cdpUrls = ExtractCdpUrls(cert);
         if (cdpUrls.Count == 0)
         {
             if (storedCrls.Count > 0)
             {
-                // Use expired stored CRL with warning
                 link.CrlStatus = CrlCheckStatus.CrlExpired;
                 link.Problems.Add($"CRL #{storedCrls[0].CrlNumber} expired (NextUpdate: {storedCrls[0].NextUpdate:yyyy-MM-dd}), no CDP URL to fetch fresh CRL");
             }
@@ -318,7 +414,6 @@ public class ChainValidationService
             return;
         }
 
-        // Try each CDP URL
         foreach (var url in cdpUrls)
         {
             try
@@ -329,7 +424,6 @@ public class ChainValidationService
                 var crlParser = new X509CrlParser();
                 var downloadedCrl = crlParser.ReadCrl(crlBytes);
 
-                // Verify CRL signature against the issuer
                 try
                 {
                     downloadedCrl.Verify(issuerCa.Value.bcCert.GetPublicKey());
@@ -340,7 +434,6 @@ public class ChainValidationService
                     continue;
                 }
 
-                // Check CRL time validity
                 var now = DateTime.UtcNow;
                 if (now < downloadedCrl.ThisUpdate.ToUniversalTime())
                 {
@@ -351,10 +444,8 @@ public class ChainValidationService
                 if (downloadedCrl.NextUpdate.HasValue && now > downloadedCrl.NextUpdate.Value.ToUniversalTime())
                 {
                     _logger.LogWarning("Downloaded CRL from {Url} is expired", url);
-                    // Still use it but note it's expired
                 }
 
-                // Extract CRL number
                 long crlNumber = 0;
                 var crlNumExt = downloadedCrl.GetExtensionValue(X509Extensions.CrlNumber);
                 if (crlNumExt != null)
@@ -364,8 +455,6 @@ public class ChainValidationService
                     crlNumber = DerInteger.GetInstance(asn1Num).LongValueExact;
                 }
 
-                // Build a temporary CRL-like structure for checking
-                var serialHex = cert.SerialNumber.ToString(16).ToUpperInvariant();
                 var isRevoked = downloadedCrl.IsRevoked(cert);
 
                 if (isRevoked)
@@ -394,7 +483,6 @@ public class ChainValidationService
             }
         }
 
-        // Online resolution failed — fall back to expired stored CRL or report failure
         if (storedCrls.Count > 0)
         {
             var expiredCrl = storedCrls[0];
@@ -434,7 +522,6 @@ public class ChainValidationService
         {
             var client = _httpClientFactory.CreateClient("SigilCrl");
 
-            // Cache-busting query parameter to bypass Windows HTTP cache
             var separator = url.Contains('?') ? '&' : '?';
             var bustUrl = $"{url}{separator}_t={DateTimeOffset.UtcNow.ToUnixTimeMilliseconds()}";
 
