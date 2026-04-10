@@ -25,6 +25,29 @@
                 input.click();
             }
         };
+
+        window.sigilColResize = function(table) {
+            if (!table) return;
+            var cols = table.querySelectorAll('col');
+            var handles = table.querySelectorAll('.col-resize');
+            handles.forEach(function(handle, i) {
+                handle.addEventListener('mousedown', function(e) {
+                    e.preventDefault();
+                    var startX = e.pageX;
+                    var startW = cols[i].offsetWidth || parseInt(getComputedStyle(cols[i]).width);
+                    function onMove(ev) {
+                        var newW = Math.max(40, startW + ev.pageX - startX);
+                        cols[i].style.width = newW + 'px';
+                    }
+                    function onUp() {
+                        document.removeEventListener('mousemove', onMove);
+                        document.removeEventListener('mouseup', onUp);
+                    }
+                    document.addEventListener('mousemove', onMove);
+                    document.addEventListener('mouseup', onUp);
+                });
+            });
+        };
     </script>
 </body>
 </html>

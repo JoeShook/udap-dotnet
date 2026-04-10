@@ -40,13 +40,18 @@ public class CertificateParsingService
                 cert = X509CertificateLoader.LoadPkcs12(fileBytes, password,
                     X509KeyStorageFlags.Exportable);
             }
-            else if (ext is ".cer" or ".crt" or ".der")
+            else if (ext is ".cer" or ".crt" or ".der" or ".pem")
             {
-                cert = X509CertificateLoader.LoadCertificate(fileBytes);
-            }
-            else if (ext == ".pem")
-            {
-                cert = X509CertificateLoader.LoadCertificate(fileBytes);
+                // Try DER first, then PEM
+                try
+                {
+                    cert = X509CertificateLoader.LoadCertificate(fileBytes);
+                }
+                catch
+                {
+                    var pem = System.Text.Encoding.UTF8.GetString(fileBytes);
+                    cert = X509Certificate2.CreateFromPem(pem);
+                }
             }
             else
             {

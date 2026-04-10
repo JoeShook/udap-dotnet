@@ -14,7 +14,7 @@
                       IconStart="@(themeMode == DesignThemeModes.Dark ? new Icons.Regular.Size20.WeatherSunny() : new Icons.Regular.Size20.WeatherMoon())" />
     </FluentHeader>
     <div style="display: flex; height: calc(100vh - 50px); overflow: hidden;">
-        <FluentNavMenu Width="220" Title="Navigation">
+        <FluentNavMenu Width="220" Collapsible="true" Title="Navigation">
             <FluentNavLink Href="/" Match="NavLinkMatch.All" Icon="@(new Icons.Regular.Size20.Home())">Dashboard</FluentNavLink>
             <FluentNavLink Href="/communities" Icon="@(new Icons.Regular.Size20.Organization())">Communities</FluentNavLink>
             <FluentNavLink Href="/explorer" Icon="@(new Icons.Regular.Size20.Certificate())">Certificate Explorer</FluentNavLink>

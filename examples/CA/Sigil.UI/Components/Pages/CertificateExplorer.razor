@@ -211,11 +211,60 @@
     </FluentDialogFooter>
 </FluentDialog>
 
+@* CA selection dialog for unmatched certs *@
+<FluentDialog @bind-Hidden="@caSelectDialogHidden" Modal="true" TrapFocus="true"
+              Style="min-width: 500px; overflow: visible;">
+    <FluentDialogHeader>Select Issuing CA</FluentDialogHeader>
+    <FluentDialogBody Style="overflow: visible;">
+        <p style="font-size: 0.9rem;">
+            No matching issuing CA was found for <code>@pendingFileName</code>.
+        </p>
+        <p style="font-size: 0.85rem; opacity: 0.7; margin: 0.25rem 0 0.75rem;">
+            Select a CA to store this certificate under. The chain will show as untrusted, which is
+            useful for testing invalid PKI scenarios.
+        </p>
+        @if (pendingCaSelectQueue.Count > 0)
+        {
+            <p style="font-size: 0.8rem; opacity: 0.5;">@pendingCaSelectQueue.Count more file(s) waiting</p>
+        }
+        <FluentSelect TOption="CaSelectOption"
+                      Items="@availableCas"
+                      OptionValue="@(o => o.Id.ToString())"
+                      OptionText="@(o => o.DisplayName)"
+                      @bind-SelectedOption="selectedCaForAssignment"
+                      Position="SelectPosition.Below"
+                      Style="width: 100%; margin-top: 0.5rem;" />
+        @if (selectedCaForAssignment != null)
+        {
+            <div style="font-size: 0.8rem; opacity: 0.6; margin-top: 0.5rem;">
+                <strong>Subject:</strong> @selectedCaForAssignment.Subject
+            </div>
+        }
+    </FluentDialogBody>
+    <FluentDialogFooter>
+        <FluentButton Appearance="Appearance.Accent" OnClick="ConfirmCaAssignmentAsync"
+                      Disabled="@(selectedCaForAssignment == null)">
+            Assign
+        </FluentButton>
+        @if (pendingCaSelectQueue.Count > 0)
+        {
+            <FluentButton Appearance="Appearance.Outline" OnClick="SkipCaAssignment">Skip</FluentButton>
+        }
+        <FluentButton Appearance="Appearance.Outline" OnClick="CancelCaAssignment">Cancel</FluentButton>
+    </FluentDialogFooter>
+</FluentDialog>
+
 @if (treeNodes.Count > 0)
 {
-    <FluentGrid Style="margin-top: 1rem;" Spacing="3">
-        <FluentGridItem xs="12" md="4">
-            <FluentCard Style="height: calc(100vh - 200px); overflow-y: auto;">
+    <FluentSplitter Orientation="Orientation.Horizontal"
+                    Panel1Size="33%"
+                    Panel1MinSize="200px"
+                    Panel2MinSize="300px"
+                    BarSize="6"
+                    BarHandle="true"
+                    Style="margin-top: 1rem; height: calc(100vh - 200px);">
+        <Panel1>
+            <FluentCard Style="height: 100%; overflow-y: auto;">
                 <FluentLabel Typo="Typography.Subject" Style="margin-bottom: 0.5rem;">
                     @selectedCommunityName
                 </FluentLabel>
@@ -226,7 +275,7 @@
                         <FluentTreeItem Text="@root.Name"
                                         @key="@($"ca-{root.Id}")"
                                         Data="@root"
-                                        Expanded="true"
+                                        InitiallyExpanded="true"
                                         Style="@(IsError(root.Status) ? $"color: {NodeColor(root.Status)};" : "")">
                             <span slot="start" style="display: flex; align-items: center; gap: 0.35rem;">
                                 <FluentIcon Value="@(new Icons.Regular.Size16.ShieldKeyhole())" Color="Color.Custom"
@@ -238,7 +287,7 @@
                                 <FluentTreeItem Text="@intermediate.Name"
                                                 @key="@($"ca-{intermediate.Id}")"
                                                 Data="@intermediate"
-                                                Expanded="true"
+                                                InitiallyExpanded="true"
                                                 Style="@(IsError(intermediate.Status) ? $"color: {NodeColor(intermediate.Status)};" : "")">
                                     <span slot="start" style="display: flex; align-items: center; gap: 0.35rem;">
                                         <FluentIcon Value="@(new Icons.Regular.Size16.Shield())" Color="Color.Custom"
@@ -309,13 +358,12 @@
                     }
                 </FluentTreeView>
             </FluentCard>
-        </FluentGridItem>
-
-        <FluentGridItem xs="12" md="8">
+        </Panel1>
+        <Panel2>
             @if (selectedCrl != null)
             {
                 @* CRL Detail Panel *@
-                <FluentCard Style="height: calc(100vh - 200px); overflow-y: auto;">
+                <FluentCard Style="height: 100%; overflow-y: auto;">
                     <FluentStack Orientation="Orientation.Horizontal" Style="align-items: center; gap: 0.5rem;">
                         <FluentLabel Typo="Typography.Subject">CRL #@selectedCrl.CrlNumber</FluentLabel>
                         <FluentSpacer />
@@ -390,7 +438,7 @@
             else if (selectedCert != null)
             {
                 @* Certificate Detail Panel *@
-                <FluentCard Style="height: calc(100vh - 200px); overflow-y: auto;">
+                <FluentCard Style="height: 100%; overflow-y: auto;">
                     <FluentStack Orientation="Orientation.Horizontal" Style="align-items: center; gap: 0.5rem;">
                         <FluentLabel Typo="Typography.Subject">@selectedNode?.Name</FluentLabel>
                         <FluentSpacer />
@@ -477,7 +525,7 @@
                             <FluentAccordionItem Heading="@($"Chain Validation {(chainValidation.IsValid ? "(Trusted)" : "(UNTRUSTED)")}")" Expanded="true">
                                 <FluentStack Orientation="Orientation.Horizontal" Style="margin-bottom: 0.75rem; gap: 0.5rem; align-items: center;">
                                     <FluentButton Appearance="Appearance.Outline" OnClick="RevalidateSelectedAsync"
-                                                  Title="Revalidate with online CRL resolution"
+                                                  Title="Re-run chain validation and CRL checks"
                                                   Disabled="isRevalidating">
                                         <FluentIcon Value="new Icons.Regular.Size16.ArrowSync()" />
                                         @(isRevalidating ? "Validating..." : "Revalidate")
@@ -527,8 +575,13 @@
                                                 case CrlCheckStatus.Good:
                                                     <FluentBadge BackgroundColor="#4caf50" Color="white" Style="font-size: 0.7rem;"
                                                                  title="@(link.CrlSource == CrlSource.Downloaded ? $"Downloaded from {link.CrlSourceUrl}" : "From stored CRL")">
-                                                        CRL OK @(link.CrlSource == CrlSource.Downloaded ? " ↓" : "")
+                                                        CRL OK
                                                     </FluentBadge>
+                                                    @if (link.CrlSource == CrlSource.Downloaded)
+                                                    {
+                                                        <span style="font-size: 0.7rem; font-weight: 600;">↓</span>
+                                                        <span style="font-size: 0.7rem; color: #1976d2; font-weight: 600;">Downloaded</span>
+                                                    }
                                                     break;
                                                 case CrlCheckStatus.Revoked:
                                                     <FluentBadge BackgroundColor="#9c27b0" Color="white" Style="font-size: 0.7rem;">REVOKED</FluentBadge>
@@ -545,6 +598,12 @@
                                             }
                                         </FluentStack>
                                         <div style="opacity: 0.7; font-size: 0.8rem;">@link.Subject</div>
+                                        @if (link.CrlSource == CrlSource.Downloaded && link.CrlSourceUrl != null)
+                                        {
+                                            <div style="font-size: 0.75rem; color: #1976d2; margin-top: 0.15rem;">
+                                                CRL resolved from: @link.CrlSourceUrl
+                                            </div>
+                                        }
                                         @if (link.HasProblems)
                                         {
                                             <ul style="color: #e94560; margin: 0.25rem 0 0; padding-left: 1.25rem; font-size: 0.8rem;">
@@ -571,12 +630,12 @@
             }
             else
             {
-                <FluentCard Style="height: calc(100vh - 200px); display: flex; align-items: center; justify-content: center;">
+                <FluentCard Style="height: 100%; display: flex; align-items: center; justify-content: center;">
                     <span style="opacity: 0.5;">Select a certificate or CRL from the tree to view details</span>
                 </FluentCard>
             }
-        </FluentGridItem>
-    </FluentGrid>
+        </Panel2>
+    </FluentSplitter>
 }
 else if (CommunityId > 0 && !showDropZone)
 {

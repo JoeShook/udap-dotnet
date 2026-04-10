@@ -63,25 +63,31 @@ public class ChainValidationService
             }
         }
 
-        var results = new Dictionary<string, ChainValidationResult>();
+        // Build list of all certs to validate
+        var validationTasks = new List<(string Thumbprint, Task<ChainValidationResult> Task)>();
 
-        // Validate all CAs
         foreach (var ca in allCas)
         {
-            var result = await ValidateChainInternal(
-                ca.X509CertificatePem, ca.Name, bcCas, allCrls, skipOnlineCrl: true, ct);
-            results[ca.Thumbprint] = result;
+            validationTasks.Add((ca.Thumbprint, ValidateChainInternal(
+                ca.X509CertificatePem, ca.Name, bcCas, allCrls, skipOnlineCrl: false, ct)));
         }
 
-        // Validate all issued certs
         foreach (var ca in allCas)
         {
             foreach (var issued in ca.IssuedCertificates)
             {
-                var result = await ValidateChainInternal(
-                    issued.X509CertificatePem, issued.Name, bcCas, allCrls, skipOnlineCrl: true, ct);
-                results[issued.Thumbprint] = result;
+                validationTasks.Add((issued.Thumbprint, ValidateChainInternal(
+                    issued.X509CertificatePem, issued.Name, bcCas, allCrls, skipOnlineCrl: false, ct)));
             }
+        }
+
+        // Run all validations in parallel (CRL downloads happen concurrently)
+        await Task.WhenAll(validationTasks.Select(t => t.Task));
+
+        var results = new Dictionary<string, ChainValidationResult>();
+        foreach (var (thumbprint, task) in validationTasks)
+        {
+            results[thumbprint] = task.Result;
         }
 
         return results;
@@ -528,7 +534,7 @@ public class ChainValidationService
             _logger.LogDebug("Downloading CRL from {Url}", bustUrl);
 
             using var cts = CancellationTokenSource.CreateLinkedTokenSource(ct);
-            cts.CancelAfter(TimeSpan.FromSeconds(10));
+            cts.CancelAfter(TimeSpan.FromSeconds(5));
 
             var response = await client.GetAsync(bustUrl, cts.Token);
             if (!response.IsSuccessStatusCode)

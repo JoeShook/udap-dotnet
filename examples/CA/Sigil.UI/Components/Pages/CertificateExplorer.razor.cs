@@ -68,6 +68,13 @@ public partial class CertificateExplorer
     private string? chainMatchDescription;
     private int? matchedParentCaId;
 
+    // CA selection dialog (for unmatched certs)
+    private bool caSelectDialogHidden = true;
+    private List<CaSelectOption> availableCas = new();
+    private CaSelectOption? selectedCaForAssignment;
+    private ParsedCertificate? pendingCaSelectParsed;
+    private Queue<(byte[] Bytes, string FileName, string? Password)> pendingCaSelectQueue = new();
+
     protected override async Task OnInitializedAsync()
     {
         await using var db = await DbFactory.CreateDbContextAsync();
@@ -359,9 +366,13 @@ public partial class CertificateExplorer
             else
                 chainValidation = await ChainValidator.ValidateIssuedCertificateAsync(selectedNode.Id);
 
-            // Update the stored results
+            // Update the stored results and tree node status
             if (!string.IsNullOrEmpty(selectedNode.Thumbprint) && chainValidation != null)
+            {
                 communityValidations[selectedNode.Thumbprint] = chainValidation;
+                selectedNode.Status = DeriveStatus(
+                    selectedNode.Thumbprint, selectedNode.NotAfter, false, communityValidations);
+            }
         }
         catch (Exception ex)
         {
@@ -409,6 +420,38 @@ public partial class CertificateExplorer
                     {
                         return ca.Id;
                     }
+                }
+            }
+            catch { }
+        }
+
+        return null;
+    }
+
+    /// <summary>
+    /// Finds the issuing CA by matching the cert's Issuer DN against CA Subject DNs,
+    /// then verifying the signature. Used as fallback when AKI/SKI match fails.
+    /// </summary>
+    private async Task<int?> FindCaByDnAndSignatureAsync(SigilDbContext db, X509Certificate2 cert)
+    {
+        var cas = await db.CaCertificates
+            .Where(ca => ca.CommunityId == CommunityId)
+            .ToListAsync();
+
+        var bcParser = new Org.BouncyCastle.X509.X509CertificateParser();
+        var bcCert = bcParser.ReadCertificate(cert.RawData);
+
+        foreach (var ca in cas)
+        {
+            try
+            {
+                using var caCert = X509Certificate2.CreateFromPem(ca.X509CertificatePem);
+                var bcCa = bcParser.ReadCertificate(caCert.RawData);
+
+                if (bcCa.SubjectDN.Equivalent(bcCert.IssuerDN))
+                {
+                    bcCert.Verify(bcCa.GetPublicKey());
+                    return ca.Id; // Signature verified — this is the issuer
                 }
             }
             catch { }
@@ -519,26 +562,56 @@ public partial class CertificateExplorer
         importProgress = 0;
         int successCount = 0;
 
-        // Sort: process CAs first (root > intermediate > end-entity), CRLs last
-        // This ensures the chain exists before we try to match end certs and CRLs
-        var sorted = files
-            .OrderBy(f =>
+        // Read all files and detect roles so we can sort CAs before end-entity certs
+        var fileEntries = new List<(byte[] Bytes, string FileName, int SortOrder)>();
+        foreach (var (filePath, fileName) in files)
+        {
+            try
             {
-                var ext = Path.GetExtension(f.FileName).ToLowerInvariant();
-                if (ext == ".crl") return 3; // CRLs last
-                // PFX/CER — try to detect role from file, but we'll just import in order
-                return 1;
-            })
-            .ToList();
+                var fileBytes = await File.ReadAllBytesAsync(filePath);
+                var ext = Path.GetExtension(fileName).ToLowerInvariant();
 
-        foreach (var (filePath, fileName) in sorted)
+                int sortOrder;
+                if (ext == ".crl")
+                {
+                    sortOrder = 3; // CRLs last
+                }
+                else
+                {
+                    // Quick-parse to detect role for sorting
+                    var parsed = ext is ".pfx" or ".p12"
+                        ? (ParsingService.Parse(fileBytes, fileName, "") ?? ParsingService.Parse(fileBytes, fileName, "udap-test"))
+                        : ParsingService.Parse(fileBytes, fileName);
+
+                    if (parsed?.DetectedRole == DetectedCertRole.RootCa)
+                        sortOrder = 0; // Roots first
+                    else if (parsed?.DetectedRole == DetectedCertRole.IntermediateCa)
+                        sortOrder = 1; // Then intermediates
+                    else
+                        sortOrder = 2; // End-entity certs after CAs
+                    parsed?.Certificate.Dispose();
+                }
+
+                fileEntries.Add((fileBytes, fileName, sortOrder));
+            }
+            catch (Exception ex)
+            {
+                importErrors.Add($"Failed to read '{fileName}': {ex.Message}");
+            }
+        }
+
+        var sorted = fileEntries.OrderBy(f => f.SortOrder).ToList();
+        importTotal = sorted.Count;
+
+        // First pass
+        var retryList = new List<(byte[] Bytes, string FileName)>();
+        foreach (var (fileBytes, fileName, _) in sorted)
         {
             importProgress++;
             StateHasChanged();
 
             try
             {
-                var fileBytes = await File.ReadAllBytesAsync(filePath);
                 var ext = Path.GetExtension(fileName).ToLowerInvariant();
 
                 if (ext == ".crl")
@@ -551,14 +624,39 @@ public partial class CertificateExplorer
                 }
                 else
                 {
+                    var errorCountBefore = importErrors.Count;
                     var imported = await TryAutoImportCert(fileBytes, fileName);
                     if (imported)
                         successCount++;
+                    else if (importErrors.Count > errorCountBefore)
+                        retryList.Add((fileBytes, fileName)); // Had an error (not just queued for password)
                 }
             }
             catch (Exception ex)
             {
                 importErrors.Add($"{fileName}: {ex.Message}");
+            }
+        }
+
+        // Second pass: retry files that failed (CAs should now exist)
+        if (retryList.Count > 0)
+        {
+            // Clear errors from first pass for files we're retrying
+            var retryNames = retryList.Select(r => r.FileName).ToHashSet();
+            importErrors.RemoveAll(e => retryNames.Any(n => e.StartsWith($"{n}:")));
+
+            foreach (var (fileBytes, fileName) in retryList)
+            {
+                try
+                {
+                    var imported = await TryAutoImportCert(fileBytes, fileName);
+                    if (imported)
+                        successCount++;
+                }
+                catch (Exception ex)
+                {
+                    importErrors.Add($"{fileName}: {ex.Message}");
+                }
             }
         }
 
@@ -570,13 +668,17 @@ public partial class CertificateExplorer
             await LoadCommunityTreeAsync(CommunityId);
         }
 
-        if (importErrors.Count > 0 && successCount == 0 && pendingPasswordQueue.Count == 0)
+        if (importErrors.Count > 0 && successCount == 0
+            && pendingPasswordQueue.Count == 0 && pendingCaSelectQueue.Count == 0)
         {
             importError = "No files were imported successfully.";
         }
 
-        // Process queued PFX files that need manual password entry
-        ProcessNextPendingPassword();
+        // Process queued PFX files that need manual password entry, then unmatched certs
+        if (pendingPasswordQueue.Count > 0)
+            ProcessNextPendingPassword();
+        else if (pendingCaSelectQueue.Count > 0)
+            ProcessNextPendingCaSelect();
     }
 
     /// <summary>
@@ -668,9 +770,13 @@ public partial class CertificateExplorer
             if (parsed.DetectedRole is DetectedCertRole.RootCa or DetectedCertRole.IntermediateCa)
             {
                 int? parentId = null;
-                if (parsed.DetectedRole == DetectedCertRole.IntermediateCa && parsed.AuthorityKeyIdentifier != null)
+                if (parsed.DetectedRole == DetectedCertRole.IntermediateCa)
                 {
-                    parentId = await FindCaBySkiAsync(db, parsed.AuthorityKeyIdentifier);
+                    if (parsed.AuthorityKeyIdentifier != null)
+                        parentId = await FindCaBySkiAsync(db, parsed.AuthorityKeyIdentifier);
+
+                    // Fallback: match by Issuer DN + signature verification
+                    parentId ??= await FindCaByDnAndSignatureAsync(db, cert);
                 }
 
                 db.CaCertificates.Add(new CaCertificate
@@ -700,18 +806,13 @@ public partial class CertificateExplorer
                     issuingCaId = await FindCaBySkiAsync(db, parsed.AuthorityKeyIdentifier);
                 }
 
-                if (issuingCaId == null)
-                {
-                    var firstCa = await db.CaCertificates
-                        .Where(ca => ca.CommunityId == CommunityId)
-                        .OrderByDescending(ca => ca.ParentId)
-                        .FirstOrDefaultAsync();
-                    issuingCaId = firstCa?.Id;
-                }
+                // Fallback: match by Issuer DN + signature verification
+                issuingCaId ??= await FindCaByDnAndSignatureAsync(db, cert);
 
                 if (issuingCaId == null)
                 {
-                    importErrors.Add($"{fileName}: No CA found to issue under");
+                    // Queue for manual CA selection
+                    pendingCaSelectQueue.Enqueue((fileBytes, fileName, usedPassword));
                     parsed.Certificate.Dispose();
                     return false;
                 }
@@ -948,7 +1049,13 @@ public partial class CertificateExplorer
 
     private void ProcessNextPendingPassword()
     {
-        if (pendingPasswordQueue.Count == 0) return;
+        if (pendingPasswordQueue.Count == 0)
+        {
+            // Password queue done — process any unmatched certs
+            if (pendingCaSelectQueue.Count > 0)
+                ProcessNextPendingCaSelect();
+            return;
+        }
 
         var (bytes, name) = pendingPasswordQueue.Dequeue();
         pendingFileBytes = bytes;
@@ -1054,8 +1161,13 @@ public partial class CertificateExplorer
             if (parsed.DetectedRole is DetectedCertRole.RootCa or DetectedCertRole.IntermediateCa)
             {
                 int? parentId = null;
-                if (parsed.DetectedRole == DetectedCertRole.IntermediateCa && parsed.AuthorityKeyIdentifier != null)
-                    parentId = await FindCaBySkiAsync(db, parsed.AuthorityKeyIdentifier);
+                if (parsed.DetectedRole == DetectedCertRole.IntermediateCa)
+                {
+                    if (parsed.AuthorityKeyIdentifier != null)
+                        parentId = await FindCaBySkiAsync(db, parsed.AuthorityKeyIdentifier);
+
+                    parentId ??= await FindCaByDnAndSignatureAsync(db, cert);
+                }
 
                 db.CaCertificates.Add(new CaCertificate
                 {
@@ -1082,14 +1194,13 @@ public partial class CertificateExplorer
                     ? await FindCaBySkiAsync(db, parsed.AuthorityKeyIdentifier)
                     : null;
 
-                issuingCaId ??= (await db.CaCertificates
-                    .Where(ca => ca.CommunityId == CommunityId)
-                    .OrderByDescending(ca => ca.ParentId)
-                    .FirstOrDefaultAsync())?.Id;
+                // Fallback: match by Issuer DN + signature verification
+                issuingCaId ??= await FindCaByDnAndSignatureAsync(db, cert);
 
                 if (issuingCaId == null)
                 {
-                    importErrors.Add($"{fileName}: No CA found to issue under");
+                    // Queue for manual CA selection
+                    pendingCaSelectQueue.Enqueue((parsed.RawFileBytes ?? Array.Empty<byte>(), fileName, password));
                     parsed.Certificate.Dispose();
                     return;
                 }
@@ -1208,21 +1319,19 @@ public partial class CertificateExplorer
             {
                 var issuingCaId = matchedParentCaId;
 
-                // If no match found, try to find any intermediate, then root
-                if (issuingCaId == null)
-                {
-                    var firstCa = await db.CaCertificates
-                        .Where(ca => ca.CommunityId == CommunityId)
-                        .OrderByDescending(ca => ca.ParentId) // prefer intermediates
-                        .FirstOrDefaultAsync();
-
-                    issuingCaId = firstCa?.Id;
-                }
+                // Fallback: match by Issuer DN + signature verification
+                issuingCaId ??= await FindCaByDnAndSignatureAsync(db, cert);
 
                 if (issuingCaId == null)
                 {
-                    importError = "No CA certificate found in this community. Import a CA certificate first.";
+                    // Pass the already-parsed cert to the CA selection dialog (no re-parse needed)
                     confirmDialogHidden = true;
+                    pendingCaSelectParsed = parsedCert;
+                    parsedCert = null; // Transfer ownership, don't dispose
+                    await ShowCaSelectDialog(
+                        pendingCaSelectParsed.RawFileBytes,
+                        pendingCaSelectParsed.FileName,
+                        pendingCaSelectParsed.HasPrivateKey ? pfxPassword : null);
                     return;
                 }
 
@@ -1297,9 +1406,213 @@ public partial class CertificateExplorer
         _ => "#666"
     };
 
+    // --- CA selection for unmatched certs ---
+
+    private async Task LoadAvailableCasAsync()
+    {
+        await using var db = await DbFactory.CreateDbContextAsync();
+        availableCas = await db.CaCertificates
+            .Where(ca => ca.CommunityId == CommunityId)
+            .OrderBy(ca => ca.ParentId == null ? 0 : 1) // Roots first
+            .ThenBy(ca => ca.Name)
+            .Select(ca => new CaSelectOption
+            {
+                Id = ca.Id,
+                Name = ca.Name,
+                Subject = ca.Subject,
+                IsRoot = ca.ParentId == null
+            })
+            .ToListAsync();
+    }
+
+    private async Task ShowCaSelectDialog(byte[] fileBytes, string fileName, string? password)
+    {
+        await LoadAvailableCasAsync();
+
+        if (availableCas.Count == 0)
+        {
+            importErrors.Add($"{fileName}: No CAs exist in this community to assign under");
+            return;
+        }
+
+        pendingFileBytes = fileBytes;
+        pendingFileName = fileName;
+        pfxPassword = password ?? string.Empty;
+        selectedCaForAssignment = null;
+        caSelectDialogHidden = false;
+        StateHasChanged();
+    }
+
+    private async void ProcessNextPendingCaSelect()
+    {
+        if (pendingCaSelectQueue.Count == 0) return;
+
+        var (bytes, name, password) = pendingCaSelectQueue.Dequeue();
+        pendingCaSelectParsed = null; // Batch items need re-parse
+        await ShowCaSelectDialog(bytes, name, password);
+    }
+
+    private async Task ConfirmCaAssignmentAsync()
+    {
+        if (selectedCaForAssignment == null) return;
+
+        // Use pre-parsed cert if available, otherwise re-parse from bytes
+        var parsed = pendingCaSelectParsed;
+        if (parsed == null && pendingFileBytes != null)
+        {
+            var ext = Path.GetExtension(pendingFileName).ToLowerInvariant();
+            parsed = ext is ".pfx" or ".p12"
+                ? ParsingService.Parse(pendingFileBytes, pendingFileName, pfxPassword)
+                : ParsingService.Parse(pendingFileBytes, pendingFileName);
+        }
+
+        if (parsed == null)
+        {
+            ToastService.ShowError($"Could not parse '{pendingFileName}'");
+            caSelectDialogHidden = true;
+            pendingCaSelectParsed = null;
+            ProcessNextPendingCaSelect();
+            return;
+        }
+
+        try
+        {
+            await SaveWithCaAssignmentAsync(parsed);
+        }
+        catch (Exception ex)
+        {
+            ToastService.ShowError($"Import failed: {ex.Message}");
+            parsed.Certificate.Dispose();
+        }
+        pendingCaSelectParsed = null;
+
+        caSelectDialogHidden = true;
+        pendingFileBytes = null;
+
+        if (pendingCaSelectQueue.Count > 0)
+        {
+            ProcessNextPendingCaSelect();
+        }
+        else
+        {
+            await LoadCommunityTreeAsync(CommunityId);
+        }
+    }
+
+    private async Task SaveWithCaAssignmentAsync(ParsedCertificate parsed)
+    {
+        await using var db = await DbFactory.CreateDbContextAsync();
+        var cert = parsed.Certificate;
+        var thumbprint = cert.Thumbprint;
+
+        // Check for existing cert — merge if duplicate (e.g. .cer + .pfx for same cert)
+        var existingCa = await db.CaCertificates
+            .FirstOrDefaultAsync(c => c.Thumbprint == thumbprint && c.CommunityId == CommunityId);
+        if (existingCa != null)
+        {
+            if (parsed.HasPrivateKey && existingCa.EncryptedPfxBytes == null)
+            {
+                existingCa.EncryptedPfxBytes = pendingFileBytes;
+                existingCa.PfxPassword = pfxPassword;
+                await db.SaveChangesAsync();
+            }
+            parsed.Certificate.Dispose();
+            ToastService.ShowSuccess($"Merged PFX into existing '{existingCa.Name}'");
+            return;
+        }
+
+        var existingIssued = await db.IssuedCertificates
+            .Include(i => i.IssuingCaCertificate)
+            .FirstOrDefaultAsync(c => c.Thumbprint == thumbprint
+                && c.IssuingCaCertificate.CommunityId == CommunityId);
+        if (existingIssued != null)
+        {
+            if (parsed.HasPrivateKey && existingIssued.EncryptedPfxBytes == null)
+            {
+                existingIssued.EncryptedPfxBytes = pendingFileBytes;
+                existingIssued.PfxPassword = pfxPassword;
+                await db.SaveChangesAsync();
+            }
+            parsed.Certificate.Dispose();
+            ToastService.ShowSuccess($"Merged PFX into existing '{existingIssued.Name}'");
+            return;
+        }
+
+        // New cert — assign under selected CA
+        if (parsed.DetectedRole is DetectedCertRole.RootCa or DetectedCertRole.IntermediateCa)
+        {
+            db.CaCertificates.Add(new CaCertificate
+            {
+                CommunityId = CommunityId,
+                ParentId = selectedCaForAssignment!.Id,
+                Name = Path.GetFileNameWithoutExtension(pendingFileName),
+                Subject = cert.Subject,
+                X509CertificatePem = cert.ExportCertificatePem(),
+                EncryptedPfxBytes = parsed.HasPrivateKey ? pendingFileBytes : null,
+                PfxPassword = parsed.HasPrivateKey ? pfxPassword : null,
+                Thumbprint = thumbprint,
+                SerialNumber = cert.SerialNumber,
+                KeyAlgorithm = parsed.Algorithm,
+                KeySize = parsed.KeySize,
+                NotBefore = cert.NotBefore.ToUniversalTime(),
+                NotAfter = cert.NotAfter.ToUniversalTime(),
+                CertSecurityLevel = CertSecurityLevel.Software,
+                Enabled = true
+            });
+        }
+        else
+        {
+            db.IssuedCertificates.Add(new IssuedCertificate
+            {
+                IssuingCaCertificateId = selectedCaForAssignment!.Id,
+                Name = Path.GetFileNameWithoutExtension(pendingFileName),
+                Subject = cert.Subject,
+                SubjectAltNames = parsed.SubjectAltNames,
+                X509CertificatePem = cert.ExportCertificatePem(),
+                EncryptedPfxBytes = parsed.HasPrivateKey ? pendingFileBytes : null,
+                PfxPassword = parsed.HasPrivateKey ? pfxPassword : null,
+                Thumbprint = thumbprint,
+                SerialNumber = cert.SerialNumber,
+                KeyAlgorithm = parsed.Algorithm,
+                KeySize = parsed.KeySize,
+                NotBefore = cert.NotBefore.ToUniversalTime(),
+                NotAfter = cert.NotAfter.ToUniversalTime(),
+                Enabled = true
+            });
+        }
+
+        await db.SaveChangesAsync();
+        parsed.Certificate.Dispose();
+        ToastService.ShowSuccess($"'{Path.GetFileNameWithoutExtension(pendingFileName)}' assigned under '{selectedCaForAssignment!.Name}'");
+    }
+
+    private void SkipCaAssignment()
+    {
+        caSelectDialogHidden = true;
+        importErrors.Add($"{pendingFileName}: Skipped (no CA selected)");
+        pendingFileBytes = null;
+        ProcessNextPendingCaSelect();
+    }
+
+    private void CancelCaAssignment()
+    {
+        caSelectDialogHidden = true;
+        pendingFileBytes = null;
+        pendingCaSelectQueue.Clear();
+    }
+
     public class CommunityOption
     {
         public int Id { get; set; }
         public string Name { get; set; } = string.Empty;
+    }
+
+    public class CaSelectOption
+    {
+        public int Id { get; set; }
+        public string Name { get; set; } = string.Empty;
+        public string Subject { get; set; } = string.Empty;
+        public bool IsRoot { get; set; }
+        public string DisplayName => IsRoot ? $"[Root] {Name}" : $"[Intermediate] {Name}";
     }
 }
