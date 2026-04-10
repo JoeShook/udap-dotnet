@@ -114,14 +114,14 @@ public partial class CertificateExplorer
         var validationResults = new Dictionary<string, ChainValidationResult>();
         foreach (var ca in caCerts)
         {
-            var result = ChainValidator.ValidateChain(ca.X509CertificatePem, ca.Name, caCerts, allCrls);
+            var result = await ChainValidator.ValidateChainAsync(ca.X509CertificatePem, ca.Name, caCerts, allCrls);
             validationResults[ca.Thumbprint] = result;
         }
         foreach (var ca in caCerts)
         {
             foreach (var issued in ca.IssuedCertificates)
             {
-                var result = ChainValidator.ValidateChain(issued.X509CertificatePem, issued.Name, caCerts, allCrls);
+                var result = await ChainValidator.ValidateChainAsync(issued.X509CertificatePem, issued.Name, caCerts, allCrls);
                 validationResults[issued.Thumbprint] = result;
             }
         }
@@ -393,6 +393,18 @@ public partial class CertificateExplorer
 
         return null;
     }
+
+    private static string NodeColor(CertificateStatus status) => status switch
+    {
+        CertificateStatus.Expired => "#e94560",
+        CertificateStatus.Revoked => "#9c27b0",
+        CertificateStatus.Untrusted => "#d32f2f",
+        CertificateStatus.Expiring => "#ff9800",
+        _ => ""
+    };
+
+    private static bool IsError(CertificateStatus status) =>
+        status is CertificateStatus.Expired or CertificateStatus.Revoked or CertificateStatus.Untrusted;
 
     private string GetPublicKeyInfo()
     {

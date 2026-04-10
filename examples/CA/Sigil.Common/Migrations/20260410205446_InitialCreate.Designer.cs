@@ -12,8 +12,8 @@ using Sigil.Common.Data;
 namespace Sigil.Common.Migrations
 {
     [DbContext(typeof(SigilDbContext))]
-    [Migration("20260410165848_AddCrlEntity")]
-    partial class AddCrlEntity
+    [Migration("20260410205446_InitialCreate")]
+    partial class InitialCreate
     {
         /// <inheritdoc />
         protected override void BuildTargetModel(ModelBuilder modelBuilder)
@@ -26,7 +26,7 @@ namespace Sigil.Common.Migrations
 
             NpgsqlModelBuilderExtensions.UseIdentityByDefaultColumns(modelBuilder);
 
-            modelBuilder.Entity("Sigil.Data.Entities.CaCertificate", b =>
+            modelBuilder.Entity("Sigil.Common.Data.Entities.CaCertificate", b =>
                 {
                     b.Property<int>("Id")
                         .ValueGeneratedOnAdd()
@@ -115,7 +115,7 @@ namespace Sigil.Common.Migrations
                     b.ToTable("CaCertificates", "sigil");
                 });
 
-            modelBuilder.Entity("Sigil.Data.Entities.CertificateRevocation", b =>
+            modelBuilder.Entity("Sigil.Common.Data.Entities.CertificateRevocation", b =>
                 {
                     b.Property<int>("Id")
                         .ValueGeneratedOnAdd()
@@ -148,7 +148,7 @@ namespace Sigil.Common.Migrations
                     b.ToTable("CertificateRevocations", "sigil");
                 });
 
-            modelBuilder.Entity("Sigil.Data.Entities.CertificateTemplate", b =>
+            modelBuilder.Entity("Sigil.Common.Data.Entities.CertificateTemplate", b =>
                 {
                     b.Property<int>("Id")
                         .ValueGeneratedOnAdd()
@@ -211,7 +211,7 @@ namespace Sigil.Common.Migrations
                     b.ToTable("CertificateTemplates", "sigil");
                 });
 
-            modelBuilder.Entity("Sigil.Data.Entities.Community", b =>
+            modelBuilder.Entity("Sigil.Common.Data.Entities.Community", b =>
                 {
                     b.Property<int>("Id")
                         .ValueGeneratedOnAdd()
@@ -241,7 +241,7 @@ namespace Sigil.Common.Migrations
                     b.ToTable("Communities", "sigil");
                 });
 
-            modelBuilder.Entity("Sigil.Data.Entities.Crl", b =>
+            modelBuilder.Entity("Sigil.Common.Data.Entities.Crl", b =>
                 {
                     b.Property<int>("Id")
                         .ValueGeneratedOnAdd()
@@ -287,7 +287,7 @@ namespace Sigil.Common.Migrations
                     b.ToTable("Crls", "sigil");
                 });
 
-            modelBuilder.Entity("Sigil.Data.Entities.IssuedCertificate", b =>
+            modelBuilder.Entity("Sigil.Common.Data.Entities.IssuedCertificate", b =>
                 {
                     b.Property<int>("Id")
                         .ValueGeneratedOnAdd()
@@ -372,7 +372,7 @@ namespace Sigil.Common.Migrations
                     b.ToTable("IssuedCertificates", "sigil");
                 });
 
-            modelBuilder.Entity("Sigil.Data.Entities.Job", b =>
+            modelBuilder.Entity("Sigil.Common.Data.Entities.Job", b =>
                 {
                     b.Property<int>("Id")
                         .ValueGeneratedOnAdd()
@@ -421,7 +421,7 @@ namespace Sigil.Common.Migrations
                     b.ToTable("Jobs", "sigil");
                 });
 
-            modelBuilder.Entity("Sigil.Data.Entities.JobExecution", b =>
+            modelBuilder.Entity("Sigil.Common.Data.Entities.JobExecution", b =>
                 {
                     b.Property<int>("Id")
                         .ValueGeneratedOnAdd()
@@ -451,15 +451,15 @@ namespace Sigil.Common.Migrations
                     b.ToTable("JobExecutions", "sigil");
                 });
 
-            modelBuilder.Entity("Sigil.Data.Entities.CaCertificate", b =>
+            modelBuilder.Entity("Sigil.Common.Data.Entities.CaCertificate", b =>
                 {
-                    b.HasOne("Sigil.Data.Entities.Community", "Community")
+                    b.HasOne("Sigil.Common.Data.Entities.Community", "Community")
                         .WithMany("CaCertificates")
                         .HasForeignKey("CommunityId")
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired();
 
-                    b.HasOne("Sigil.Data.Entities.CaCertificate", "Parent")
+                    b.HasOne("Sigil.Common.Data.Entities.CaCertificate", "Parent")
                         .WithMany("Children")
                         .HasForeignKey("ParentId")
                         .OnDelete(DeleteBehavior.Restrict);
@@ -469,9 +469,9 @@ namespace Sigil.Common.Migrations
                     b.Navigation("Parent");
                 });
 
-            modelBuilder.Entity("Sigil.Data.Entities.CertificateRevocation", b =>
+            modelBuilder.Entity("Sigil.Common.Data.Entities.CertificateRevocation", b =>
                 {
-                    b.HasOne("Sigil.Data.Entities.Crl", "Crl")
+                    b.HasOne("Sigil.Common.Data.Entities.Crl", "Crl")
                         .WithMany("Revocations")
                         .HasForeignKey("CrlId")
                         .OnDelete(DeleteBehavior.Cascade)
@@ -480,9 +480,9 @@ namespace Sigil.Common.Migrations
                     b.Navigation("Crl");
                 });
 
-            modelBuilder.Entity("Sigil.Data.Entities.Crl", b =>
+            modelBuilder.Entity("Sigil.Common.Data.Entities.Crl", b =>
                 {
-                    b.HasOne("Sigil.Data.Entities.CaCertificate", "CaCertificate")
+                    b.HasOne("Sigil.Common.Data.Entities.CaCertificate", "CaCertificate")
                         .WithMany("Crls")
                         .HasForeignKey("CaCertificateId")
                         .OnDelete(DeleteBehavior.Cascade)
@@ -491,15 +491,15 @@ namespace Sigil.Common.Migrations
                     b.Navigation("CaCertificate");
                 });
 
-            modelBuilder.Entity("Sigil.Data.Entities.IssuedCertificate", b =>
+            modelBuilder.Entity("Sigil.Common.Data.Entities.IssuedCertificate", b =>
                 {
-                    b.HasOne("Sigil.Data.Entities.CaCertificate", "IssuingCaCertificate")
+                    b.HasOne("Sigil.Common.Data.Entities.CaCertificate", "IssuingCaCertificate")
                         .WithMany("IssuedCertificates")
                         .HasForeignKey("IssuingCaCertificateId")
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired();
 
-                    b.HasOne("Sigil.Data.Entities.CertificateTemplate", "Template")
+                    b.HasOne("Sigil.Common.Data.Entities.CertificateTemplate", "Template")
                         .WithMany("IssuedCertificates")
                         .HasForeignKey("TemplateId")
                         .OnDelete(DeleteBehavior.SetNull);
@@ -509,9 +509,9 @@ namespace Sigil.Common.Migrations
                     b.Navigation("Template");
                 });
 
-            modelBuilder.Entity("Sigil.Data.Entities.JobExecution", b =>
+            modelBuilder.Entity("Sigil.Common.Data.Entities.JobExecution", b =>
                 {
-                    b.HasOne("Sigil.Data.Entities.Job", "Job")
+                    b.HasOne("Sigil.Common.Data.Entities.Job", "Job")
                         .WithMany("Executions")
                         .HasForeignKey("JobId")
                         .OnDelete(DeleteBehavior.Cascade)
@@ -520,7 +520,7 @@ namespace Sigil.Common.Migrations
                     b.Navigation("Job");
                 });
 
-            modelBuilder.Entity("Sigil.Data.Entities.CaCertificate", b =>
+            modelBuilder.Entity("Sigil.Common.Data.Entities.CaCertificate", b =>
                 {
                     b.Navigation("Children");
 
@@ -529,22 +529,22 @@ namespace Sigil.Common.Migrations
                     b.Navigation("IssuedCertificates");
                 });
 
-            modelBuilder.Entity("Sigil.Data.Entities.CertificateTemplate", b =>
+            modelBuilder.Entity("Sigil.Common.Data.Entities.CertificateTemplate", b =>
                 {
                     b.Navigation("IssuedCertificates");
                 });
 
-            modelBuilder.Entity("Sigil.Data.Entities.Community", b =>
+            modelBuilder.Entity("Sigil.Common.Data.Entities.Community", b =>
                 {
                     b.Navigation("CaCertificates");
                 });
 
-            modelBuilder.Entity("Sigil.Data.Entities.Crl", b =>
+            modelBuilder.Entity("Sigil.Common.Data.Entities.Crl", b =>
                 {
                     b.Navigation("Revocations");
                 });
 
-            modelBuilder.Entity("Sigil.Data.Entities.Job", b =>
+            modelBuilder.Entity("Sigil.Common.Data.Entities.Job", b =>
                 {
                     b.Navigation("Executions");
                 });

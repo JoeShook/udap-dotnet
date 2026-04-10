@@ -55,12 +55,33 @@ public class CrlImportService
             .ToListAsync(ct);
 
         CaCertificate? issuingCa = null;
+
+        // Try DN matching first
         foreach (var ca in cas)
         {
             if (DnMatch(ca.Subject, issuerDn))
             {
                 issuingCa = ca;
                 break;
+            }
+        }
+
+        // Fallback: try signature verification against each CA
+        if (issuingCa == null)
+        {
+            var bcCertParser = new X509CertificateParser();
+            foreach (var ca in cas)
+            {
+                try
+                {
+                    var bcCaCert = bcCertParser.ReadCertificate(
+                        System.Text.Encoding.UTF8.GetBytes(ca.X509CertificatePem));
+                    crl.Verify(bcCaCert.GetPublicKey());
+                    issuingCa = ca;
+                    _logger.LogInformation("Matched CRL to CA '{Name}' via signature verification (DN match failed)", ca.Name);
+                    break;
+                }
+                catch { }
             }
         }
 

@@ -53,12 +53,12 @@
                              Accept=".pfx,.p12,.cer,.crt,.pem,.der,.crl"
                              OnCompleted="OnFilesCompleted"
                              DragDropZoneVisible="true"
-                             Style="height: 120px; border: 2px dashed var(--accent-fill-rest); border-radius: 8px;">
+                             Style="height: 120px; border: 2px dashed var(--accent-fill-rest); border-radius: 8px; cursor: pointer;">
                 <ChildContent>
-                    <label for="file-uploader" style="display: flex; flex-direction: column; align-items: center; justify-content: center; height: 100%; cursor: pointer; opacity: 0.6;">
+                    <div style="display: flex; flex-direction: column; align-items: center; justify-content: center; height: 100%; opacity: 0.7; pointer-events: none;">
                         <FluentIcon Value="@(new Icons.Regular.Size24.ArrowUpload())" />
                         <span>Drag & drop files or click to select</span>
-                    </label>
+                    </div>
                 </ChildContent>
             </FluentInputFile>
 
@@ -226,8 +226,11 @@
                         <FluentTreeItem Text="@root.Name"
                                         @key="@($"ca-{root.Id}")"
                                         Data="@root"
-                                        Expanded="true">
-                            <span slot="start">
+                                        Expanded="true"
+                                        Style="@(IsError(root.Status) ? $"color: {NodeColor(root.Status)};" : "")">
+                            <span slot="start" style="display: flex; align-items: center; gap: 0.35rem;">
+                                <FluentIcon Value="@(new Icons.Regular.Size16.ShieldKeyhole())" Color="Color.Custom"
+                                            CustomColor="@(IsError(root.Status) ? NodeColor(root.Status) : "#2d6a4f")" />
                                 <CertBadge Status="@root.Status" />
                             </span>
                             @foreach (var intermediate in root.Children.Where(c => c.CertificateRole == "IntermediateCA"))
@@ -235,16 +238,23 @@
                                 <FluentTreeItem Text="@intermediate.Name"
                                                 @key="@($"ca-{intermediate.Id}")"
                                                 Data="@intermediate"
-                                                Expanded="true">
-                                    <span slot="start">
+                                                Expanded="true"
+                                                Style="@(IsError(intermediate.Status) ? $"color: {NodeColor(intermediate.Status)};" : "")">
+                                    <span slot="start" style="display: flex; align-items: center; gap: 0.35rem;">
+                                        <FluentIcon Value="@(new Icons.Regular.Size16.Shield())" Color="Color.Custom"
+                                                    CustomColor="@(IsError(intermediate.Status) ? NodeColor(intermediate.Status) : "#1976d2")" />
                                         <CertBadge Status="@intermediate.Status" />
                                     </span>
-                                    @foreach (var child in intermediate.Children.Where(c => c.CertificateRole != "CRL"))
+                                    @foreach (var child in intermediate.Children.Where(c => c.CertificateRole == "EndEntity"))
                                     {
                                         <FluentTreeItem Text="@child.Name"
                                                         @key="@($"ee-{child.Id}")"
-                                                        Data="@child">
-                                            <span slot="start">
+                                                        Data="@child"
+                                                        Style="@(IsError(child.Status) ? $"color: {NodeColor(child.Status)};" : "")">
+                                            <span slot="start" style="display: flex; align-items: center; gap: 0.35rem;">
+                                                <FluentIcon Value="@(new Icons.Regular.Size16.Certificate())" Color="Color.Custom"
+                                                            CustomColor="@(IsError(child.Status) ? NodeColor(child.Status) : "")"
+                                                            Style="@(IsError(child.Status) ? "" : "opacity: 0.7;")" />
                                                 <CertBadge Status="@child.Status" />
                                             </span>
                                         </FluentTreeItem>
@@ -253,32 +263,44 @@
                                     {
                                         <FluentTreeItem Text="@crl.Name"
                                                         @key="@($"crl-{crl.Id}")"
-                                                        Data="@crl">
-                                            <span slot="start">
+                                                        Data="@crl"
+                                                        Style="@(IsError(crl.Status) ? $"color: {NodeColor(crl.Status)};" : "font-style: italic; opacity: 0.8;")">
+                                            <span slot="start" style="display: flex; align-items: center; gap: 0.35rem;">
+                                                <FluentIcon Value="@(new Icons.Regular.Size16.DocumentBulletList())" Color="Color.Custom"
+                                                            CustomColor="@(IsError(crl.Status) ? NodeColor(crl.Status) : "")"
+                                                            Style="@(IsError(crl.Status) ? "" : "opacity: 0.6;")" />
                                                 <CrlBadge Status="@(crl.Status == CertificateStatus.Expired ? CrlTimeStatus.Expired : crl.Status == CertificateStatus.Expiring ? CrlTimeStatus.ExpiringSoon : CrlTimeStatus.Valid)" />
                                             </span>
                                         </FluentTreeItem>
                                     }
                                 </FluentTreeItem>
                             }
-                            @* End-entity certs directly under root (no intermediate) *@
+                            @* End-entity certs directly under root *@
                             @foreach (var issued in root.Children.Where(c => c.CertificateRole == "EndEntity"))
                             {
                                 <FluentTreeItem Text="@issued.Name"
                                                 @key="@($"ee-{issued.Id}")"
-                                                Data="@issued">
-                                    <span slot="start">
+                                                Data="@issued"
+                                                Style="@(IsError(issued.Status) ? $"color: {NodeColor(issued.Status)};" : "")">
+                                    <span slot="start" style="display: flex; align-items: center; gap: 0.35rem;">
+                                        <FluentIcon Value="@(new Icons.Regular.Size16.Certificate())" Color="Color.Custom"
+                                                    CustomColor="@(IsError(issued.Status) ? NodeColor(issued.Status) : "")"
+                                                    Style="@(IsError(issued.Status) ? "" : "opacity: 0.7;")" />
                                         <CertBadge Status="@issued.Status" />
                                     </span>
                                 </FluentTreeItem>
                             }
-                            @* CRLs directly under root CA *@
+                            @* CRLs directly under root *@
                             @foreach (var crl in root.Children.Where(c => c.CertificateRole == "CRL"))
                             {
                                 <FluentTreeItem Text="@crl.Name"
                                                 @key="@($"crl-{crl.Id}")"
-                                                Data="@crl">
-                                    <span slot="start">
+                                                Data="@crl"
+                                                Style="@(IsError(crl.Status) ? $"color: {NodeColor(crl.Status)};" : "font-style: italic; opacity: 0.8;")">
+                                    <span slot="start" style="display: flex; align-items: center; gap: 0.35rem;">
+                                        <FluentIcon Value="@(new Icons.Regular.Size16.DocumentBulletList())" Color="Color.Custom"
+                                                    CustomColor="@(IsError(crl.Status) ? NodeColor(crl.Status) : "")"
+                                                    Style="@(IsError(crl.Status) ? "" : "opacity: 0.6;")" />
                                         <CrlBadge Status="@(crl.Status == CertificateStatus.Expired ? CrlTimeStatus.Expired : crl.Status == CertificateStatus.Expiring ? CrlTimeStatus.ExpiringSoon : CrlTimeStatus.Valid)" />
                                     </span>
                                 </FluentTreeItem>
@@ -494,7 +516,10 @@
                                             @switch (link.CrlStatus)
                                             {
                                                 case CrlCheckStatus.Good:
-                                                    <FluentBadge BackgroundColor="#4caf50" Color="white" Style="font-size: 0.7rem;">CRL OK</FluentBadge>
+                                                    <FluentBadge BackgroundColor="#4caf50" Color="white" Style="font-size: 0.7rem;"
+                                                                 title="@(link.CrlSource == CrlSource.Downloaded ? $"Downloaded from {link.CrlSourceUrl}" : "From stored CRL")">
+                                                        CRL OK @(link.CrlSource == CrlSource.Downloaded ? " ↓" : "")
+                                                    </FluentBadge>
                                                     break;
                                                 case CrlCheckStatus.Revoked:
                                                     <FluentBadge BackgroundColor="#9c27b0" Color="white" Style="font-size: 0.7rem;">REVOKED</FluentBadge>
@@ -504,6 +529,9 @@
                                                     break;
                                                 case CrlCheckStatus.CrlExpired:
                                                     <FluentBadge BackgroundColor="#ff9800" Color="white" Style="font-size: 0.7rem;">CRL Expired</FluentBadge>
+                                                    break;
+                                                case CrlCheckStatus.CrlFetchFailed:
+                                                    <FluentBadge BackgroundColor="#e94560" Color="white" Style="font-size: 0.7rem;">CRL Fetch Failed</FluentBadge>
                                                     break;
                                             }
                                         </FluentStack>

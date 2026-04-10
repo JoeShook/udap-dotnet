@@ -154,23 +154,27 @@ namespace Sigil.Common.Migrations
                 });
 
             migrationBuilder.CreateTable(
-                name: "CertificateRevocations",
+                name: "Crls",
                 schema: "sigil",
                 columns: table => new
                 {
                     Id = table.Column<int>(type: "integer", nullable: false)
                         .Annotation("Npgsql:ValueGenerationStrategy", NpgsqlValueGenerationStrategy.IdentityByDefaultColumn),
                     CaCertificateId = table.Column<int>(type: "integer", nullable: false),
-                    RevokedCertSerialNumber = table.Column<string>(type: "character varying(100)", maxLength: 100, nullable: false),
-                    RevokedCertThumbprint = table.Column<string>(type: "character varying(64)", maxLength: 64, nullable: true),
-                    RevocationDate = table.Column<DateTime>(type: "timestamp with time zone", nullable: false),
-                    RevocationReason = table.Column<int>(type: "integer", nullable: false)
+                    CrlNumber = table.Column<long>(type: "bigint", nullable: false),
+                    ThisUpdate = table.Column<DateTime>(type: "timestamp with time zone", nullable: false),
+                    NextUpdate = table.Column<DateTime>(type: "timestamp with time zone", nullable: false),
+                    SignatureAlgorithm = table.Column<string>(type: "character varying(50)", maxLength: 50, nullable: false),
+                    RawBytes = table.Column<byte[]>(type: "bytea", nullable: false),
+                    FileName = table.Column<string>(type: "character varying(200)", maxLength: 200, nullable: true),
+                    SignatureValid = table.Column<bool>(type: "boolean", nullable: false),
+                    ImportedAt = table.Column<DateTime>(type: "timestamp with time zone", nullable: false)
                 },
                 constraints: table =>
                 {
-                    table.PrimaryKey("PK_CertificateRevocations", x => x.Id);
+                    table.PrimaryKey("PK_Crls", x => x.Id);
                     table.ForeignKey(
-                        name: "FK_CertificateRevocations_CaCertificates_CaCertificateId",
+                        name: "FK_Crls_CaCertificates_CaCertificateId",
                         column: x => x.CaCertificateId,
                         principalSchema: "sigil",
                         principalTable: "CaCertificates",
@@ -223,6 +227,31 @@ namespace Sigil.Common.Migrations
                         onDelete: ReferentialAction.SetNull);
                 });
 
+            migrationBuilder.CreateTable(
+                name: "CertificateRevocations",
+                schema: "sigil",
+                columns: table => new
+                {
+                    Id = table.Column<int>(type: "integer", nullable: false)
+                        .Annotation("Npgsql:ValueGenerationStrategy", NpgsqlValueGenerationStrategy.IdentityByDefaultColumn),
+                    CrlId = table.Column<int>(type: "integer", nullable: false),
+                    RevokedCertSerialNumber = table.Column<string>(type: "character varying(100)", maxLength: 100, nullable: false),
+                    RevokedCertThumbprint = table.Column<string>(type: "character varying(64)", maxLength: 64, nullable: true),
+                    RevocationDate = table.Column<DateTime>(type: "timestamp with time zone", nullable: false),
+                    RevocationReason = table.Column<int>(type: "integer", nullable: false)
+                },
+                constraints: table =>
+                {
+                    table.PrimaryKey("PK_CertificateRevocations", x => x.Id);
+                    table.ForeignKey(
+                        name: "FK_CertificateRevocations_Crls_CrlId",
+                        column: x => x.CrlId,
+                        principalSchema: "sigil",
+                        principalTable: "Crls",
+                        principalColumn: "Id",
+                        onDelete: ReferentialAction.Cascade);
+                });
+
             migrationBuilder.CreateIndex(
                 name: "IX_CaCertificates_CommunityId",
                 schema: "sigil",
@@ -243,10 +272,10 @@ namespace Sigil.Common.Migrations
                 unique: true);
 
             migrationBuilder.CreateIndex(
-                name: "IX_CertificateRevocations_CaCertificateId",
+                name: "IX_CertificateRevocations_CrlId",
                 schema: "sigil",
                 table: "CertificateRevocations",
-                column: "CaCertificateId");
+                column: "CrlId");
 
             migrationBuilder.CreateIndex(
                 name: "IX_CertificateTemplates_Name",
@@ -261,6 +290,12 @@ namespace Sigil.Common.Migrations
                 table: "Communities",
                 column: "Name",
                 unique: true);
+
+            migrationBuilder.CreateIndex(
+                name: "IX_Crls_CaCertificateId",
+                schema: "sigil",
+                table: "Crls",
+                column: "CaCertificateId");
 
             migrationBuilder.CreateIndex(
                 name: "IX_IssuedCertificates_IssuingCaCertificateId",
@@ -310,7 +345,7 @@ namespace Sigil.Common.Migrations
                 schema: "sigil");
 
             migrationBuilder.DropTable(
-                name: "CaCertificates",
+                name: "Crls",
                 schema: "sigil");
 
             migrationBuilder.DropTable(
@@ -319,6 +354,10 @@ namespace Sigil.Common.Migrations
 
             migrationBuilder.DropTable(
                 name: "Jobs",
+                schema: "sigil");
+
+            migrationBuilder.DropTable(
+                name: "CaCertificates",
                 schema: "sigil");
 
             migrationBuilder.DropTable(

@@ -30,6 +30,8 @@ try
     builder.Services.AddScoped<Asn1ParsingService>();
     builder.Services.AddScoped<CrlImportService>();
     builder.Services.AddScoped<ChainValidationService>();
+    builder.Services.AddHttpClient("SigilCrl");
+    builder.Services.AddHttpClient();
 
     // Blazor Server + Fluent UI
     builder.Services.AddRazorComponents()

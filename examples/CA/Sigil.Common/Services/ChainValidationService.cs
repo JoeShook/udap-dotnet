@@ -13,19 +13,19 @@ namespace Sigil.Common.Services;
 public class ChainValidationService
 {
     private readonly IDbContextFactory<SigilDbContext> _dbFactory;
+    private readonly IHttpClientFactory _httpClientFactory;
     private readonly ILogger<ChainValidationService> _logger;
 
     public ChainValidationService(
         IDbContextFactory<SigilDbContext> dbFactory,
+        IHttpClientFactory httpClientFactory,
         ILogger<ChainValidationService> logger)
     {
         _dbFactory = dbFactory;
+        _httpClientFactory = httpClientFactory;
         _logger = logger;
     }
 
-    /// <summary>
-    /// Validates a CA certificate's trust chain within its community.
-    /// </summary>
     public async Task<ChainValidationResult> ValidateCaCertificateAsync(
         int caCertificateId, CancellationToken ct = default)
     {
@@ -47,12 +47,9 @@ public class ChainValidationService
             .Include(c => c.Revocations)
             .ToListAsync(ct);
 
-        return ValidateChain(caCert.X509CertificatePem, caCert.Name, allCas, allCrls);
+        return await ValidateChainAsync(caCert.X509CertificatePem, caCert.Name, allCas, allCrls, ct);
     }
 
-    /// <summary>
-    /// Validates an issued certificate's trust chain within its community.
-    /// </summary>
     public async Task<ChainValidationResult> ValidateIssuedCertificateAsync(
         int issuedCertificateId, CancellationToken ct = default)
     {
@@ -77,22 +74,19 @@ public class ChainValidationService
             .Include(c => c.Revocations)
             .ToListAsync(ct);
 
-        return ValidateChain(issued.X509CertificatePem, issued.Name, allCas, allCrls);
+        return await ValidateChainAsync(issued.X509CertificatePem, issued.Name, allCas, allCrls, ct);
     }
 
-    /// <summary>
-    /// Validates a certificate chain from leaf to root using community CA certs and CRLs.
-    /// </summary>
-    public ChainValidationResult ValidateChain(
+    public async Task<ChainValidationResult> ValidateChainAsync(
         string leafPem,
         string leafName,
         List<CaCertificate> communityCas,
-        List<Crl> communityCrls)
+        List<Crl> communityCrls,
+        CancellationToken ct = default)
     {
         var parser = new X509CertificateParser();
         var chainLinks = new List<ChainLink>();
 
-        // Parse leaf
         BcX509Certificate bcLeaf;
         try
         {
@@ -104,7 +98,6 @@ public class ChainValidationService
             return ChainValidationResult.Failed($"Cannot parse certificate: {ex.Message}");
         }
 
-        // Parse all community CAs into BouncyCastle certs
         var bcCas = new List<(CaCertificate entity, BcX509Certificate bcCert)>();
         foreach (var ca in communityCas)
         {
@@ -120,7 +113,6 @@ public class ChainValidationService
             }
         }
 
-        // Build chain iteratively from leaf up to root
         var current = bcLeaf;
         var currentName = leafName;
         var visited = new HashSet<string>();
@@ -146,31 +138,25 @@ public class ChainValidationService
             // Check time validity
             var now = DateTime.UtcNow;
             if (now < current.NotBefore.ToUniversalTime())
-            {
                 link.Problems.Add("Not yet valid (NotBefore is in the future)");
-            }
             if (now > current.NotAfter.ToUniversalTime())
-            {
                 link.Problems.Add($"Expired (NotAfter: {current.NotAfter:yyyy-MM-dd})");
-            }
 
             // Check basic constraints for non-leaf certs
             if (depth > 0)
             {
                 var basicConstraints = current.GetBasicConstraints();
                 if (basicConstraints < 0)
-                {
                     link.Problems.Add("Not a CA (BasicConstraints CA=false or missing)");
-                }
             }
 
             // Check CRL revocation (skip for self-signed roots)
             if (!current.IssuerDN.Equivalent(current.SubjectDN))
             {
-                CheckCrlRevocation(current, link, bcCas, communityCrls);
+                await CheckCrlRevocationAsync(current, link, bcCas, communityCrls, ct);
             }
 
-            // Self-signed? This is a root — verify self-signature
+            // Self-signed root
             if (current.IssuerDN.Equivalent(current.SubjectDN))
             {
                 try
@@ -184,7 +170,6 @@ public class ChainValidationService
                     link.SignatureValid = false;
                 }
 
-                // Check if this root is actually in our community trust store
                 var matchedRoot = bcCas.FirstOrDefault(ca =>
                     ca.bcCert.SubjectDN.Equivalent(current.SubjectDN));
                 if (matchedRoot.entity != null)
@@ -201,13 +186,12 @@ public class ChainValidationService
                 break;
             }
 
-            // Find issuer in community CAs
+            // Find issuer by AKI/SKI
             BcX509Certificate? issuerBc = null;
             CaCertificate? issuerEntity = null;
 
             foreach (var (caEntity, caCert) in bcCas)
             {
-                // Match by AKI/SKI first
                 if (MatchesKeyIdentifiers(current, caCert))
                 {
                     try
@@ -218,14 +202,11 @@ public class ChainValidationService
                         link.SignatureValid = true;
                         break;
                     }
-                    catch
-                    {
-                        // AKI/SKI matched but signature failed — keep looking
-                    }
+                    catch { }
                 }
             }
 
-            // Fallback: try DN match + signature verification
+            // Fallback: DN match
             if (issuerBc == null)
             {
                 foreach (var (caEntity, caCert) in bcCas)
@@ -240,10 +221,7 @@ public class ChainValidationService
                             link.SignatureValid = true;
                             break;
                         }
-                        catch
-                        {
-                            // DN matched but signature didn't — try next
-                        }
+                        catch { }
                     }
                 }
             }
@@ -257,8 +235,6 @@ public class ChainValidationService
             }
 
             chainLinks.Add(link);
-
-            // Move up the chain
             current = issuerBc;
             currentName = issuerEntity?.Name ?? issuerBc.SubjectDN.ToString();
         }
@@ -273,13 +249,14 @@ public class ChainValidationService
         };
     }
 
-    private void CheckCrlRevocation(
+    private async Task CheckCrlRevocationAsync(
         BcX509Certificate cert,
         ChainLink link,
         List<(CaCertificate entity, BcX509Certificate bcCert)> bcCas,
-        List<Crl> communityCrls)
+        List<Crl> communityCrls,
+        CancellationToken ct)
     {
-        // Find which CA issued this cert
+        // Find issuer
         (CaCertificate entity, BcX509Certificate bcCert)? issuerCa = null;
         foreach (var ca in bcCas)
         {
@@ -301,59 +278,256 @@ public class ChainValidationService
             return;
         }
 
-        // Find CRLs for this issuer
-        var relevantCrls = communityCrls
+        // Try stored CRLs first
+        var storedCrls = communityCrls
             .Where(c => c.CaCertificateId == issuerCa.Value.entity.Id)
             .OrderByDescending(c => c.CrlNumber)
             .ToList();
 
-        if (relevantCrls.Count == 0)
+        if (storedCrls.Count > 0)
         {
-            link.CrlStatus = CrlCheckStatus.NoCrlAvailable;
-            link.Problems.Add("No CRL available for revocation checking");
+            var latestCrl = storedCrls[0];
+            var now = DateTime.UtcNow;
+
+            if (now <= latestCrl.NextUpdate)
+            {
+                // Stored CRL is still valid — use it
+                CheckRevocationInCrl(cert, link, latestCrl, CrlSource.Stored);
+                return;
+            }
+
+            // Stored CRL is expired — try online, fall back to expired
+            _logger.LogInformation("Stored CRL #{Number} expired, attempting online resolution", latestCrl.CrlNumber);
+        }
+
+        // No valid stored CRL — try online resolution via CDP extension
+        var cdpUrls = ExtractCdpUrls(cert);
+        if (cdpUrls.Count == 0)
+        {
+            if (storedCrls.Count > 0)
+            {
+                // Use expired stored CRL with warning
+                link.CrlStatus = CrlCheckStatus.CrlExpired;
+                link.Problems.Add($"CRL #{storedCrls[0].CrlNumber} expired (NextUpdate: {storedCrls[0].NextUpdate:yyyy-MM-dd}), no CDP URL to fetch fresh CRL");
+            }
+            else
+            {
+                link.CrlStatus = CrlCheckStatus.NoCrlAvailable;
+                link.Problems.Add("No CRL available and no CDP extension for online resolution");
+            }
             return;
         }
 
-        // Use the latest CRL
-        var latestCrl = relevantCrls[0];
-
-        // Check CRL time validity
-        var now = DateTime.UtcNow;
-        if (now > latestCrl.NextUpdate)
+        // Try each CDP URL
+        foreach (var url in cdpUrls)
         {
+            try
+            {
+                var crlBytes = await DownloadCrlAsync(url, ct);
+                if (crlBytes == null) continue;
+
+                var crlParser = new X509CrlParser();
+                var downloadedCrl = crlParser.ReadCrl(crlBytes);
+
+                // Verify CRL signature against the issuer
+                try
+                {
+                    downloadedCrl.Verify(issuerCa.Value.bcCert.GetPublicKey());
+                }
+                catch
+                {
+                    _logger.LogWarning("Downloaded CRL from {Url} failed signature verification", url);
+                    continue;
+                }
+
+                // Check CRL time validity
+                var now = DateTime.UtcNow;
+                if (now < downloadedCrl.ThisUpdate.ToUniversalTime())
+                {
+                    _logger.LogWarning("Downloaded CRL from {Url} has ThisUpdate in the future", url);
+                    continue;
+                }
+
+                if (downloadedCrl.NextUpdate.HasValue && now > downloadedCrl.NextUpdate.Value.ToUniversalTime())
+                {
+                    _logger.LogWarning("Downloaded CRL from {Url} is expired", url);
+                    // Still use it but note it's expired
+                }
+
+                // Extract CRL number
+                long crlNumber = 0;
+                var crlNumExt = downloadedCrl.GetExtensionValue(X509Extensions.CrlNumber);
+                if (crlNumExt != null)
+                {
+                    var asn1Num = Org.BouncyCastle.X509.Extension.X509ExtensionUtilities
+                        .FromExtensionValue(crlNumExt);
+                    crlNumber = DerInteger.GetInstance(asn1Num).LongValueExact;
+                }
+
+                // Build a temporary CRL-like structure for checking
+                var serialHex = cert.SerialNumber.ToString(16).ToUpperInvariant();
+                var isRevoked = downloadedCrl.IsRevoked(cert);
+
+                if (isRevoked)
+                {
+                    link.CrlStatus = CrlCheckStatus.Revoked;
+                    link.CrlSource = CrlSource.Downloaded;
+                    link.CrlSourceUrl = url;
+
+                    var entry = downloadedCrl.GetRevokedCertificate(cert.SerialNumber);
+                    var reason = GetRevocationReason(entry);
+                    link.Problems.Add($"REVOKED on {entry?.RevocationDate:yyyy-MM-dd} — {reason} (CRL #{crlNumber} from {url})");
+                }
+                else
+                {
+                    link.CrlStatus = CrlCheckStatus.Good;
+                    link.CrlSource = CrlSource.Downloaded;
+                    link.CrlSourceUrl = url;
+                }
+
+                _logger.LogInformation("Resolved CRL #{Number} from {Url} for revocation check", crlNumber, url);
+                return;
+            }
+            catch (Exception ex)
+            {
+                _logger.LogWarning(ex, "Failed to download/parse CRL from {Url}", url);
+            }
+        }
+
+        // Online resolution failed — fall back to expired stored CRL or report failure
+        if (storedCrls.Count > 0)
+        {
+            var expiredCrl = storedCrls[0];
             link.CrlStatus = CrlCheckStatus.CrlExpired;
-            link.Problems.Add($"CRL #{latestCrl.CrlNumber} expired (NextUpdate: {latestCrl.NextUpdate:yyyy-MM-dd})");
-            return;
+            link.Problems.Add($"CRL #{expiredCrl.CrlNumber} expired, online resolution from CDP failed");
         }
+        else
+        {
+            link.CrlStatus = CrlCheckStatus.CrlFetchFailed;
+            link.Problems.Add($"CRL download failed from {string.Join(", ", cdpUrls)}");
+        }
+    }
 
-        // Check if this cert is revoked
+    private void CheckRevocationInCrl(BcX509Certificate cert, ChainLink link, Crl storedCrl, CrlSource source)
+    {
         var serialHex = cert.SerialNumber.ToString(16).ToUpperInvariant();
-        var revocationEntry = latestCrl.Revocations
+        var revocationEntry = storedCrl.Revocations
             .FirstOrDefault(r => r.RevokedCertSerialNumber.Equals(serialHex, StringComparison.OrdinalIgnoreCase));
 
         if (revocationEntry != null)
         {
             link.CrlStatus = CrlCheckStatus.Revoked;
-            var reasonName = revocationEntry.RevocationReason switch
-            {
-                0 => "Unspecified",
-                1 => "Key Compromise",
-                2 => "CA Compromise",
-                3 => "Affiliation Changed",
-                4 => "Superseded",
-                5 => "Cessation of Operation",
-                6 => "Certificate Hold",
-                9 => "Privilege Withdrawn",
-                10 => "AA Compromise",
-                _ => $"Unknown ({revocationEntry.RevocationReason})"
-            };
+            link.CrlSource = source;
+            var reasonName = GetRevocationReasonName(revocationEntry.RevocationReason);
             link.Problems.Add($"REVOKED on {revocationEntry.RevocationDate:yyyy-MM-dd} — {reasonName}");
         }
         else
         {
             link.CrlStatus = CrlCheckStatus.Good;
+            link.CrlSource = source;
         }
     }
+
+    private async Task<byte[]?> DownloadCrlAsync(string url, CancellationToken ct)
+    {
+        try
+        {
+            var client = _httpClientFactory.CreateClient("SigilCrl");
+
+            // Cache-busting query parameter to bypass Windows HTTP cache
+            var separator = url.Contains('?') ? '&' : '?';
+            var bustUrl = $"{url}{separator}_t={DateTimeOffset.UtcNow.ToUnixTimeMilliseconds()}";
+
+            _logger.LogDebug("Downloading CRL from {Url}", bustUrl);
+
+            using var cts = CancellationTokenSource.CreateLinkedTokenSource(ct);
+            cts.CancelAfter(TimeSpan.FromSeconds(10));
+
+            var response = await client.GetAsync(bustUrl, cts.Token);
+            if (!response.IsSuccessStatusCode)
+            {
+                _logger.LogWarning("CRL download returned {StatusCode} from {Url}", response.StatusCode, url);
+                return null;
+            }
+
+            return await response.Content.ReadAsByteArrayAsync(cts.Token);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "CRL download failed from {Url}", url);
+            return null;
+        }
+    }
+
+    private static List<string> ExtractCdpUrls(BcX509Certificate cert)
+    {
+        var urls = new List<string>();
+        try
+        {
+            var cdpExt = cert.GetExtensionValue(X509Extensions.CrlDistributionPoints);
+            if (cdpExt == null) return urls;
+
+            var cdpObj = Asn1OctetString.GetInstance(cdpExt).GetOctets();
+            var cdpSeq = Asn1Sequence.GetInstance(Asn1Object.FromByteArray(cdpObj));
+
+            foreach (Asn1Encodable dpEncodable in cdpSeq)
+            {
+                var dp = DistributionPoint.GetInstance(dpEncodable);
+                var dpName = dp.DistributionPointName;
+                if (dpName?.PointType != DistributionPointName.FullName) continue;
+
+                var generalNames = GeneralNames.GetInstance(dpName.Name);
+                foreach (var gn in generalNames.GetNames())
+                {
+                    if (gn.TagNo == GeneralName.UniformResourceIdentifier)
+                    {
+                        var uri = gn.Name.ToString();
+                        if (uri != null && (uri.StartsWith("http://") || uri.StartsWith("https://")))
+                        {
+                            urls.Add(uri);
+                        }
+                    }
+                }
+            }
+        }
+        catch (Exception)
+        {
+            // Malformed CDP extension — ignore
+        }
+
+        return urls;
+    }
+
+    private static string GetRevocationReason(X509CrlEntry? entry)
+    {
+        if (entry == null) return "Unknown";
+        try
+        {
+            var reasonExt = entry.GetExtensionValue(X509Extensions.ReasonCode);
+            if (reasonExt != null)
+            {
+                var asn1 = Org.BouncyCastle.X509.Extension.X509ExtensionUtilities.FromExtensionValue(reasonExt);
+                var code = DerEnumerated.GetInstance(asn1).IntValueExact;
+                return GetRevocationReasonName(code);
+            }
+        }
+        catch { }
+        return "Unspecified";
+    }
+
+    private static string GetRevocationReasonName(int code) => code switch
+    {
+        0 => "Unspecified",
+        1 => "Key Compromise",
+        2 => "CA Compromise",
+        3 => "Affiliation Changed",
+        4 => "Superseded",
+        5 => "Cessation of Operation",
+        6 => "Certificate Hold",
+        9 => "Privilege Withdrawn",
+        10 => "AA Compromise",
+        _ => $"Unknown ({code})"
+    };
 
     private static bool MatchesKeyIdentifiers(BcX509Certificate subject, BcX509Certificate issuer)
     {
@@ -401,6 +575,8 @@ public class ChainLink
     public bool? SignatureValid { get; set; }
     public bool IsTrustAnchor { get; set; }
     public CrlCheckStatus CrlStatus { get; set; } = CrlCheckStatus.NotChecked;
+    public CrlSource CrlSource { get; set; } = CrlSource.None;
+    public string? CrlSourceUrl { get; set; }
     public List<string> Problems { get; set; } = new();
 
     public bool HasProblems => Problems.Count > 0;
@@ -421,5 +597,13 @@ public enum CrlCheckStatus
     Revoked,
     NoCrlAvailable,
     CrlExpired,
+    CrlFetchFailed,
     IssuerNotFound
+}
+
+public enum CrlSource
+{
+    None,
+    Stored,
+    Downloaded
 }
