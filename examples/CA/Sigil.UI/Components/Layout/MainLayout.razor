@@ -1,0 +1,45 @@
+@inherits LayoutComponentBase
+
+<FluentDesignTheme @bind-Mode="themeMode"
+                   CustomColor="#2d6a4f"
+                   StorageName="sigil-theme" />
+
+<FluentLayout>
+    <FluentHeader>
+        <span style="font-weight: bold; font-size: 1.1rem;">Sigil</span>
+        <span style="opacity: 0.6; margin-left: 0.5rem; font-size: 0.85rem;">PKI Management</span>
+        <FluentSpacer />
+        <FluentButton Appearance="Appearance.Stealth" OnClick="ToggleTheme"
+                      Title="@(themeMode == DesignThemeModes.Dark ? "Switch to light mode" : "Switch to dark mode")"
+                      IconStart="@(themeMode == DesignThemeModes.Dark ? new Icons.Regular.Size20.WeatherSunny() : new Icons.Regular.Size20.WeatherMoon())" />
+    </FluentHeader>
+    <div style="display: flex; height: calc(100vh - 50px); overflow: hidden;">
+        <FluentNavMenu Width="220" Title="Navigation">
+            <FluentNavLink Href="/" Match="NavLinkMatch.All" Icon="@(new Icons.Regular.Size20.Home())">Dashboard</FluentNavLink>
+            <FluentNavLink Href="/communities" Icon="@(new Icons.Regular.Size20.Organization())">Communities</FluentNavLink>
+            <FluentNavLink Href="/explorer" Icon="@(new Icons.Regular.Size20.Certificate())">Certificate Explorer</FluentNavLink>
+            <FluentNavLink Href="/templates" Icon="@(new Icons.Regular.Size20.DocumentBulletList())">Templates</FluentNavLink>
+            <FluentNavLink Href="/jobs" Icon="@(new Icons.Regular.Size20.Timer())">Jobs</FluentNavLink>
+            <FluentNavLink Href="/import" Icon="@(new Icons.Regular.Size20.ArrowImport())">Import</FluentNavLink>
+        </FluentNavMenu>
+        <main style="flex: 1; overflow-y: auto;">
+            <div style="padding: 1.5rem; padding-bottom: 4rem;">
+                @Body
+            </div>
+        </main>
+    </div>
+</FluentLayout>
+
+<FluentDialogProvider />
+<FluentToastProvider />
+
+@code {
+    private DesignThemeModes themeMode = DesignThemeModes.Dark;
+
+    private void ToggleTheme()
+    {
+        themeMode = themeMode == DesignThemeModes.Dark
+            ? DesignThemeModes.Light
+            : DesignThemeModes.Dark;
+    }
+}

@@ -1,0 +1,18 @@
+@using Sigil.Common.Services
+
+@if (RootNode != null)
+{
+    <div style="font-family: 'Cascadia Code', 'Consolas', monospace; font-size: 0.8rem; line-height: 1.6;">
+        <FluentTreeView>
+            <Asn1TreeNode Node="@RootNode" />
+        </FluentTreeView>
+    </div>
+}
+else
+{
+    <span style="opacity: 0.5;">No ASN.1 data to display</span>
+}
+
+@code {
+    [Parameter] public Asn1Node? RootNode { get; set; }
+}

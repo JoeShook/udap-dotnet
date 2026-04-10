@@ -1,0 +1,25 @@
+@using Sigil.Common.ViewModels
+
+<FluentBadge BackgroundColor="@GetBackgroundColor()" Color="white" Style="font-size: 0.75rem;">
+    @GetLabel()
+</FluentBadge>
+
+@code {
+    [Parameter] public CrlTimeStatus Status { get; set; }
+
+    private string GetBackgroundColor() => Status switch
+    {
+        CrlTimeStatus.Valid => "#4caf50",
+        CrlTimeStatus.ExpiringSoon => "#ff9800",
+        CrlTimeStatus.Expired => "#e94560",
+        _ => "#666"
+    };
+
+    private string GetLabel() => Status switch
+    {
+        CrlTimeStatus.Valid => "Valid",
+        CrlTimeStatus.ExpiringSoon => "Expiring",
+        CrlTimeStatus.Expired => "Expired",
+        _ => "Unknown"
+    };
+}

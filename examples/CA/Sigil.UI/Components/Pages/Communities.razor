@@ -1,0 +1,65 @@
+@page "/communities"
+
+<PageTitle>Sigil - Communities</PageTitle>
+
+<FluentLabel Typo="Typography.PageTitle">Communities</FluentLabel>
+
+<FluentCard Style="margin-top: 1rem;">
+    <FluentStack Orientation="Orientation.Horizontal" Style="align-items: center; gap: 0.5rem;">
+        <FluentLabel Typo="Typography.Subject">PKI Communities</FluentLabel>
+        <FluentSpacer />
+        <FluentButton Appearance="Appearance.Accent" OnClick="ShowAddDialog"
+                      IconStart="@(new Icons.Regular.Size16.Add())">
+            Add Community
+        </FluentButton>
+    </FluentStack>
+
+    <FluentDataGrid Items="@communities.AsQueryable()" Style="margin-top: 0.5rem;">
+        <PropertyColumn Property="@(c => c.Name)" Title="Name" Sortable="true" IsDefaultSortColumn="true" />
+        <PropertyColumn Property="@(c => c.Description)" Title="Description" />
+        <TemplateColumn Title="Enabled">
+            @if (context.Enabled)
+            {
+                <FluentBadge BackgroundColor="#4caf50" Color="white">Yes</FluentBadge>
+            }
+            else
+            {
+                <FluentBadge BackgroundColor="#666" Color="white">No</FluentBadge>
+            }
+        </TemplateColumn>
+        <PropertyColumn Property="@(c => c.RootCaCount)" Title="Root CAs" />
+        <PropertyColumn Property="@(c => c.TotalCertCount)" Title="Total Certs" />
+        <TemplateColumn Title="Actions">
+            <FluentButton Size="ButtonSize.Small"
+                          Appearance="Appearance.Outline"
+                          IconStart="@(new Icons.Regular.Size16.Certificate())"
+                          OnClick="@(() => NavigateToExplorer(context.Id))">
+                Explore
+            </FluentButton>
+            <FluentButton Size="ButtonSize.Small"
+                          Appearance="Appearance.Outline"
+                          IconStart="@(new Icons.Regular.Size16.Delete())"
+                          OnClick="@(() => DeleteCommunityAsync(context))">
+                Delete
+            </FluentButton>
+        </TemplateColumn>
+    </FluentDataGrid>
+</FluentCard>
+
+<FluentDialog @bind-Hidden="@addDialogHidden" Modal="true" TrapFocus="true"
+              Style="min-width: 400px;">
+    <FluentDialogHeader>Add Community</FluentDialogHeader>
+    <FluentDialogBody>
+        <FluentTextField @bind-Value="newCommunityName" Label="Name" Style="width: 100%;" />
+        <FluentTextField @bind-Value="newCommunityDescription" Label="Description" Style="width: 100%; margin-top: 0.5rem;" />
+    </FluentDialogBody>
+    <FluentDialogFooter>
+        <FluentButton Appearance="Appearance.Accent" OnClick="AddCommunityAsync"
+                      Disabled="@(string.IsNullOrWhiteSpace(newCommunityName))">
+            Create
+        </FluentButton>
+        <FluentButton Appearance="Appearance.Outline" OnClick="@(() => addDialogHidden = true)">
+            Cancel
+        </FluentButton>
+    </FluentDialogFooter>
+</FluentDialog>

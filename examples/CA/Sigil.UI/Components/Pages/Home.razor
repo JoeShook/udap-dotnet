@@ -1,0 +1,24 @@
+@page "/"
+
+<PageTitle>Sigil - Dashboard</PageTitle>
+
+<FluentLabel Typo="Typography.PageTitle">Dashboard</FluentLabel>
+
+<FluentStack Orientation="Orientation.Horizontal" Wrap="true" Style="margin-top: 1rem; gap: 1rem;">
+
+    <FluentCard Style="min-width: 300px; flex: 1;">
+        <FluentLabel Typo="Typography.Subject">Communities</FluentLabel>
+        <p>No communities imported yet. <a href="/import">Import certificates</a> to get started.</p>
+    </FluentCard>
+
+    <FluentCard Style="min-width: 300px; flex: 1;">
+        <FluentLabel Typo="Typography.Subject">Expiring Certificates</FluentLabel>
+        <p>Certificate expiry warnings will appear here.</p>
+    </FluentCard>
+
+    <FluentCard Style="min-width: 300px; flex: 1;">
+        <FluentLabel Typo="Typography.Subject">Recent Activity</FluentLabel>
+        <p>Job execution history will appear here.</p>
+    </FluentCard>
+
+</FluentStack>

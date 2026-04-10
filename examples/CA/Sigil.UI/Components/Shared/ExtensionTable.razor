@@ -1,0 +1,61 @@
+@using System.Security.Cryptography.X509Certificates
+
+<FluentDataGrid Items="@extensions.AsQueryable()" Style="font-size: 0.85rem;">
+    <PropertyColumn Property="@(e => e.Oid)" Title="OID" />
+    <PropertyColumn Property="@(e => e.FriendlyName)" Title="Name" />
+    <TemplateColumn Title="Critical">
+        @if (context.Critical)
+        {
+            <FluentBadge BackgroundColor="#e94560" Color="white" Style="font-size: 0.7rem;">Yes</FluentBadge>
+        }
+        else
+        {
+            <span style="opacity: 0.5;">No</span>
+        }
+    </TemplateColumn>
+    <PropertyColumn Property="@(e => e.Value)" Title="Value" />
+</FluentDataGrid>
+
+@code {
+    [Parameter] public X509Certificate2? Certificate { get; set; }
+
+    private List<ExtensionRow> extensions = new();
+
+    protected override void OnParametersSet()
+    {
+        extensions.Clear();
+
+        if (Certificate == null) return;
+
+        foreach (var ext in Certificate.Extensions)
+        {
+            extensions.Add(new ExtensionRow
+            {
+                Oid = ext.Oid?.Value ?? "Unknown",
+                FriendlyName = ext.Oid?.FriendlyName ?? "Unknown",
+                Critical = ext.Critical,
+                Value = FormatExtensionValue(ext)
+            });
+        }
+    }
+
+    private static string FormatExtensionValue(X509Extension ext)
+    {
+        try
+        {
+            return ext.Format(multiLine: false);
+        }
+        catch
+        {
+            return Convert.ToHexString(ext.RawData);
+        }
+    }
+
+    private record ExtensionRow
+    {
+        public string Oid { get; init; } = "";
+        public string FriendlyName { get; init; } = "";
+        public bool Critical { get; init; }
+        public string Value { get; init; } = "";
+    }
+}

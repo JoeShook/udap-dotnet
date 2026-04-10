@@ -31,8 +31,4 @@
     </PackageReference>
   </ItemGroup>
 
-  <ItemGroup>
-    <ProjectReference Include="..\..\examples\Udap.CA\Udap.CA.csproj" />
-  </ItemGroup>
-
 </Project>

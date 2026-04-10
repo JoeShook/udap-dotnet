@@ -1,0 +1,30 @@
+<!DOCTYPE html>
+<html lang="en" style="background-color: #1a1a2e; color-scheme: dark;">
+<head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Sigil - PKI Management</title>
+    <base href="/" />
+    <style>
+        html, body { height: 100%; margin: 0; background-color: #1a1a2e; color: #e0e0e0; }
+    </style>
+    <link rel="stylesheet" href="/css/site.css" />
+    <link href="/_content/Microsoft.FluentUI.AspNetCore.Components/css/reboot.css" rel="stylesheet" />
+    <link href="/Sigil.styles.css" rel="stylesheet" />
+    <HeadOutlet @rendermode="InteractiveServer" />
+</head>
+<body>
+    <Routes @rendermode="InteractiveServer" />
+    <script src="/_framework/blazor.web.js"></script>
+    <script>
+        window.sigilFolderUpload = function(inputId) {
+            var input = document.getElementById(inputId);
+            if (input) {
+                input.setAttribute('webkitdirectory', '');
+                input.setAttribute('directory', '');
+                input.click();
+            }
+        };
+    </script>
+</body>
+</html>
