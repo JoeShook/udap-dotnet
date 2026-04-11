@@ -20,14 +20,14 @@ public class CopyableToastContent
 
 public static class ToastExtensions
 {
-    public static void ShowCopyableSuccess(this IToastService toastService, string message, int timeoutMs = 10000)
+    public static void ShowCopyableSuccess(this IToastService toastService, string message, int timeoutMs = 5000)
     {
-        toastService.ShowToast<CopyableToast, CopyableToastContent>(new ToastParameters<CopyableToastContent>
+        toastService.ShowCommunicationToast(new ToastParameters<CommunicationToastContent>
         {
             Intent = ToastIntent.Success,
             Title = "Success",
             Timeout = timeoutMs,
-            Content = new CopyableToastContent { Message = message },
+            Content = new CommunicationToastContent { Subtitle = message },
         });
     }
 

@@ -1,0 +1,173 @@
+# Sigil — Implemented Features
+
+**Stack**: .NET 10, Blazor Server (InteractiveServer), FluentUI v4, PostgreSQL, BouncyCastle, Serilog
+**Location**: `examples/CA/` in udap-dotnet repo (three projects: `Sigil`, `Sigil.Common`, `Sigil.UI`)
+
+---
+
+## Phase 1: Foundation (Complete)
+
+### Communities
+- CRUD page for PKI communities (multi-tenant hierarchy separator)
+- Each community is an independent PKI namespace with its own CA tree
+- Community selector always visible in Explorer header for quick switching
+
+### Certificate Explorer
+- **Tree view** with hierarchical display: Root CA → Intermediate CA → End-entity certs → CRLs
+- **Detail panel** with draggable splitter (FluentSplitter) between tree and details
+- Color-coded status badges: Valid, Expiring, Expired, Revoked, Untrusted
+- CRL time status badges: Valid, Expiring Soon, Expired
+- Collapsible tree items (InitiallyExpanded)
+
+### Certificate Detail Panel
+- General information: Subject, Issuer, Serial, Thumbprint, Validity, Algorithm, Key info, Private key status
+- Subject Alternative Names display
+- Chain validation with trust anchor detection
+- Extension table with resizable columns (JS interop column drag)
+- ASN.1 structure viewer (collapsible tree with OID friendly names)
+- Operational/Trust Only badges based on private key availability
+
+### Issuer Navigation
+- Clickable link icon on the Issuer field to load issuer certificate details
+- Issuer detail panel appears below the primary cert details with blue left border
+- Chain walking: click issuer's issuer to navigate up the chain
+- Issuer lookup via AKI → SKI matching with DN fallback
+- **Tree highlighting** via JS shadow DOM styling:
+  - Green highlight on selected cert's tree item
+  - Blue highlight on issuer cert's tree item
+  - Highlights target the `positioning-region` inside FluentTreeItem's shadow DOM
+- Detail panel title bars color-coded to match tree highlights
+
+### Certificate Import
+- Drag & drop file upload (.pfx, .p12, .cer, .crt, .pem, .der, .crl)
+- Folder upload with recursive file discovery (up to 500 files)
+- **Auto-detection** of certificate role (Root CA, Intermediate CA, End-entity) via BasicConstraints
+- PEM fallback for .cer files containing PEM text
+- **Batch import** with role-detection pre-sort (Root → Intermediate → End-entity → CRL) and retry pass
+- Password dialog queue for PFX files
+- Confirm import dialog with parsed cert preview
+- **Chain matching** via AKI/SKI, with DN + BouncyCastle signature verification fallback
+- **CA selection dialog** for unmatched/untrusted certs (for test harness scenarios)
+- Duplicate detection and merge (public-only → PFX upgrade)
+
+### CRL Handling
+- CRL import with signature validation against issuing CA
+- CRL number tracking and next update dates
+- Revocation entry parsing with reason codes
+- CRL detail panel with revoked certificate list
+
+### Chain Validation
+- Full chain validation with revocation checking
+- **Online CRL resolution** via CDP (CRL Distribution Points) extension
+- Parallel async CRL downloads with 5-second timeout per download
+- Pre-computed validation results during tree load (batch validation)
+- On-demand revalidation button
+- CRL status indicators: CRL OK, Revoked, No CRL, CRL Expired, CRL Fetch Failed
+- Downloaded CRL source URL display
+
+### Download Endpoints
+- `GET /api/ca/{id}/download/cer` — PEM-encoded CA certificate
+- `GET /api/ca/{id}/download/pfx` — CA certificate with private key
+- `GET /api/ca/{id}/download/pem` — PEM format (.pem extension)
+- `GET /api/issued/{id}/download/cer` — PEM-encoded end-entity certificate
+- `GET /api/issued/{id}/download/pfx` — End-entity with private key
+- `GET /api/issued/{id}/download/pem` — PEM format (.pem extension)
+- `GET /api/crl/{id}/download` — DER-encoded CRL
+
+### UI
+- Dark/light theme toggle with FluentDesignTheme
+- Collapsible navigation menu (FluentNavMenu)
+- Draggable splitter between tree and detail panels
+- Copyable toast notifications (icon-only copy button on error/warning toasts, 15s timeout)
+- Communication toasts for success messages (5s timeout)
+
+---
+
+## Phase 2: Certificate Issuance & Templates (Complete)
+
+### Certificate Templates
+- CRUD page with FluentDataGrid + Add/Edit/Clone/Delete dialog
+- **4 preset templates** (seeded on startup, non-deletable):
+  - Root CA (RSA-4096, 10yr, CertSign+CrlSign)
+  - Intermediate CA (RSA-4096, 5yr, DigSig+CertSign+CrlSign, CDP+AIA, URI SANs)
+  - UDAP Client (RSA-2048, 2yr, DigSig, TLS Client Auth EKU, CDP+AIA, URI SANs)
+  - SSL Server (RSA-2048, 1yr, DigSig, TLS Server Auth EKU, CDP, DNS SANs)
+- Clone preset templates to customize
+- Configurable fields:
+  - General: Name, Description, Certificate Type, Validity Days
+  - Key Parameters: Algorithm (RSA/ECDSA), Key Size (2048/3072/4096), ECDSA Curve (P-256/P-384/P-521), Hash Algorithm (SHA256/384/512)
+  - Extensions: Key Usage (checkbox flags), Key Usage criticality, BasicConstraints (CA + path length), BasicConstraints criticality
+  - **EKU picker**: Checkboxes for 10 common OIDs with friendly names (TLS Client/Server Auth, Code Signing, S/MIME, etc.) plus custom OID text field
+  - Distribution: CDP URL template, AIA URL template
+  - SAN type hints: URI, DNS, Email, IP (guides issuance UI)
+
+### Certificate Issuance Engine (`CertificateIssuanceService`)
+- Located in `Sigil.Common` for reuse by CLI/API consumers
+- Uses .NET `CertificateRequest` API with BouncyCastle extension helpers
+- **RSA + ECDSA** key generation
+- Self-signed root CA creation
+- CA-signed intermediate and end-entity certificate creation
+- Extension building from template: BasicConstraints, KeyUsage, SKI, AKI, EKU, CDP, AIA, SANs
+- **Extension helpers** (`CertificateExtensionHelpers`): AddAuthorityKeyIdentifier, MakeCdp, BuildAiaExtension — extracted from Udap.PKI.Generator for reuse
+- Serial numbers: `RandomNumberGenerator.GetBytes(16)`
+- **Validity clamping**: NotAfter automatically clamped to issuing CA's NotAfter
+- PFX + PEM export and database storage
+
+### Issue Certificate Flow (Explorer UI)
+- **"New Root CA"** button in Explorer header (self-signed, Root CA templates only)
+- **"Issue Certificate"** button on CA detail panel (visible when CA has private key)
+- Issuance dialog with:
+  - Template selector (filtered by cert type)
+  - Subject DN field
+  - Display name field
+  - Validity date pickers (auto-calculated from template, clamped to issuer)
+  - CDP/AIA URL fields (conditional on template flags)
+  - Dynamic SAN entries (add/remove, type selector: URI/DNS/Email/IP)
+  - PFX password
+  - Template summary showing key params
+- Post-generation: toast with thumbprint, tree refresh
+
+### Certificate Renewal
+
+#### Re-key (New Key Pair)
+- Available on all certificate types
+- Creates new certificate with new key pair, new serial, new validity
+- Pre-fills subject, name, and SANs from existing cert
+- SAN parsing handles all formats: `URL=`, `DNS Name=`, `RFC822 Name=`, `IP Address=`, and DB storage format
+
+#### Re-sign (Same Key, New Validity)
+- Available on Root CA and Intermediate CA certs with private keys
+- **Updates the existing entity in-place** — same DB row, all child relationships preserved
+- Loads existing private key from PFX
+- Builds new CertificateRequest with same public key
+- Copies all extensions from original cert (preserves SKI, AKI, BasicConstraints, etc.)
+- Signs with parent CA (or self-signs for roots)
+- New serial number + new validity period
+- Downstream certs continue to validate (AKI→SKI match unchanged)
+- Validity clamped to parent CA's NotAfter
+
+---
+
+## Architecture
+
+### Project Structure
+```
+examples/CA/
+├── Sigil/                 # Blazor Server host (Program.cs, App.razor, wwwroot)
+├── Sigil.Common/          # Class library (entities, services, ViewModels, migrations)
+│   ├── Data/Entities/     # Community, CaCertificate, IssuedCertificate, Crl, CertificateTemplate, Job
+│   ├── Services/          # Issuance, Validation, Parsing, Import, CRL, ASN.1, Extension helpers
+│   └── ViewModels/        # DTOs for UI and API consumers
+└── Sigil.UI/              # Razor Class Library (all components, pages, shared, layout)
+    ├── Components/Pages/  # Explorer, Communities, Templates, Import, Home, Jobs
+    ├── Components/Shared/ # Asn1TreeView, CertBadge, CrlBadge, ExtensionTable, CopyableToast
+    └── Services/          # Toast extensions
+```
+
+### Key Design Decisions
+- **Sigil.Common has no UI dependencies** — reusable by CLI tools, APIs, tests
+- **CertificateIssuanceService** and all DTOs in Common for multi-host consumption
+- **Extension helpers** extracted from Udap.PKI.Generator test project into Sigil.Common
+- **Tree highlighting** via JS interop into FluentTreeItem shadow DOM (avoids Blazor re-render/collapse)
+- **Re-sign updates in-place** to preserve child relationships (vs creating new entity)
+- **Preset templates** seeded idempotently on startup

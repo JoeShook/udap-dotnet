@@ -387,6 +387,51 @@
     </FluentDialogFooter>
 </FluentDialog>
 
+@* Re-sign Certificate dialog *@
+<FluentDialog @bind-Hidden="@resignDialogHidden" Modal="true" TrapFocus="true"
+              Style="min-width: 500px;">
+    <FluentDialogHeader>Re-sign Certificate (Same Key)</FluentDialogHeader>
+    <FluentDialogBody>
+        <div style="display: flex; flex-direction: column; gap: 0.75rem;">
+            <FluentMessageBar Intent="MessageIntent.Info">
+                Re-signing creates a new certificate with the <strong>same key pair</strong> and extensions
+                but a new serial number and validity period. Downstream certificates that chain to this
+                certificate via AKI/SKI will continue to validate without re-issuance.
+            </FluentMessageBar>
+
+            @if (selectedNode != null)
+            {
+                <div style="display: grid; grid-template-columns: 120px 1fr; gap: 0.4rem; font-size: 0.9rem;">
+                    <strong>Certificate</strong>
+                    <span>@selectedNode.Name</span>
+                    <strong>Subject</strong>
+                    <span>@selectedCert?.Subject</span>
+                </div>
+            }
+
+            <div style="display: flex; gap: 1rem;">
+                <FluentDatePicker @bind-Value="resignNotBefore" Label="Not Before" Style="flex: 1;" />
+                <FluentDatePicker @bind-Value="resignNotAfter" Label="Not After" Style="flex: 1;" />
+            </div>
+
+            <FluentTextField @bind-Value="resignPfxPassword"
+                             Label="PFX Password (for private key storage)"
+                             TextFieldType="TextFieldType.Password"
+                             Style="width: 100%;" />
+        </div>
+    </FluentDialogBody>
+    <FluentDialogFooter>
+        <FluentButton Appearance="Appearance.Accent" OnClick="ResignCertificateAsync"
+                      Disabled="@(isResigning || string.IsNullOrWhiteSpace(resignPfxPassword))">
+            @(isResigning ? "Re-signing..." : "Re-sign Certificate")
+        </FluentButton>
+        <FluentButton Appearance="Appearance.Outline" OnClick="@(() => resignDialogHidden = true)"
+                      Disabled="@isResigning">
+            Cancel
+        </FluentButton>
+    </FluentDialogFooter>
+</FluentDialog>
+
 @if (treeNodes.Count > 0)
 {
     <FluentSplitter Orientation="Orientation.Horizontal"
@@ -633,9 +678,18 @@
                         <FluentButton Appearance="Appearance.Outline"
                                       IconStart="@(new Icons.Regular.Size16.ArrowRepeatAll())"
                                       OnClick="ShowRenewDialog"
-                                      title="Re-issue with same subject/SANs, new key and validity">
-                            Renew
+                                      title="Re-key: new key pair, new serial, new validity. Downstream certs need re-issuance.">
+                            Re-key
                         </FluentButton>
+                        @if (selectedNodeHasPrivateKey && selectedNode?.CertificateRole is "RootCA" or "IntermediateCA")
+                        {
+                            <FluentButton Appearance="Appearance.Outline"
+                                          IconStart="@(new Icons.Regular.Size16.ArrowRepeatAll())"
+                                          OnClick="ShowResignDialog"
+                                          title="Re-sign: same key, new serial and validity. Downstream certs remain valid.">
+                                Re-sign
+                            </FluentButton>
+                        }
                     </FluentStack>
 
                     <FluentAccordion Style="margin-top: 1rem;">

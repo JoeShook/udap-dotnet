@@ -9,13 +9,11 @@
 <FluentStack Orientation="Orientation.Vertical" Style="gap: 0.25rem; width: 100%;">
     <FluentStack Orientation="Orientation.Horizontal" Style="align-items: center; gap: 0.5rem;">
         <span style="flex: 1; word-break: break-all; user-select: text; cursor: text;">@Content.Message</span>
-        <FluentButton Appearance="Appearance.Outline" Size="ButtonSize.Small"
+        <FluentButton Appearance="Appearance.Stealth" Size="ButtonSize.Small"
                       IconStart="@(copied ? new Icons.Regular.Size16.CheckmarkCircle() : new Icons.Regular.Size16.Copy())"
                       OnClick="CopyAsync"
                       title="Copy to clipboard"
-                      Style="min-width: 70px;">
-            @(copied ? "Copied" : "Copy")
-        </FluentButton>
+                      Style="min-width: 24px; padding: 2px;" />
     </FluentStack>
 </FluentStack>
 

@@ -73,6 +73,40 @@ public class CertificateIssuanceRequest
 }
 
 /// <summary>
+/// Request DTO for re-signing an existing certificate with the same key pair.
+/// Creates a new certificate with a new serial number and validity period,
+/// but preserves the original private key and SKI so downstream chains remain valid.
+/// </summary>
+public class CertificateResignRequest
+{
+    /// <summary>
+    /// The database ID of the existing certificate to re-sign.
+    /// Must be a CaCertificate (Root or Intermediate) with a private key.
+    /// </summary>
+    public int ExistingCertificateId { get; set; }
+
+    /// <summary>
+    /// "CaCertificate" or "IssuedCertificate".
+    /// </summary>
+    public string EntityType { get; set; } = "CaCertificate";
+
+    /// <summary>
+    /// New validity start. Defaults to UtcNow if not specified.
+    /// </summary>
+    public DateTimeOffset? NotBefore { get; set; }
+
+    /// <summary>
+    /// New validity end. Defaults to NotBefore + original validity duration if not specified.
+    /// </summary>
+    public DateTimeOffset? NotAfter { get; set; }
+
+    /// <summary>
+    /// Password for the exported PFX containing the (same) private key.
+    /// </summary>
+    public string PfxPassword { get; set; } = string.Empty;
+}
+
+/// <summary>
 /// A single Subject Alternative Name entry.
 /// </summary>
 public record SanEntry(SanType Type, string Value);

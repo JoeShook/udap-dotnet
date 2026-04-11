@@ -230,6 +230,176 @@ public class CertificateIssuanceService
         }
     }
 
+    /// <summary>
+    /// Re-signs an existing certificate with the same key pair but new serial and validity.
+    /// The SKI remains the same so downstream certificate chains continue to validate.
+    /// Creates a new certificate entity; the old one is preserved.
+    /// </summary>
+    public async Task<CertificateIssuanceResult> ResignCertificateAsync(CertificateResignRequest request)
+    {
+        if (string.IsNullOrWhiteSpace(request.PfxPassword))
+            return CertificateIssuanceResult.Failure("PFX password is required.");
+
+        await using var db = await _dbFactory.CreateDbContextAsync();
+
+        // Currently only CA certificates can be re-signed (they have hierarchy)
+        if (request.EntityType != "CaCertificate")
+            return CertificateIssuanceResult.Failure("Only CA certificates can be re-signed.");
+
+        var caEntity = await db.CaCertificates.FindAsync(request.ExistingCertificateId);
+        if (caEntity == null)
+            return CertificateIssuanceResult.Failure("Certificate not found.");
+
+        if (caEntity.EncryptedPfxBytes == null || string.IsNullOrEmpty(caEntity.PfxPassword))
+            return CertificateIssuanceResult.Failure("Certificate does not have a private key.");
+
+        // Load existing cert with private key
+        X509Certificate2 existingCert;
+        try
+        {
+            existingCert = X509CertificateLoader.LoadPkcs12(
+                caEntity.EncryptedPfxBytes,
+                caEntity.PfxPassword,
+                X509KeyStorageFlags.Exportable);
+        }
+        catch (Exception ex)
+        {
+            return CertificateIssuanceResult.Failure($"Failed to load certificate: {ex.Message}");
+        }
+
+        // Load parent CA for signing (if not self-signed root)
+        X509Certificate2? parentCert = null;
+        bool isSelfSigned = caEntity.ParentId == null;
+
+        if (!isSelfSigned)
+        {
+            var parentEntity = await db.CaCertificates.FindAsync(caEntity.ParentId);
+            if (parentEntity?.EncryptedPfxBytes == null || string.IsNullOrEmpty(parentEntity.PfxPassword))
+            {
+                existingCert.Dispose();
+                return CertificateIssuanceResult.Failure("Parent CA does not have a private key.");
+            }
+
+            try
+            {
+                parentCert = X509CertificateLoader.LoadPkcs12(
+                    parentEntity.EncryptedPfxBytes,
+                    parentEntity.PfxPassword,
+                    X509KeyStorageFlags.Exportable);
+            }
+            catch (Exception ex)
+            {
+                existingCert.Dispose();
+                return CertificateIssuanceResult.Failure($"Failed to load parent CA: {ex.Message}");
+            }
+        }
+
+        try
+        {
+            // Build CertificateRequest using the SAME key from the existing cert
+            var rsaKey = existingCert.GetRSAPrivateKey();
+            var ecdsaKey = existingCert.GetECDsaPrivateKey();
+
+            CertificateRequest certRequest;
+            if (ecdsaKey != null)
+            {
+                certRequest = new CertificateRequest(
+                    existingCert.SubjectName,
+                    ecdsaKey,
+                    HashAlgorithmName.SHA256);
+            }
+            else if (rsaKey != null)
+            {
+                certRequest = new CertificateRequest(
+                    existingCert.SubjectName,
+                    rsaKey,
+                    HashAlgorithmName.SHA256,
+                    RSASignaturePadding.Pkcs1);
+            }
+            else
+            {
+                return CertificateIssuanceResult.Failure("Unsupported key algorithm.");
+            }
+
+            // Copy ALL extensions from the existing certificate
+            // This preserves SKI, AKI, BasicConstraints, KeyUsage, SANs, CDP, AIA, etc.
+            foreach (var ext in existingCert.Extensions)
+            {
+                certRequest.CertificateExtensions.Add(ext);
+            }
+
+            // Determine validity
+            var notBefore = request.NotBefore ?? DateTimeOffset.UtcNow;
+            var originalDuration = existingCert.NotAfter - existingCert.NotBefore;
+            var notAfter = request.NotAfter ?? notBefore.Add(originalDuration);
+
+            // Clamp to parent's NotAfter
+            if (parentCert != null && notAfter > parentCert.NotAfter)
+            {
+                notAfter = new DateTimeOffset(parentCert.NotAfter.ToUniversalTime(), TimeSpan.Zero);
+            }
+
+            // Sign with new serial
+            X509Certificate2 newCert;
+            if (isSelfSigned)
+            {
+                // Self-signed root: sign with own key
+                newCert = certRequest.CreateSelfSigned(notBefore, notAfter);
+            }
+            else
+            {
+                var serialBytes = RandomNumberGenerator.GetBytes(16);
+                using var signedCert = certRequest.Create(
+                    parentCert!,
+                    notBefore,
+                    notAfter,
+                    serialBytes);
+
+                // Attach the SAME private key
+                if (ecdsaKey != null)
+                    newCert = signedCert.CopyWithPrivateKey(ecdsaKey);
+                else
+                    newCert = signedCert.CopyWithPrivateKey(rsaKey!);
+            }
+
+            using (newCert)
+            {
+                var pfxBytes = newCert.Export(X509ContentType.Pkcs12, request.PfxPassword);
+                var pem = newCert.ExportCertificatePem();
+
+                // Update the existing entity in-place so all child relationships
+                // (issued certs, CRLs, sub-CAs) remain attached to this CA.
+                caEntity.X509CertificatePem = pem;
+                caEntity.EncryptedPfxBytes = pfxBytes;
+                caEntity.PfxPassword = request.PfxPassword;
+                caEntity.Thumbprint = newCert.Thumbprint;
+                caEntity.SerialNumber = newCert.SerialNumber;
+                caEntity.NotBefore = newCert.NotBefore.ToUniversalTime();
+                caEntity.NotAfter = newCert.NotAfter.ToUniversalTime();
+
+                await db.SaveChangesAsync();
+
+                return new CertificateIssuanceResult
+                {
+                    Success = true,
+                    EntityId = caEntity.Id,
+                    EntityType = "CaCertificate",
+                    Thumbprint = newCert.Thumbprint,
+                    SerialNumber = newCert.SerialNumber
+                };
+            }
+        }
+        catch (Exception ex)
+        {
+            return CertificateIssuanceResult.Failure($"Re-sign failed: {ex.Message}");
+        }
+        finally
+        {
+            existingCert.Dispose();
+            parentCert?.Dispose();
+        }
+    }
+
     private static KeyHolder GenerateKeyPair(CertificateTemplate template)
     {
         if (template.KeyAlgorithm.Equals("ECDSA", StringComparison.OrdinalIgnoreCase))

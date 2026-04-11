@@ -105,6 +105,13 @@ public partial class CertificateExplorer
     private List<IssuanceSanEntry> issuanceSans = new();
     private string issuancePfxPassword = string.Empty;
 
+    // Re-sign dialog
+    private bool resignDialogHidden = true;
+    private bool isResigning;
+    private DateTime? resignNotBefore = DateTime.UtcNow;
+    private DateTime? resignNotAfter = DateTime.UtcNow.AddYears(5);
+    private string resignPfxPassword = string.Empty;
+
     protected override async Task OnInitializedAsync()
     {
         await using var db = await DbFactory.CreateDbContextAsync();
@@ -2035,6 +2042,79 @@ public partial class CertificateExplorer
             {
                 issuanceSans.Add(entry);
             }
+        }
+    }
+
+    // --- Re-sign Methods ---
+
+    private async Task ShowResignDialog()
+    {
+        if (selectedNode == null || selectedCert == null) return;
+
+        // Load parent CA's NotAfter for clamping
+        await using var db = await DbFactory.CreateDbContextAsync();
+        DateTime? parentNotAfter = null;
+        var caEntity = await db.CaCertificates.FindAsync(selectedNode.Id);
+        if (caEntity?.ParentId != null)
+        {
+            var parent = await db.CaCertificates.FindAsync(caEntity.ParentId);
+            parentNotAfter = parent?.NotAfter;
+        }
+
+        resignNotBefore = DateTime.UtcNow;
+        // Default to the same duration as the original cert
+        var originalDuration = selectedCert.NotAfter - selectedCert.NotBefore;
+        var desiredNotAfter = DateTime.UtcNow.Add(originalDuration);
+
+        // Clamp to parent's NotAfter if applicable
+        if (parentNotAfter.HasValue && desiredNotAfter > parentNotAfter.Value)
+            desiredNotAfter = parentNotAfter.Value;
+
+        resignNotAfter = desiredNotAfter;
+        resignPfxPassword = string.Empty;
+        isResigning = false;
+        resignDialogHidden = false;
+    }
+
+    private async Task ResignCertificateAsync()
+    {
+        if (selectedNode == null) return;
+
+        isResigning = true;
+        StateHasChanged();
+
+        try
+        {
+            var request = new CertificateResignRequest
+            {
+                ExistingCertificateId = selectedNode.Id,
+                EntityType = selectedNode.EntityType,
+                NotBefore = resignNotBefore.HasValue ? new DateTimeOffset(resignNotBefore.Value, TimeSpan.Zero) : null,
+                NotAfter = resignNotAfter.HasValue ? new DateTimeOffset(resignNotAfter.Value, TimeSpan.Zero) : null,
+                PfxPassword = resignPfxPassword,
+            };
+
+            var result = await IssuanceService.ResignCertificateAsync(request);
+
+            if (result.Success)
+            {
+                resignDialogHidden = true;
+                ToastService.ShowCopyableSuccess($"Certificate re-signed (same key): {result.Thumbprint}");
+                await LoadCommunityTreeAsync(CommunityId);
+            }
+            else
+            {
+                ToastService.ShowCopyableError(result.Error ?? "Unknown error");
+            }
+        }
+        catch (Exception ex)
+        {
+            ToastService.ShowCopyableError($"Re-sign failed: {ex.Message}");
+        }
+        finally
+        {
+            isResigning = false;
+            StateHasChanged();
         }
     }
 
