@@ -1,3 +1,13 @@
+#region (c) 2026 Joseph Shook. All rights reserved.
+// /*
+//  Authors:
+//     Joseph Shook   JoeShook@Gmail.com
+//                    Joseph.Shook@Surescripts.com
+//
+//  See LICENSE in the project root for license information.
+// */
+#endregion
+
 using System.Security.Cryptography.X509Certificates;
 using System.Text;
 using Microsoft.EntityFrameworkCore;
@@ -5,6 +15,7 @@ using Microsoft.FluentUI.AspNetCore.Components;
 using Serilog;
 using Sigil.Components;
 using Sigil.Common.Data;
+using Sigil.Common.Data.Entities;
 using Sigil.Common.Services;
 
 Log.Logger = new LoggerConfiguration()
@@ -30,6 +41,7 @@ try
     builder.Services.AddScoped<Asn1ParsingService>();
     builder.Services.AddScoped<CrlImportService>();
     builder.Services.AddScoped<ChainValidationService>();
+    builder.Services.AddScoped<CertificateIssuanceService>();
     builder.Services.AddHttpClient("SigilCrl");
     builder.Services.AddHttpClient();
 
@@ -40,11 +52,12 @@ try
 
     var app = builder.Build();
 
-    // Run migrations
+    // Run migrations + seed data
     using (var scope = app.Services.CreateScope())
     {
         var db = scope.ServiceProvider.GetRequiredService<SigilDbContext>();
         await db.Database.MigrateAsync();
+        await SeedTemplatesAsync(db);
     }
 
     app.UseSerilogRequestLogging(options =>
@@ -124,6 +137,27 @@ try
         return Results.File(crl.RawBytes, "application/pkix-crl", fileName);
     });
 
+    // PEM download endpoints
+    app.MapGet("/api/ca/{id}/download/pem", async (int id, IDbContextFactory<SigilDbContext> dbFactory) =>
+    {
+        await using var db = await dbFactory.CreateDbContextAsync();
+        var ca = await db.CaCertificates.FindAsync(id);
+        if (ca == null) return Results.NotFound();
+
+        var pemBytes = Encoding.UTF8.GetBytes(ca.X509CertificatePem);
+        return Results.File(pemBytes, "application/x-pem-file", $"{ca.Name}.pem");
+    });
+
+    app.MapGet("/api/issued/{id}/download/pem", async (int id, IDbContextFactory<SigilDbContext> dbFactory) =>
+    {
+        await using var db = await dbFactory.CreateDbContextAsync();
+        var cert = await db.IssuedCertificates.FindAsync(id);
+        if (cert == null) return Results.NotFound();
+
+        var pemBytes = Encoding.UTF8.GetBytes(cert.X509CertificatePem);
+        return Results.File(pemBytes, "application/x-pem-file", $"{cert.Name}.pem");
+    });
+
     app.Run();
 }
 catch (Exception ex)
@@ -133,4 +167,87 @@ catch (Exception ex)
 finally
 {
     Log.CloseAndFlush();
+}
+
+static async Task SeedTemplatesAsync(SigilDbContext db)
+{
+    if (await db.CertificateTemplates.AnyAsync(t => t.IsPreset))
+        return;
+
+    db.CertificateTemplates.AddRange(
+        new CertificateTemplate
+        {
+            Name = "Root CA",
+            Description = "Self-signed Root Certificate Authority with 10-year validity.",
+            CertificateType = CertificateType.RootCa,
+            KeyAlgorithm = "RSA",
+            KeySize = 4096,
+            ValidityDays = 3650,
+            KeyUsageFlags = (int)(X509KeyUsageFlags.CrlSign | X509KeyUsageFlags.KeyCertSign),
+            IsKeyUsageCritical = true,
+            IsBasicConstraintsCa = true,
+            IsBasicConstraintsCritical = true,
+            PathLengthConstraint = null,
+            HashAlgorithm = "SHA256",
+            IsPreset = true,
+        },
+        new CertificateTemplate
+        {
+            Name = "Intermediate CA",
+            Description = "Intermediate Certificate Authority signed by a Root CA, 5-year validity.",
+            CertificateType = CertificateType.IntermediateCa,
+            KeyAlgorithm = "RSA",
+            KeySize = 4096,
+            ValidityDays = 1825,
+            KeyUsageFlags = (int)(X509KeyUsageFlags.DigitalSignature | X509KeyUsageFlags.CrlSign | X509KeyUsageFlags.KeyCertSign),
+            IsKeyUsageCritical = true,
+            IsBasicConstraintsCa = true,
+            IsBasicConstraintsCritical = true,
+            PathLengthConstraint = 0,
+            HashAlgorithm = "SHA256",
+            IncludeCdp = true,
+            IncludeAia = true,
+            SubjectAltNameTypes = "URI",
+            IsPreset = true,
+        },
+        new CertificateTemplate
+        {
+            Name = "UDAP Client",
+            Description = "End-entity client certificate for UDAP dynamic client registration.",
+            CertificateType = CertificateType.EndEntityClient,
+            KeyAlgorithm = "RSA",
+            KeySize = 2048,
+            ValidityDays = 730,
+            KeyUsageFlags = (int)X509KeyUsageFlags.DigitalSignature,
+            IsKeyUsageCritical = true,
+            ExtendedKeyUsageOids = "1.3.6.1.5.5.7.3.2",
+            IsBasicConstraintsCa = false,
+            IsBasicConstraintsCritical = true,
+            HashAlgorithm = "SHA256",
+            IncludeCdp = true,
+            IncludeAia = true,
+            SubjectAltNameTypes = "URI",
+            IsPreset = true,
+        },
+        new CertificateTemplate
+        {
+            Name = "SSL Server",
+            Description = "End-entity TLS server certificate for HTTPS endpoints.",
+            CertificateType = CertificateType.EndEntityServer,
+            KeyAlgorithm = "RSA",
+            KeySize = 2048,
+            ValidityDays = 365,
+            KeyUsageFlags = (int)X509KeyUsageFlags.DigitalSignature,
+            IsKeyUsageCritical = true,
+            ExtendedKeyUsageOids = "1.3.6.1.5.5.7.3.1",
+            IsBasicConstraintsCa = false,
+            IsBasicConstraintsCritical = true,
+            HashAlgorithm = "SHA256",
+            IncludeCdp = true,
+            SubjectAltNameTypes = "DNS",
+            IsPreset = true,
+        }
+    );
+
+    await db.SaveChangesAsync();
 }

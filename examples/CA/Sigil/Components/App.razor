@@ -1,3 +1,8 @@
+@* (c) 2026 Joseph Shook. All rights reserved.
+   Authors: Joseph Shook   JoeShook@Gmail.com
+                            Joseph.Shook@Surescripts.com
+   See LICENSE in the project root for license information. *@
+
 <!DOCTYPE html>
 <html lang="en" style="background-color: #1a1a2e; color-scheme: dark;">
 <head>
@@ -17,12 +22,52 @@
     <Routes @rendermode="InteractiveServer" />
     <script src="/_framework/blazor.web.js"></script>
     <script>
+        window.sigilCopyText = function(text) {
+            return navigator.clipboard.writeText(text).then(function() { return true; }, function() { return false; });
+        };
+
         window.sigilFolderUpload = function(inputId) {
             var input = document.getElementById(inputId);
             if (input) {
                 input.setAttribute('webkitdirectory', '');
                 input.setAttribute('directory', '');
                 input.click();
+            }
+        };
+
+        window.sigilHighlightTree = function(selectedId, issuerId) {
+            // Clear previous highlights
+            document.querySelectorAll('fluent-tree-item').forEach(function(el) {
+                var pr = el.shadowRoot && el.shadowRoot.querySelector('.positioning-region');
+                if (pr) {
+                    pr.style.removeProperty('background-color');
+                    pr.style.removeProperty('border-left');
+                    pr.style.removeProperty('border-radius');
+                }
+            });
+            // Apply selected highlight to shadow DOM positioning-region
+            if (selectedId) {
+                var sel = document.getElementById(selectedId);
+                if (sel) {
+                    var pr = sel.shadowRoot && sel.shadowRoot.querySelector('.positioning-region');
+                    if (pr) {
+                        pr.style.backgroundColor = 'rgba(45, 106, 79, 0.4)';
+                        pr.style.borderLeft = '3px solid #2d6a4f';
+                        pr.style.borderRadius = '0 4px 4px 0';
+                    }
+                }
+            }
+            // Apply issuer highlight
+            if (issuerId) {
+                var iss = document.getElementById(issuerId);
+                if (iss) {
+                    var pr = iss.shadowRoot && iss.shadowRoot.querySelector('.positioning-region');
+                    if (pr) {
+                        pr.style.backgroundColor = 'rgba(25, 118, 210, 0.3)';
+                        pr.style.borderLeft = '3px solid #1976d2';
+                        pr.style.borderRadius = '0 4px 4px 0';
+                    }
+                }
             }
         };
 

@@ -1,3 +1,13 @@
+#region (c) 2026 Joseph Shook. All rights reserved.
+// /*
+//  Authors:
+//     Joseph Shook   JoeShook@Gmail.com
+//                    Joseph.Shook@Surescripts.com
+//
+//  See LICENSE in the project root for license information.
+// */
+#endregion
+
 using System.Security.Cryptography.X509Certificates;
 using Microsoft.AspNetCore.Components;
 using Microsoft.AspNetCore.Components.Forms;
@@ -8,6 +18,7 @@ using Sigil.Common.Data;
 using Sigil.Common.Data.Entities;
 using Sigil.Common.Services;
 using Sigil.Common.ViewModels;
+using Sigil.UI.Services;
 
 namespace Sigil.UI.Components.Pages;
 
@@ -22,10 +33,12 @@ public partial class CertificateExplorer
     [Inject] private Asn1ParsingService Asn1Parser { get; set; } = null!;
     [Inject] private CrlImportService CrlImporter { get; set; } = null!;
     [Inject] private ChainValidationService ChainValidator { get; set; } = null!;
+    [Inject] private CertificateIssuanceService IssuanceService { get; set; } = null!;
     [Inject] private IJSRuntime JS { get; set; } = null!;
 
     // Tree state
     private List<CommunityOption> communityList = new();
+    private CommunityOption? selectedCommunity;
     private string selectedCommunityName = string.Empty;
     private List<CertificateChainNodeViewModel> treeNodes = new();
     private CertificateChainNodeViewModel? selectedNode;
@@ -75,6 +88,23 @@ public partial class CertificateExplorer
     private ParsedCertificate? pendingCaSelectParsed;
     private Queue<(byte[] Bytes, string FileName, string? Password)> pendingCaSelectQueue = new();
 
+    // Issuance dialog
+    private bool issuanceDialogHidden = true;
+    private bool isIssuing;
+    private int? issuingCaIdForIssuance;
+    private string? issuingCaNameForIssuance;
+    private DateTime? issuingCaNotAfter;
+    private List<CertificateTemplate> availableTemplates = new();
+    private CertificateTemplate? selectedTemplate;
+    private string issuanceSubjectDn = string.Empty;
+    private string issuanceCertName = string.Empty;
+    private DateTime? issuanceNotBeforeNullable = DateTime.UtcNow;
+    private DateTime? issuanceNotAfterNullable = DateTime.UtcNow.AddYears(1);
+    private string issuanceCdpUrl = string.Empty;
+    private string issuanceAiaUrl = string.Empty;
+    private List<IssuanceSanEntry> issuanceSans = new();
+    private string issuancePfxPassword = string.Empty;
+
     protected override async Task OnInitializedAsync()
     {
         await using var db = await DbFactory.CreateDbContextAsync();
@@ -86,6 +116,7 @@ public partial class CertificateExplorer
 
         if (CommunityId > 0)
         {
+            selectedCommunity = communityList.FirstOrDefault(c => c.Id == CommunityId);
             await LoadCommunityTreeAsync(CommunityId);
         }
     }
@@ -94,6 +125,7 @@ public partial class CertificateExplorer
     {
         if (option != null)
         {
+            selectedCommunity = option;
             CommunityId = option.Id;
             await LoadCommunityTreeAsync(option.Id);
         }
@@ -243,6 +275,7 @@ public partial class CertificateExplorer
         chainValidation = null;
         asn1Root = null;
         subjectAltNames.Clear();
+        CloseIssuerDetails();
 
         await using var db = await DbFactory.CreateDbContextAsync();
 
@@ -349,6 +382,8 @@ public partial class CertificateExplorer
                 catch { }
             }
         }
+
+        await UpdateTreeHighlightsAsync();
     }
 
     private async Task RevalidateSelectedAsync()
@@ -376,7 +411,7 @@ public partial class CertificateExplorer
         }
         catch (Exception ex)
         {
-            ToastService.ShowError($"Validation failed: {ex.Message}");
+            ToastService.ShowCopyableError($"Validation failed: {ex.Message}");
         }
         finally
         {
@@ -664,7 +699,7 @@ public partial class CertificateExplorer
 
         if (successCount > 0)
         {
-            ToastService.ShowSuccess($"Imported {successCount} of {files.Count} files.");
+            ToastService.ShowCopyableSuccess($"Imported {successCount} of {files.Count} files.");
             await LoadCommunityTreeAsync(CommunityId);
         }
 
@@ -885,7 +920,7 @@ public partial class CertificateExplorer
         }
 
         await db.SaveChangesAsync();
-        ToastService.ShowSuccess($"Deleted '{selectedNode.Name}'");
+        ToastService.ShowCopyableSuccess($"Deleted '{selectedNode.Name}'");
 
         selectedNode = null;
         selectedCert?.Dispose();
@@ -976,7 +1011,7 @@ public partial class CertificateExplorer
 
                     if (newIssuingCaId == null)
                     {
-                        ToastService.ShowError("Target community has no CA certificates");
+                        ToastService.ShowCopyableError("Target community has no CA certificates");
                         moveDialogHidden = true;
                         return;
                     }
@@ -989,7 +1024,7 @@ public partial class CertificateExplorer
         await db.SaveChangesAsync();
         moveDialogHidden = true;
 
-        ToastService.ShowSuccess($"Moved '{selectedNode.Name}' to '{moveTargetCommunity.Name}'");
+        ToastService.ShowCopyableSuccess($"Moved '{selectedNode.Name}' to '{moveTargetCommunity.Name}'");
 
         selectedNode = null;
         selectedCert?.Dispose();
@@ -1137,7 +1172,7 @@ public partial class CertificateExplorer
                     await db.SaveChangesAsync();
                 }
                 parsed.Certificate.Dispose();
-                ToastService.ShowSuccess($"Imported '{fileName}'");
+                ToastService.ShowCopyableSuccess($"Imported '{fileName}'");
                 return;
             }
 
@@ -1154,7 +1189,7 @@ public partial class CertificateExplorer
                     await db.SaveChangesAsync();
                 }
                 parsed.Certificate.Dispose();
-                ToastService.ShowSuccess($"Imported '{fileName}'");
+                ToastService.ShowCopyableSuccess($"Imported '{fileName}'");
                 return;
             }
 
@@ -1226,7 +1261,7 @@ public partial class CertificateExplorer
 
             await db.SaveChangesAsync();
             parsed.Certificate.Dispose();
-            ToastService.ShowSuccess($"Imported '{fileName}'");
+            ToastService.ShowCopyableSuccess($"Imported '{fileName}'");
         }
         catch (Exception ex)
         {
@@ -1364,7 +1399,7 @@ public partial class CertificateExplorer
             parsedCert?.Certificate.Dispose();
             parsedCert = null;
 
-            ToastService.ShowSuccess($"Certificate '{importName}' imported successfully.");
+            ToastService.ShowCopyableSuccess($"Certificate '{importName}' imported successfully.");
             await LoadCommunityTreeAsync(CommunityId);
         }
         catch (Exception ex)
@@ -1387,7 +1422,7 @@ public partial class CertificateExplorer
         showDropZone = false;
         var sigStatus = result.SignatureValid ? "signature valid" : "signature INVALID";
         var nextUpdateStr = result.NextUpdate?.ToString("yyyy-MM-dd") ?? "unknown";
-        ToastService.ShowSuccess(
+        ToastService.ShowCopyableSuccess(
             $"CRL #{result.CrlNumber} imported ({sigStatus}): {result.RevokedCount} revocation(s), next update {nextUpdateStr}");
     }
 
@@ -1468,7 +1503,7 @@ public partial class CertificateExplorer
 
         if (parsed == null)
         {
-            ToastService.ShowError($"Could not parse '{pendingFileName}'");
+            ToastService.ShowCopyableError($"Could not parse '{pendingFileName}'");
             caSelectDialogHidden = true;
             pendingCaSelectParsed = null;
             ProcessNextPendingCaSelect();
@@ -1481,7 +1516,7 @@ public partial class CertificateExplorer
         }
         catch (Exception ex)
         {
-            ToastService.ShowError($"Import failed: {ex.Message}");
+            ToastService.ShowCopyableError($"Import failed: {ex.Message}");
             parsed.Certificate.Dispose();
         }
         pendingCaSelectParsed = null;
@@ -1517,7 +1552,7 @@ public partial class CertificateExplorer
                 await db.SaveChangesAsync();
             }
             parsed.Certificate.Dispose();
-            ToastService.ShowSuccess($"Merged PFX into existing '{existingCa.Name}'");
+            ToastService.ShowCopyableSuccess($"Merged PFX into existing '{existingCa.Name}'");
             return;
         }
 
@@ -1534,7 +1569,7 @@ public partial class CertificateExplorer
                 await db.SaveChangesAsync();
             }
             parsed.Certificate.Dispose();
-            ToastService.ShowSuccess($"Merged PFX into existing '{existingIssued.Name}'");
+            ToastService.ShowCopyableSuccess($"Merged PFX into existing '{existingIssued.Name}'");
             return;
         }
 
@@ -1583,7 +1618,7 @@ public partial class CertificateExplorer
 
         await db.SaveChangesAsync();
         parsed.Certificate.Dispose();
-        ToastService.ShowSuccess($"'{Path.GetFileNameWithoutExtension(pendingFileName)}' assigned under '{selectedCaForAssignment!.Name}'");
+        ToastService.ShowCopyableSuccess($"'{Path.GetFileNameWithoutExtension(pendingFileName)}' assigned under '{selectedCaForAssignment!.Name}'");
     }
 
     private void SkipCaAssignment()
@@ -1601,6 +1636,428 @@ public partial class CertificateExplorer
         pendingCaSelectQueue.Clear();
     }
 
+    // Issuer detail state
+    private X509Certificate2? issuerCert;
+    private CertificateChainNodeViewModel? issuerNode;
+    private Asn1Node? issuerAsn1Root;
+
+    // Issuance constants
+    private static readonly SanType[] sanTypeOptions = Enum.GetValues<SanType>();
+
+    private static string GetSanPlaceholder(SanType type) => type switch
+    {
+        SanType.Uri => "https://example.com/fhir/r4",
+        SanType.Dns => "example.com",
+        SanType.Email => "admin@example.com",
+        SanType.IpAddress => "192.168.1.1",
+        _ => ""
+    };
+
+    // --- Issuer Navigation Methods ---
+
+    private async Task UpdateTreeHighlightsAsync()
+    {
+        try
+        {
+            var selectedId = selectedNode != null ? $"tree-{selectedNode.Thumbprint}" : null;
+            var issuerId = issuerNode != null ? $"tree-{issuerNode.Thumbprint}" : null;
+            await JS.InvokeVoidAsync("sigilHighlightTree", selectedId, issuerId);
+        }
+        catch { /* JS not ready yet */ }
+    }
+
+    private string GetTreeItemCrlStyle(CertificateChainNodeViewModel node)
+    {
+        if (IsError(node.Status))
+            return $"color: {NodeColor(node.Status)};";
+        return "font-style: italic; opacity: 0.8;";
+    }
+
+    private async Task LoadIssuerDetailsAsync()
+    {
+        if (selectedCert == null) return;
+        await LoadIssuerByCert(selectedCert);
+    }
+
+    private async Task LoadIssuerOfIssuerDetailsAsync()
+    {
+        if (issuerCert == null || issuerCert.Subject == issuerCert.Issuer) return;
+
+        // The current issuer becomes the selected cert, and we load its issuer
+        var prevIssuer = issuerCert;
+
+        // Find the node for the current issuer and make it the primary selection
+        var issuerThumbprint = issuerCert.Thumbprint;
+        var node = FindNodeByThumbprint(treeNodes, issuerThumbprint);
+        if (node != null)
+        {
+            await SelectNode(node);
+        }
+
+        // Now load the issuer of that cert
+        await LoadIssuerByCert(selectedCert!);
+    }
+
+    private async Task LoadIssuerByCert(X509Certificate2 cert)
+    {
+        CloseIssuerDetails();
+
+        if (cert.Subject == cert.Issuer) return; // self-signed, no parent
+
+        // Find issuer by AKI → SKI match, or by DN match
+        await using var db = await DbFactory.CreateDbContextAsync();
+
+        var akiValue = GetAkiKeyId(cert);
+        CaCertificate? issuerEntity = null;
+
+        if (akiValue != null)
+        {
+            // Find CA whose SKI matches our AKI
+            var cas = await db.CaCertificates
+                .Where(ca => ca.CommunityId == CommunityId)
+                .ToListAsync();
+
+            foreach (var ca in cas)
+            {
+                try
+                {
+                    using var caCert = X509Certificate2.CreateFromPem(ca.X509CertificatePem);
+                    var ski = caCert.Extensions["2.5.29.14"];
+                    if (ski != null)
+                    {
+                        var skiHex = Convert.ToHexString(ski.RawData.AsSpan(2));
+                        if (string.Equals(skiHex, akiValue, StringComparison.OrdinalIgnoreCase))
+                        {
+                            issuerEntity = ca;
+                            break;
+                        }
+                    }
+                }
+                catch { }
+            }
+        }
+
+        if (issuerEntity == null)
+        {
+            // Fallback: match by issuer DN
+            var cas = await db.CaCertificates
+                .Where(ca => ca.CommunityId == CommunityId && ca.Subject == cert.Issuer)
+                .ToListAsync();
+
+            issuerEntity = cas.FirstOrDefault();
+        }
+
+        if (issuerEntity == null) return;
+
+        try
+        {
+            issuerCert = X509Certificate2.CreateFromPem(issuerEntity.X509CertificatePem);
+            issuerAsn1Root = Asn1Parser.ParsePem(issuerEntity.X509CertificatePem);
+            issuerNode = FindNodeByThumbprint(treeNodes, issuerEntity.Thumbprint);
+        }
+        catch { }
+
+        StateHasChanged();
+        await UpdateTreeHighlightsAsync();
+    }
+
+    private void CloseIssuerDetails()
+    {
+        issuerCert?.Dispose();
+        issuerCert = null;
+        issuerNode = null;
+        issuerAsn1Root = null;
+    }
+
+    private async Task CloseIssuerDetailsAsync()
+    {
+        CloseIssuerDetails();
+        await UpdateTreeHighlightsAsync();
+    }
+
+    private static string? GetAkiKeyId(X509Certificate2 cert)
+    {
+        var akiExt = cert.Extensions["2.5.29.35"];
+        if (akiExt == null || akiExt.RawData.Length < 6) return null;
+
+        // AKI is a SEQUENCE containing [0] KeyIdentifier (tag 0x80)
+        // Simple parse: skip SEQUENCE header, look for tag 0x80
+        var data = akiExt.RawData;
+        for (int i = 0; i < data.Length - 2; i++)
+        {
+            if (data[i] == 0x80)
+            {
+                int len = data[i + 1];
+                if (i + 2 + len <= data.Length)
+                {
+                    return Convert.ToHexString(data.AsSpan(i + 2, len));
+                }
+            }
+        }
+
+        return null;
+    }
+
+    private static CertificateChainNodeViewModel? FindNodeByThumbprint(
+        List<CertificateChainNodeViewModel> nodes, string thumbprint)
+    {
+        foreach (var node in nodes)
+        {
+            if (string.Equals(node.Thumbprint, thumbprint, StringComparison.OrdinalIgnoreCase))
+                return node;
+
+            var found = FindNodeByThumbprint(node.Children, thumbprint);
+            if (found != null) return found;
+        }
+
+        return null;
+    }
+
+    private string GetIssuerPublicKeyInfo()
+    {
+        if (issuerCert == null) return "";
+        using var rsa = issuerCert.GetRSAPublicKey();
+        if (rsa != null) return $"RSA {rsa.KeySize}-bit";
+        using var ecdsa = issuerCert.GetECDsaPublicKey();
+        if (ecdsa != null) return $"ECDSA {ecdsa.KeySize}-bit";
+        return "Unknown";
+    }
+
+    // --- Issuance Methods ---
+
+    private async Task ShowIssuanceDialog(int? issuingCaId, string? issuingCaName)
+    {
+        issuingCaIdForIssuance = issuingCaId;
+        issuingCaNameForIssuance = issuingCaName;
+        issuingCaNotAfter = null;
+
+        await using var db = await DbFactory.CreateDbContextAsync();
+
+        // Load issuing CA's NotAfter to clamp validity
+        if (issuingCaId.HasValue)
+        {
+            var ca = await db.CaCertificates.FindAsync(issuingCaId.Value);
+            issuingCaNotAfter = ca?.NotAfter;
+        }
+
+        var allTemplates = await db.CertificateTemplates
+            .OrderBy(t => t.CertificateType)
+            .ThenBy(t => t.Name)
+            .ToListAsync();
+
+        if (issuingCaId == null)
+        {
+            // Self-signed root only
+            availableTemplates = allTemplates
+                .Where(t => t.CertificateType == CertificateType.RootCa)
+                .ToList();
+        }
+        else
+        {
+            // Intermediate + end-entity templates
+            availableTemplates = allTemplates
+                .Where(t => t.CertificateType != CertificateType.RootCa)
+                .ToList();
+        }
+
+        selectedTemplate = availableTemplates.FirstOrDefault();
+        OnTemplateSelected(selectedTemplate);
+
+        issuanceSans.Clear();
+        issuancePfxPassword = string.Empty;
+        issuanceCertName = string.Empty;
+        issuanceSubjectDn = string.Empty;
+        isIssuing = false;
+
+        issuanceDialogHidden = false;
+    }
+
+    private void OnTemplateSelected(CertificateTemplate? template)
+    {
+        selectedTemplate = template;
+        if (template == null) return;
+
+        issuanceNotBeforeNullable = DateTime.UtcNow;
+        var desiredNotAfter = DateTime.UtcNow.AddDays(template.ValidityDays);
+        // Clamp to issuing CA's expiry
+        if (issuingCaNotAfter.HasValue && desiredNotAfter > issuingCaNotAfter.Value)
+            desiredNotAfter = issuingCaNotAfter.Value;
+        issuanceNotAfterNullable = desiredNotAfter;
+
+        issuanceSubjectDn = template.SubjectTemplate ?? string.Empty;
+        issuanceCdpUrl = template.CdpUrlTemplate ?? string.Empty;
+        issuanceAiaUrl = template.AiaUrlTemplate ?? string.Empty;
+
+        // Pre-populate SAN entries from template's SubjectAltNameTypes
+        issuanceSans.Clear();
+        if (!string.IsNullOrWhiteSpace(template.SubjectAltNameTypes))
+        {
+            foreach (var sanType in template.SubjectAltNameTypes.Split(';', StringSplitOptions.RemoveEmptyEntries))
+            {
+                var type = sanType.Trim().ToUpperInvariant() switch
+                {
+                    "URI" => SanType.Uri,
+                    "DNS" => SanType.Dns,
+                    "EMAIL" => SanType.Email,
+                    "IP" => SanType.IpAddress,
+                    _ => SanType.Uri
+                };
+                issuanceSans.Add(new IssuanceSanEntry { Type = type, Value = string.Empty });
+            }
+        }
+    }
+
+    private void AddSanEntry()
+    {
+        issuanceSans.Add(new IssuanceSanEntry { Type = SanType.Uri, Value = string.Empty });
+    }
+
+    private void RemoveSanEntry(IssuanceSanEntry entry)
+    {
+        issuanceSans.Remove(entry);
+    }
+
+    private async Task IssueCertificateAsync()
+    {
+        if (selectedTemplate == null || string.IsNullOrWhiteSpace(issuanceSubjectDn)) return;
+
+        isIssuing = true;
+        StateHasChanged();
+
+        try
+        {
+            var request = new CertificateIssuanceRequest
+            {
+                IssuingCaCertificateId = issuingCaIdForIssuance,
+                TemplateId = selectedTemplate.Id,
+                CommunityId = CommunityId,
+                SubjectDn = issuanceSubjectDn,
+                CertificateName = issuanceCertName,
+                SubjectAltNames = issuanceSans
+                    .Where(s => !string.IsNullOrWhiteSpace(s.Value))
+                    .Select(s => new SanEntry(s.Type, s.Value))
+                    .ToList(),
+                CdpUrl = selectedTemplate.IncludeCdp && !string.IsNullOrWhiteSpace(issuanceCdpUrl) ? issuanceCdpUrl : null,
+                AiaUrl = selectedTemplate.IncludeAia && !string.IsNullOrWhiteSpace(issuanceAiaUrl) ? issuanceAiaUrl : null,
+                NotBefore = issuanceNotBeforeNullable.HasValue ? new DateTimeOffset(issuanceNotBeforeNullable.Value, TimeSpan.Zero) : null,
+                NotAfter = issuanceNotAfterNullable.HasValue ? new DateTimeOffset(issuanceNotAfterNullable.Value, TimeSpan.Zero) : null,
+                PfxPassword = issuancePfxPassword,
+            };
+
+            var result = await IssuanceService.IssueCertificateAsync(request);
+
+            if (result.Success)
+            {
+                issuanceDialogHidden = true;
+                ToastService.ShowCopyableSuccess($"Certificate issued: {result.Thumbprint}");
+                await LoadCommunityTreeAsync(CommunityId);
+            }
+            else
+            {
+                ToastService.ShowCopyableError(result.Error ?? "Unknown error");
+            }
+        }
+        catch (Exception ex)
+        {
+            ToastService.ShowCopyableError($"Issuance failed: {ex.Message}");
+        }
+        finally
+        {
+            isIssuing = false;
+            StateHasChanged();
+        }
+    }
+
+    private async Task ShowRenewDialog()
+    {
+        if (selectedNode == null || selectedCert == null) return;
+
+        // Determine the issuing CA
+        int? issuingCaId = null;
+        string? issuingCaName = null;
+
+        await using var db = await DbFactory.CreateDbContextAsync();
+
+        if (selectedNode.CertificateRole == "EndEntity")
+        {
+            var issued = await db.IssuedCertificates
+                .Include(i => i.IssuingCaCertificate)
+                .FirstOrDefaultAsync(i => i.Thumbprint == selectedNode.Thumbprint);
+            if (issued != null)
+            {
+                issuingCaId = issued.IssuingCaCertificateId;
+                issuingCaName = issued.IssuingCaCertificate.Name;
+            }
+        }
+        else if (selectedNode.CertificateRole == "IntermediateCA")
+        {
+            var ca = await db.CaCertificates
+                .Include(c => c.Parent)
+                .FirstOrDefaultAsync(c => c.Thumbprint == selectedNode.Thumbprint);
+            if (ca?.Parent != null)
+            {
+                issuingCaId = ca.ParentId;
+                issuingCaName = ca.Parent.Name;
+            }
+        }
+        else if (selectedNode.CertificateRole == "RootCA")
+        {
+            // Root CA renewal = new self-signed root
+            issuingCaId = null;
+            issuingCaName = null;
+        }
+
+        await ShowIssuanceDialog(issuingCaId, issuingCaName);
+
+        // Pre-fill from existing cert
+        issuanceSubjectDn = selectedCert.Subject;
+        issuanceCertName = selectedNode.Name + " (renewed)";
+
+        // Extract SANs from existing cert
+        // Format varies: "URL=https://..." or "DNS Name=example.com" or "URI:https://..."
+        // or from DB storage: "Uri:https://..." / semicolon-delimited
+        issuanceSans.Clear();
+        foreach (var san in subjectAltNames)
+        {
+            var trimmed = san.Trim();
+            if (TryParseSan(trimmed, "URL=", SanType.Uri, out var entry) ||
+                TryParseSan(trimmed, "URI:", SanType.Uri, out entry) ||
+                TryParseSan(trimmed, "Uri:", SanType.Uri, out entry) ||
+                TryParseSan(trimmed, "DNS Name=", SanType.Dns, out entry) ||
+                TryParseSan(trimmed, "DNS:", SanType.Dns, out entry) ||
+                TryParseSan(trimmed, "Dns:", SanType.Dns, out entry) ||
+                TryParseSan(trimmed, "RFC822 Name=", SanType.Email, out entry) ||
+                TryParseSan(trimmed, "email:", SanType.Email, out entry) ||
+                TryParseSan(trimmed, "Email:", SanType.Email, out entry) ||
+                TryParseSan(trimmed, "IP Address=", SanType.IpAddress, out entry) ||
+                TryParseSan(trimmed, "IP:", SanType.IpAddress, out entry) ||
+                TryParseSan(trimmed, "IpAddress:", SanType.IpAddress, out entry))
+            {
+                issuanceSans.Add(entry);
+            }
+        }
+    }
+
+    private static bool TryParseSan(string value, string prefix, SanType type, out IssuanceSanEntry entry)
+    {
+        if (value.StartsWith(prefix, StringComparison.OrdinalIgnoreCase))
+        {
+            entry = new IssuanceSanEntry { Type = type, Value = value[prefix.Length..].Trim() };
+            return true;
+        }
+        entry = null!;
+        return false;
+    }
+
+    private static string GetCertTypeLabel(CertificateType ct) => ct switch
+    {
+        CertificateType.RootCa => "Root CA",
+        CertificateType.IntermediateCa => "Intermediate CA",
+        CertificateType.EndEntityClient => "Client",
+        CertificateType.EndEntityServer => "Server",
+        _ => ct.ToString()
+    };
+
     public class CommunityOption
     {
         public int Id { get; set; }
@@ -1614,5 +2071,11 @@ public partial class CertificateExplorer
         public string Subject { get; set; } = string.Empty;
         public bool IsRoot { get; set; }
         public string DisplayName => IsRoot ? $"[Root] {Name}" : $"[Intermediate] {Name}";
+    }
+
+    public class IssuanceSanEntry
+    {
+        public SanType Type { get; set; } = SanType.Uri;
+        public string Value { get; set; } = string.Empty;
     }
 }

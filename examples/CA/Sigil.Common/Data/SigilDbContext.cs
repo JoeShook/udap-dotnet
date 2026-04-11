@@ -1,3 +1,13 @@
+#region (c) 2026 Joseph Shook. All rights reserved.
+// /*
+//  Authors:
+//     Joseph Shook   JoeShook@Gmail.com
+//                    Joseph.Shook@Surescripts.com
+//
+//  See LICENSE in the project root for license information.
+// */
+#endregion
+
 using Microsoft.EntityFrameworkCore;
 using Sigil.Common.Data.Entities;
 
@@ -116,6 +126,11 @@ public class SigilDbContext : DbContext
             entity.HasIndex(e => e.Name).IsUnique();
             entity.Property(e => e.KeyAlgorithm).HasMaxLength(20);
             entity.Property(e => e.SubjectTemplate).HasMaxLength(500);
+            entity.Property(e => e.EcdsaCurve).HasMaxLength(20);
+            entity.Property(e => e.HashAlgorithm).HasMaxLength(10);
+            entity.Property(e => e.CdpUrlTemplate).HasMaxLength(500);
+            entity.Property(e => e.AiaUrlTemplate).HasMaxLength(500);
+            entity.Property(e => e.SubjectAltNameTypes).HasMaxLength(100);
         });
 
         // Job

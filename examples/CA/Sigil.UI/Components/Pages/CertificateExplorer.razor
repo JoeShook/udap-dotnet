@@ -1,3 +1,8 @@
+@* (c) 2026 Joseph Shook. All rights reserved.
+   Authors: Joseph Shook   JoeShook@Gmail.com
+                            Joseph.Shook@Surescripts.com
+   See LICENSE in the project root for license information. *@
+
 @page "/explorer"
 @page "/explorer/{CommunityId:int}"
 @using Sigil.Common.ViewModels
@@ -7,8 +12,20 @@
 
 <PageTitle>Sigil - Certificate Explorer</PageTitle>
 
-<FluentStack Orientation="Orientation.Horizontal" Style="align-items: center;">
+<FluentStack Orientation="Orientation.Horizontal" Style="align-items: center; gap: 0.75rem;">
     <FluentLabel Typo="Typography.PageTitle">Certificate Explorer</FluentLabel>
+    @if (communityList.Count > 0)
+    {
+        <FluentSelect TOption="CommunityOption"
+                      Items="@communityList"
+                      OptionValue="@(o => o.Id.ToString())"
+                      OptionText="@(o => o.Name)"
+                      SelectedOptionChanged="OnCommunitySelected"
+                      SelectedOption="@selectedCommunity"
+                      Position="SelectPosition.Below"
+                      Placeholder="Select a community..."
+                      Style="min-width: 250px;" />
+    }
     <FluentSpacer />
     @if (CommunityId > 0)
     {
@@ -17,22 +34,13 @@
                       OnClick="@(() => showDropZone = !showDropZone)">
             Import Certificate
         </FluentButton>
+        <FluentButton Appearance="Appearance.Outline"
+                      IconStart="@(new Icons.Regular.Size16.ShieldKeyhole())"
+                      OnClick="@(() => ShowIssuanceDialog(null, null))">
+            New Root CA
+        </FluentButton>
     }
 </FluentStack>
-
-@if (communityList.Count > 0 && CommunityId == 0)
-{
-    <div style="margin-top: 1rem; padding: 1rem;">
-        <FluentLabel Typo="Typography.Subject">Select a Community</FluentLabel>
-        <FluentSelect TOption="CommunityOption"
-                      Items="@communityList"
-                      OptionValue="@(o => o.Id.ToString())"
-                      OptionText="@(o => o.Name)"
-                      SelectedOptionChanged="OnCommunitySelected"
-                      Position="SelectPosition.Below"
-                      Style="margin-top: 0.5rem; min-width: 300px;" />
-    </div>
-}
 
 @* Drop zone for importing certificates *@
 @if (showDropZone && CommunityId > 0)
@@ -254,6 +262,131 @@
     </FluentDialogFooter>
 </FluentDialog>
 
+@* Issue Certificate dialog *@
+<FluentDialog @bind-Hidden="@issuanceDialogHidden" Modal="true" TrapFocus="true"
+              Style="min-width: 600px; max-height: 80vh; overflow-y: auto;">
+    <FluentDialogHeader>
+        @if (issuingCaIdForIssuance == null)
+        {
+            <span>New Root CA (Self-Signed)</span>
+        }
+        else
+        {
+            <span>Issue Certificate — signed by @issuingCaNameForIssuance</span>
+        }
+    </FluentDialogHeader>
+    <FluentDialogBody>
+        <div style="display: flex; flex-direction: column; gap: 0.75rem;">
+            @* Template selection *@
+            <FluentSelect TOption="CertificateTemplate"
+                          Items="@availableTemplates"
+                          OptionText="@(t => $"{t.Name} ({GetCertTypeLabel(t.CertificateType)})")"
+                          SelectedOptionChanged="OnTemplateSelected"
+                          Label="Template"
+                          Style="width: 100%;" />
+            @if (selectedTemplate?.Description != null)
+            {
+                <p style="font-size: 0.8rem; opacity: 0.6; margin: -0.25rem 0 0;">@selectedTemplate.Description</p>
+            }
+
+            @* Subject DN *@
+            <FluentTextField @bind-Value="issuanceSubjectDn" Label="Subject Distinguished Name"
+                             Placeholder="CN=My Certificate, O=My Org, C=US"
+                             Style="width: 100%;" />
+
+            @* Certificate Name *@
+            <FluentTextField @bind-Value="issuanceCertName" Label="Display Name (optional)"
+                             Placeholder="Defaults to CN value"
+                             Style="width: 100%;" />
+
+            @* Validity *@
+            <div style="display: flex; gap: 1rem;">
+                <FluentDatePicker @bind-Value="issuanceNotBeforeNullable" Label="Not Before" Style="flex: 1;" />
+                <FluentDatePicker @bind-Value="issuanceNotAfterNullable" Label="Not After" Style="flex: 1;" />
+            </div>
+
+            @* CDP / AIA URLs *@
+            @if (selectedTemplate?.IncludeCdp == true)
+            {
+                <FluentTextField @bind-Value="issuanceCdpUrl" Label="CRL Distribution Point URL"
+                                 Placeholder="http://crl.example.com/my.crl"
+                                 Style="width: 100%;" />
+            }
+            @if (selectedTemplate?.IncludeAia == true)
+            {
+                <FluentTextField @bind-Value="issuanceAiaUrl" Label="Authority Information Access URL"
+                                 Placeholder="http://crl.example.com/ca.cer"
+                                 Style="width: 100%;" />
+            }
+
+            @* Subject Alternative Names *@
+            <FluentLabel Typo="Typography.Subject" Style="margin-top: 0.25rem;">Subject Alternative Names</FluentLabel>
+            @foreach (var san in issuanceSans)
+            {
+                <FluentStack Orientation="Orientation.Horizontal" Style="gap: 0.5rem; align-items: end;">
+                    <FluentSelect TOption="SanType"
+                                  Items="@sanTypeOptions"
+                                  OptionText="@(s => s.ToString())"
+                                  @bind-SelectedOption="san.Type"
+                                  Style="width: 120px;" />
+                    <FluentTextField @bind-Value="san.Value" Style="flex: 1;"
+                                     Placeholder="@GetSanPlaceholder(san.Type)" />
+                    <FluentButton Appearance="Appearance.Outline" Size="ButtonSize.Small"
+                                  IconStart="@(new Icons.Regular.Size16.Delete())"
+                                  OnClick="@(() => RemoveSanEntry(san))" />
+                </FluentStack>
+            }
+            <FluentButton Appearance="Appearance.Outline" Size="ButtonSize.Small"
+                          IconStart="@(new Icons.Regular.Size16.Add())"
+                          OnClick="AddSanEntry">
+                Add SAN
+            </FluentButton>
+
+            @* PFX Password *@
+            <FluentTextField @bind-Value="issuancePfxPassword"
+                             Label="PFX Password (for private key storage)"
+                             TextFieldType="TextFieldType.Password"
+                             Style="width: 100%;" />
+
+            @* Template summary *@
+            @if (selectedTemplate != null)
+            {
+                <div style="border: 1px solid var(--neutral-stroke-rest); border-radius: 4px; padding: 0.5rem; font-size: 0.8rem; opacity: 0.7;">
+                    <strong>Template:</strong> @selectedTemplate.KeyAlgorithm
+                    @if (selectedTemplate.KeyAlgorithm == "ECDSA")
+                    {
+                        @($" ({selectedTemplate.EcdsaCurve ?? "P-384"})")
+                    }
+                    else
+                    {
+                        @($" {selectedTemplate.KeySize}-bit")
+                    }
+                    | @selectedTemplate.HashAlgorithm
+                    | @selectedTemplate.ValidityDays days
+                    @if (selectedTemplate.IsBasicConstraintsCa)
+                    {
+                        @(" | CA")
+                        @if (selectedTemplate.PathLengthConstraint.HasValue)
+                        {
+                            @($" (path: {selectedTemplate.PathLengthConstraint})")
+                        }
+                    }
+                </div>
+            }
+        </div>
+    </FluentDialogBody>
+    <FluentDialogFooter>
+        <FluentButton Appearance="Appearance.Accent" OnClick="IssueCertificateAsync"
+                      Disabled="@(isIssuing || string.IsNullOrWhiteSpace(issuanceSubjectDn) || string.IsNullOrWhiteSpace(issuancePfxPassword) || selectedTemplate == null)">
+            @(isIssuing ? "Generating..." : "Generate Certificate")
+        </FluentButton>
+        <FluentButton Appearance="Appearance.Outline" OnClick="@(() => issuanceDialogHidden = true)"
+                      Disabled="@isIssuing">
+            Cancel
+        </FluentButton>
+    </FluentDialogFooter>
+</FluentDialog>
+
 @if (treeNodes.Count > 0)
 {
     <FluentSplitter Orientation="Orientation.Horizontal"
@@ -274,6 +407,7 @@
                     {
                         <FluentTreeItem Text="@root.Name"
                                         @key="@($"ca-{root.Id}")"
+                                        Id="@($"tree-{root.Thumbprint}")"
                                         Data="@root"
                                         InitiallyExpanded="true"
                                         Style="@(IsError(root.Status) ? $"color: {NodeColor(root.Status)};" : "")">
@@ -286,6 +420,7 @@
                             {
                                 <FluentTreeItem Text="@intermediate.Name"
                                                 @key="@($"ca-{intermediate.Id}")"
+                                                Id="@($"tree-{intermediate.Thumbprint}")"
                                                 Data="@intermediate"
                                                 InitiallyExpanded="true"
                                                 Style="@(IsError(intermediate.Status) ? $"color: {NodeColor(intermediate.Status)};" : "")">
@@ -298,6 +433,7 @@
                                     {
                                         <FluentTreeItem Text="@child.Name"
                                                         @key="@($"ee-{child.Id}")"
+                                                        Id="@($"tree-{child.Thumbprint}")"
                                                         Data="@child"
                                                         Style="@(IsError(child.Status) ? $"color: {NodeColor(child.Status)};" : "")">
                                             <span slot="start" style="display: flex; align-items: center; gap: 0.35rem;">
@@ -329,6 +465,7 @@
                             {
                                 <FluentTreeItem Text="@issued.Name"
                                                 @key="@($"ee-{issued.Id}")"
+                                                Id="@($"tree-{issued.Thumbprint}")"
                                                 Data="@issued"
                                                 Style="@(IsError(issued.Status) ? $"color: {NodeColor(issued.Status)};" : "")">
                                     <span slot="start" style="display: flex; align-items: center; gap: 0.35rem;">
@@ -360,10 +497,11 @@
             </FluentCard>
         </Panel1>
         <Panel2>
+            <div style="height: 100%; overflow-y: auto; overflow-x: hidden;">
             @if (selectedCrl != null)
             {
                 @* CRL Detail Panel *@
-                <FluentCard Style="height: 100%; overflow-y: auto;">
+                <FluentCard Style="height: auto;">
                     <FluentStack Orientation="Orientation.Horizontal" Style="align-items: center; gap: 0.5rem;">
                         <FluentLabel Typo="Typography.Subject">CRL #@selectedCrl.CrlNumber</FluentLabel>
                         <FluentSpacer />
@@ -438,8 +576,9 @@
             else if (selectedCert != null)
             {
                 @* Certificate Detail Panel *@
-                <FluentCard Style="height: 100%; overflow-y: auto;">
-                    <FluentStack Orientation="Orientation.Horizontal" Style="align-items: center; gap: 0.5rem;">
+                <FluentCard Style="height: auto;">
+                    <FluentStack Orientation="Orientation.Horizontal"
+                                 Style="align-items: center; gap: 0.5rem; background-color: rgba(45, 106, 79, 0.4); border-left: 3px solid #2d6a4f; border-radius: 0 4px 4px 0; margin: -0.5rem -0.5rem 0 -0.5rem; padding: 0.5rem;">
                         <FluentLabel Typo="Typography.Subject">@selectedNode?.Name</FluentLabel>
                         <FluentSpacer />
                         @if (selectedNodeHasPrivateKey)
@@ -482,6 +621,21 @@
                                       Style="color: #e94560;">
                             Delete
                         </FluentButton>
+                        @if (selectedNodeHasPrivateKey && selectedNode?.CertificateRole is "RootCA" or "IntermediateCA")
+                        {
+                            <FluentButton Appearance="Appearance.Accent"
+                                          IconStart="@(new Icons.Regular.Size16.Add())"
+                                          OnClick="@(() => ShowIssuanceDialog(selectedNode.Id, selectedNode.Name))"
+                                          title="Issue a new certificate signed by this CA">
+                                Issue Certificate
+                            </FluentButton>
+                        }
+                        <FluentButton Appearance="Appearance.Outline"
+                                      IconStart="@(new Icons.Regular.Size16.ArrowRepeatAll())"
+                                      OnClick="ShowRenewDialog"
+                                      title="Re-issue with same subject/SANs, new key and validity">
+                            Renew
+                        </FluentButton>
                     </FluentStack>
 
                     <FluentAccordion Style="margin-top: 1rem;">
@@ -490,7 +644,17 @@
                                 <strong>Subject</strong>
                                 <span>@selectedCert.Subject</span>
                                 <strong>Issuer</strong>
-                                <span>@selectedCert.Issuer</span>
+                                <span style="display: flex; align-items: center; gap: 0.35rem;">
+                                    @selectedCert.Issuer
+                                    @if (selectedCert.Subject != selectedCert.Issuer)
+                                    {
+                                        <FluentButton Appearance="Appearance.Stealth" Size="ButtonSize.Small"
+                                                      IconStart="@(new Icons.Regular.Size16.Link())"
+                                                      OnClick="LoadIssuerDetailsAsync"
+                                                      title="View issuer certificate details"
+                                                      Style="min-width: 24px; padding: 2px;" />
+                                    }
+                                </span>
                                 <strong>Serial Number</strong>
                                 <code>@selectedCert.SerialNumber</code>
                                 <strong>Thumbprint</strong>
@@ -627,6 +791,66 @@
                         </FluentAccordionItem>
                     </FluentAccordion>
                 </FluentCard>
+
+                @* Issuer Detail Panel *@
+                @if (issuerCert != null)
+                {
+                    <div style="border-top: 3px solid #1976d2; margin-top: 0.5rem;"></div>
+                    <FluentCard Style="height: auto; border-left: 3px solid #1976d2;">
+                        <FluentStack Orientation="Orientation.Horizontal"
+                                     Style="align-items: center; gap: 0.5rem; background-color: rgba(25, 118, 210, 0.3); border-left: 3px solid #1976d2; border-radius: 0 4px 4px 0; margin: -0.5rem -0.5rem 0 -0.5rem; padding: 0.5rem;">
+                            <FluentIcon Value="@(new Icons.Regular.Size16.Link())" Color="Color.Custom" CustomColor="#1976d2" />
+                            <FluentLabel Typo="Typography.Subject">@issuerNode?.Name</FluentLabel>
+                            <FluentBadge BackgroundColor="#1976d2" Color="white" Style="font-size: 0.7rem;">Issuer</FluentBadge>
+                            <FluentSpacer />
+                            <FluentButton Appearance="Appearance.Stealth" Size="ButtonSize.Small"
+                                          IconStart="@(new Icons.Regular.Size16.Dismiss())"
+                                          OnClick="CloseIssuerDetailsAsync"
+                                          title="Close issuer details" />
+                        </FluentStack>
+
+                        <FluentAccordion Style="margin-top: 0.75rem;">
+                            <FluentAccordionItem Heading="General Information" Expanded="true">
+                                <div style="display: grid; grid-template-columns: 150px 1fr; gap: 0.5rem; font-size: 0.9rem;">
+                                    <strong>Subject</strong>
+                                    <span>@issuerCert.Subject</span>
+                                    <strong>Issuer</strong>
+                                    <span style="display: flex; align-items: center; gap: 0.35rem;">
+                                        @issuerCert.Issuer
+                                        @if (issuerCert.Subject != issuerCert.Issuer)
+                                        {
+                                            <FluentButton Appearance="Appearance.Stealth" Size="ButtonSize.Small"
+                                                          IconStart="@(new Icons.Regular.Size16.Link())"
+                                                          OnClick="LoadIssuerOfIssuerDetailsAsync"
+                                                          title="View this issuer's issuer"
+                                                          Style="min-width: 24px; padding: 2px;" />
+                                        }
+                                    </span>
+                                    <strong>Serial Number</strong>
+                                    <code>@issuerCert.SerialNumber</code>
+                                    <strong>Thumbprint</strong>
+                                    <code>@issuerCert.Thumbprint</code>
+                                    <strong>Not Before</strong>
+                                    <span>@issuerCert.NotBefore.ToString("yyyy-MM-dd HH:mm:ss UTC")</span>
+                                    <strong>Not After</strong>
+                                    <span>@issuerCert.NotAfter.ToString("yyyy-MM-dd HH:mm:ss UTC")</span>
+                                    <strong>Algorithm</strong>
+                                    <span>@issuerCert.SignatureAlgorithm.FriendlyName</span>
+                                    <strong>Public Key</strong>
+                                    <span>@GetIssuerPublicKeyInfo()</span>
+                                </div>
+                            </FluentAccordionItem>
+
+                            <FluentAccordionItem Heading="Extensions">
+                                <ExtensionTable Certificate="@issuerCert" />
+                            </FluentAccordionItem>
+
+                            <FluentAccordionItem Heading="ASN.1 Structure">
+                                <Asn1TreeView RootNode="@issuerAsn1Root" />
+                            </FluentAccordionItem>
+                        </FluentAccordion>
+                    </FluentCard>
+                }
             }
             else
             {
@@ -634,6 +858,7 @@
                     <span style="opacity: 0.5;">Select a certificate or CRL from the tree to view details</span>
                 </FluentCard>
             }
+            </div>
         </Panel2>
     </FluentSplitter>
 }
