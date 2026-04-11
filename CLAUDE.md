@@ -113,6 +113,7 @@ builder.Services.AddAuthentication().AddTieredOAuth(options => { ... });
 - **Udap.Proxy.Server** - YARP-based reverse proxy to secure existing FHIR servers with UDAP
 - **Udap.Identity.Provider / Udap.Identity.Provider.2** - Tiered OAuth IdP examples
 - **Udap.CA** - Web UI for generating UDAP certificates
+- **Sigil** (`examples/CA/`) - Modern PKI management tool (Blazor Server + FluentUI v4 + PostgreSQL). Three projects: `Sigil` (host), `Sigil.Common` (services/entities, no UI deps), `Sigil.UI` (Razor Class Library). See [`examples/CA/Sigil/docs/FEATURES.md`](examples/CA/Sigil/docs/FEATURES.md) for full feature list and [`examples/CA/ROADMAP.md`](examples/CA/ROADMAP.md) for planned phases.
 
 ### Test Projects (`/_tests`)
 
@@ -134,3 +135,7 @@ builder.Services.AddAuthentication().AddTieredOAuth(options => { ... });
 - **YARP 2.1.0** - Reverse proxy (for proxy examples)
 
 Package versions are centrally managed in `Directory.Packages.props`.
+
+## Specifications
+
+- **UDAP.org** is the base specification for this SDK. All 7 specs are in `docs/specifications/UDAP.org/` (see `README.md` there for index). SSRAA and TEFCA are profiles layered on top of UDAP.org.

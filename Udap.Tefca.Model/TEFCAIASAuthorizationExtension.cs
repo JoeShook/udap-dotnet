@@ -17,18 +17,16 @@ namespace Udap.Tefca.Model;
 /// <summary>
 /// TEFCA IAS Authorization Extension Object.
 ///
-/// <a href="https://rce.sequoiaproject.org/wp-content/uploads/2024/07/SOP-Facilitated-FHIR-Implementation_508-1.pdf#page=17">TEFCA IAS AUTHORIZATION EXTENSION OBJECT</a>
+/// <a href="https://rce.sequoiaproject.org/wp-content/uploads/2026/02/SOP-Facilitated-FHIR-Implementation-2.0-Draft-508.pdf#page=16">SOP: Facilitated FHIR Implementation v2.0 — Section 6.11 IAS, Table 4</a>
 /// </summary>
 public class TEFCAIASAuthorizationExtension : IAuthorizationExtensionObject
 {
     private string _version = "1";
     private JsonElement? _userInformation;
     private JsonElement? _patientInformation;
-    private string _purposeOfUse = TefcaConstants.TEFCAIASAuthorizationExtension.PurposeOfUseCode;
     private ICollection<string>? _consentPolicy;
     private ICollection<string>? _consentReference;
     private JsonElement? _idToken;
-    private JsonElement? _ialVetted;
 
     public TEFCAIASAuthorizationExtension()
     {
@@ -47,18 +45,6 @@ public class TEFCAIASAuthorizationExtension : IAuthorizationExtensionObject
     {
         get => _version;
         set => _version = value;
-    }
-
-    /// <summary>
-    /// purpose_of_use required:
-    ///
-    /// Fixed Value "T-IAS".
-    /// </summary>
-    [JsonPropertyName(TefcaConstants.TEFCAIASAuthorizationExtension.PurposeOfUse)]
-    public string PurposeOfUse
-    {
-        get => _purposeOfUse;
-        set => _purposeOfUse = value;
     }
 
     /// <summary>
@@ -119,28 +105,19 @@ public class TEFCAIASAuthorizationExtension : IAuthorizationExtensionObject
     }
 
     /// <summary>
-    /// id_token optional:
+    /// id_token required:
     ///
-    /// Additional token as per relevant SOP
+    /// The CSP-provided OpenID Connect token as further defined in
+    /// the Exchange Purpose (XP) Implementation SOP: Individual Access Services (IAS).
+    /// Responding server SHOULD respond with invalid_grant if missing.
+    ///
+    /// <a href="https://rce.sequoiaproject.org/wp-content/uploads/2026/02/SOP-Facilitated-FHIR-Implementation-2.0-Draft-508.pdf#page=16">SOP v2.0 — Table 4</a>
     /// </summary>
     [JsonPropertyName(TefcaConstants.TEFCAIASAuthorizationExtension.IdToken)]
     public JsonElement? IdToken
     {
         get => _idToken;
         set => _idToken = value;
-    }
-
-    /// <summary>
-    /// ial_vetted conditional:
-    ///
-    /// OIDC token provided by Identity Verifier when the Identity Verifier is not
-    /// the Responding Node. Responding server MAY respond with invalid_grant if missing.
-    /// </summary>
-    [JsonPropertyName(TefcaConstants.TEFCAIASAuthorizationExtension.IalVetted)]
-    public JsonElement? IalVetted
-    {
-        get => _ialVetted;
-        set => _ialVetted = value;
     }
 
     /// <inheritdoc />
@@ -161,11 +138,6 @@ public class TEFCAIASAuthorizationExtension : IAuthorizationExtensionObject
         if (!PatientInformation.HasValue || string.IsNullOrEmpty(PatientInformation.Value.ToString()))
         {
             notes.Add($"Missing required {TefcaConstants.TEFCAIASAuthorizationExtension.PatientInformation}");
-        }
-
-        if (PurposeOfUse != TefcaConstants.TEFCAIASAuthorizationExtension.PurposeOfUseCode)
-        {
-            notes.Add($"{TefcaConstants.TEFCAIASAuthorizationExtension.PurposeOfUse} must be {TefcaConstants.TEFCAIASAuthorizationExtension.PurposeOfUseCode}");
         }
 
         return notes;

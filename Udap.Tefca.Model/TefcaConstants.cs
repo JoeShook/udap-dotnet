@@ -11,7 +11,8 @@ namespace Udap.Tefca.Model;
 
 /// <summary>
 /// Constants specific to the TEFCA trust community profile.
-/// See SOP: Facilitated FHIR Implementation and SOP: Exchange Purposes (XPs).
+///
+/// <a href="https://rce.sequoiaproject.org/wp-content/uploads/2026/02/SOP-Facilitated-FHIR-Implementation-2.0-Draft-508.pdf">SOP: Facilitated FHIR Implementation v2.0</a>
 /// </summary>
 public static class TefcaConstants
 {
@@ -19,6 +20,8 @@ public static class TefcaConstants
     {
         /// <summary>
         /// TEFCA IAS Authorization Extension Object key name.
+        ///
+        /// <a href="https://rce.sequoiaproject.org/wp-content/uploads/2026/02/SOP-Facilitated-FHIR-Implementation-2.0-Draft-508.pdf#page=16">SOP v2.0 — Section 6.11 IAS, Table 4</a>
         /// </summary>
         public const string TEFCAIAS = "tefca-ias";
 
@@ -28,16 +31,24 @@ public static class TefcaConstants
         public const string TEFCASMART = "tefca_smart";
     }
 
+    /// <summary>
+    /// Field name constants for the TEFCA IAS Authorization Extension Object.
+    ///
+    /// <a href="https://rce.sequoiaproject.org/wp-content/uploads/2026/02/SOP-Facilitated-FHIR-Implementation-2.0-Draft-508.pdf#page=16">SOP v2.0 — Section 6.11 IAS, Table 4</a>
+    /// </summary>
     public static class TEFCAIASAuthorizationExtension
     {
+        /// <summary>Fixed string value: "1". <a href="https://rce.sequoiaproject.org/wp-content/uploads/2026/02/SOP-Facilitated-FHIR-Implementation-2.0-Draft-508.pdf#page=16">Table 4</a></summary>
         public const string Version = "version";
-        public const string PurposeOfUse = "purpose_of_use";
-        public const string PurposeOfUseCode = "T-IAS";
+        /// <summary>FHIR RelatedPerson Resource with all known demographics. <a href="https://rce.sequoiaproject.org/wp-content/uploads/2026/02/SOP-Facilitated-FHIR-Implementation-2.0-Draft-508.pdf#page=16">Table 4</a></summary>
         public const string UserInformation = "user_information";
+        /// <summary>FHIR US Core Patient Resource with all known demographics. <a href="https://rce.sequoiaproject.org/wp-content/uploads/2026/02/SOP-Facilitated-FHIR-Implementation-2.0-Draft-508.pdf#page=16">Table 4</a></summary>
         public const string PatientInformation = "patient_information";
-        public const string IalVetted = "ial_vetted";
+        /// <summary>Access Consent Policy Identifier for identity proofing level of assurance. <a href="https://rce.sequoiaproject.org/wp-content/uploads/2026/02/SOP-Facilitated-FHIR-Implementation-2.0-Draft-508.pdf#page=17">Table 4</a></summary>
         public const string ConsentPolicy = "consent_policy";
+        /// <summary>Array of FHIR DocumentReference or Consent resource URLs. <a href="https://rce.sequoiaproject.org/wp-content/uploads/2026/02/SOP-Facilitated-FHIR-Implementation-2.0-Draft-508.pdf#page=17">Table 4</a></summary>
         public const string ConsentReference = "consent_reference";
+        /// <summary>The CSP-provided OpenID Connect token. <a href="https://rce.sequoiaproject.org/wp-content/uploads/2026/02/SOP-Facilitated-FHIR-Implementation-2.0-Draft-508.pdf#page=16">Table 4</a></summary>
         public const string IdToken = "id_token";
     }
 
@@ -52,6 +63,8 @@ public static class TefcaConstants
 
     /// <summary>
     /// TEFCA Exchange Purpose (XP) codes OID: 2.16.840.1.113883.3.7204.1.5.2.1
+    ///
+    /// <a href="https://rce.sequoiaproject.org/wp-content/uploads/2025/01/SOP-Exchange-Purposes_CA-v2_v4-508.pdf#page=4">SOP: Exchange Purposes (XPs) v4.0 — Table 1</a>
     /// </summary>
     public static class ExchangePurposeCodes
     {
@@ -73,13 +86,18 @@ public static class TefcaConstants
 
     /// <summary>
     /// TEFCA certification constants.
-    /// See SOP: Facilitated FHIR Implementation Section 6.11 Registration #6.
+    ///
+    /// <a href="https://rce.sequoiaproject.org/wp-content/uploads/2026/02/SOP-Facilitated-FHIR-Implementation-2.0-Draft-508.pdf#page=14">SOP v2.0 — Section 6.11 Registration #6</a>
     /// </summary>
     public static class Certification
     {
+        /// <summary>URI identifying the TEFCA Basic App Certification program. <a href="https://rce.sequoiaproject.org/wp-content/uploads/2026/02/SOP-Facilitated-FHIR-Implementation-2.0-Draft-508.pdf#page=14">Section 6.11 #2, #3</a></summary>
         public const string BasicAppCertificationUri = "https://rce.sequoiaproject.org/udap/profiles/basic-app-certification";
+        /// <summary>Fixed certification_name value. <a href="https://rce.sequoiaproject.org/wp-content/uploads/2026/02/SOP-Facilitated-FHIR-Implementation-2.0-Draft-508.pdf#page=14">Section 6.11 Registration #6</a></summary>
         public const string BasicAppCertificationName = "TEFCA Basic App Certification";
+        /// <summary>Array of one Exchange Purpose from the TEFCA Exchange Purposes SOP. <a href="https://rce.sequoiaproject.org/wp-content/uploads/2026/02/SOP-Facilitated-FHIR-Implementation-2.0-Draft-508.pdf#page=14">Section 6.11 Registration #6</a></summary>
         public const string ExchangePurposes = "exchange_purposes";
+        /// <summary>HomeCommunityId of the Node making the registration request. <a href="https://rce.sequoiaproject.org/wp-content/uploads/2026/02/SOP-Facilitated-FHIR-Implementation-2.0-Draft-508.pdf#page=14">Section 6.11 Registration #6</a></summary>
         public const string HomeCommunityId = "home_community_id";
     }
 
