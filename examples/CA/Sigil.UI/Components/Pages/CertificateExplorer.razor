@@ -627,7 +627,32 @@
                 <FluentCard Style="height: auto;">
                     <FluentStack Orientation="Orientation.Horizontal"
                                  Style="align-items: center; gap: 0.5rem; background-color: rgba(45, 106, 79, 0.4); border-left: 3px solid #2d6a4f; border-radius: 0 4px 4px 0; margin: -0.5rem -0.5rem 0 -0.5rem; padding: 0.5rem;">
-                        <FluentLabel Typo="Typography.Subject">@selectedNode?.Name</FluentLabel>
+                        @if (isRenaming)
+                        {
+                            <FluentTextField @bind-Value="renamingValue"
+                                             Style="flex: 1; font-size: 1rem;"
+                                             Autofocus="true"
+                                             @onkeydown="OnRenameKeyDown" />
+                            <FluentButton Appearance="Appearance.Stealth" Size="ButtonSize.Small"
+                                          IconStart="@(new Icons.Regular.Size16.Checkmark())"
+                                          OnClick="SaveRenameAsync"
+                                          title="Save name"
+                                          Style="min-width: 24px; padding: 2px;" />
+                            <FluentButton Appearance="Appearance.Stealth" Size="ButtonSize.Small"
+                                          IconStart="@(new Icons.Regular.Size16.Dismiss())"
+                                          OnClick="CancelRename"
+                                          title="Cancel"
+                                          Style="min-width: 24px; padding: 2px;" />
+                        }
+                        else
+                        {
+                            <FluentLabel Typo="Typography.Subject">@selectedNode?.Name</FluentLabel>
+                            <FluentButton Appearance="Appearance.Stealth" Size="ButtonSize.Small"
+                                          IconStart="@(new Icons.Regular.Size16.Edit())"
+                                          OnClick="StartRename"
+                                          title="Rename certificate"
+                                          Style="min-width: 24px; padding: 2px;" />
+                        }
                         <FluentSpacer />
                         @if (selectedNodeHasPrivateKey)
                         {
@@ -746,10 +771,16 @@
                             <FluentAccordionItem Heading="@($"Chain Validation {(chainValidation.IsValid ? "(Trusted)" : "(UNTRUSTED)")}")" Expanded="true">
                                 <FluentStack Orientation="Orientation.Horizontal" Style="margin-bottom: 0.75rem; gap: 0.5rem; align-items: center;">
                                     <FluentButton Appearance="Appearance.Outline" OnClick="RevalidateSelectedAsync"
-                                                  Title="Re-run chain validation and CRL checks"
-                                                  Disabled="isRevalidating">
+                                                  Title="Re-run chain validation using stored CRLs"
+                                                  Disabled="isRevalidating || isValidatingOnline">
                                         <FluentIcon Value="new Icons.Regular.Size16.ArrowSync()" />
                                         @(isRevalidating ? "Validating..." : "Revalidate")
+                                    </FluentButton>
+                                    <FluentButton Appearance="Appearance.Outline" OnClick="ValidateOnlineAsync"
+                                                  Title="Validate chain by resolving CRL and AIA URLs online — only the root CA trust anchor is used from the database"
+                                                  Disabled="isRevalidating || isValidatingOnline">
+                                        <FluentIcon Value="new Icons.Regular.Size16.Globe()" />
+                                        @(isValidatingOnline ? "Resolving..." : "Validate Online")
                                     </FluentButton>
                                     @if (chainValidation.IsValid)
                                     {
@@ -823,6 +854,12 @@
                                         {
                                             <div style="font-size: 0.75rem; color: #1976d2; margin-top: 0.15rem;">
                                                 CRL resolved from: @link.CrlSourceUrl
+                                            </div>
+                                        }
+                                        @if (link.AiaResolved)
+                                        {
+                                            <div style="font-size: 0.75rem; color: #1976d2; margin-top: 0.15rem;">
+                                                Issuer resolved via AIA
                                             </div>
                                         }
                                         @if (link.HasProblems)

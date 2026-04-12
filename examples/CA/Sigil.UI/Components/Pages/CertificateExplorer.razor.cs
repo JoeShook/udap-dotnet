@@ -34,6 +34,7 @@ public partial class CertificateExplorer
     [Inject] private CrlImportService CrlImporter { get; set; } = null!;
     [Inject] private ChainValidationService ChainValidator { get; set; } = null!;
     [Inject] private CertificateIssuanceService IssuanceService { get; set; } = null!;
+    [Inject] private IHttpClientFactory HttpClientFactory { get; set; } = null!;
     [Inject] private IJSRuntime JS { get; set; } = null!;
 
     // Tree state
@@ -51,7 +52,12 @@ public partial class CertificateExplorer
     private FluentTreeItem? selectedTreeItem;
     private int treeVersion;
     private bool isRevalidating;
+    private bool isValidatingOnline;
     private Dictionary<string, ChainValidationResult> communityValidations = new();
+
+    // Rename state
+    private bool isRenaming;
+    private string renamingValue = string.Empty;
 
     // Import state
     private bool showDropZone;
@@ -105,6 +111,9 @@ public partial class CertificateExplorer
     private string issuanceAiaUrl = string.Empty;
     private List<IssuanceSanEntry> issuanceSans = new();
     private string issuancePfxPassword = string.Empty;
+    private bool isRenewMode;
+    private List<IssuanceSanEntry> renewalSans = new();
+    private string renewalSubjectDn = string.Empty;
 
     // Re-sign dialog
     private bool resignDialogHidden = true;
@@ -273,6 +282,7 @@ public partial class CertificateExplorer
     private async Task OnTreeItemSelected(FluentTreeItem? item)
     {
         selectedTreeItem = item;
+        isRenaming = false;
 
         if (item?.Data is CertificateChainNodeViewModel node)
         {
@@ -433,6 +443,96 @@ public partial class CertificateExplorer
             isRevalidating = false;
             StateHasChanged();
         }
+    }
+
+    private async Task ValidateOnlineAsync()
+    {
+        if (selectedNode == null || selectedNode.EntityType == "Crl") return;
+
+        isValidatingOnline = true;
+        StateHasChanged();
+
+        try
+        {
+            if (selectedNode.EntityType == "CaCertificate")
+                chainValidation = await ChainValidator.ValidateCaCertificateOnlineAsync(selectedNode.Id);
+            else
+                chainValidation = await ChainValidator.ValidateIssuedCertificateOnlineAsync(selectedNode.Id);
+
+            if (!string.IsNullOrEmpty(selectedNode.Thumbprint) && chainValidation != null)
+            {
+                communityValidations[selectedNode.Thumbprint] = chainValidation;
+                selectedNode.Status = DeriveStatus(
+                    selectedNode.Thumbprint, selectedNode.NotAfter, false, communityValidations);
+            }
+        }
+        catch (Exception ex)
+        {
+            ToastService.ShowCopyableError($"Online validation failed: {ex.Message}");
+        }
+        finally
+        {
+            isValidatingOnline = false;
+            StateHasChanged();
+        }
+    }
+
+    // --- Rename Methods ---
+
+    private void StartRename()
+    {
+        if (selectedNode == null) return;
+        renamingValue = selectedNode.Name;
+        isRenaming = true;
+    }
+
+    private void CancelRename()
+    {
+        isRenaming = false;
+    }
+
+    private async Task OnRenameKeyDown(Microsoft.AspNetCore.Components.Web.KeyboardEventArgs e)
+    {
+        if (e.Key == "Enter") await SaveRenameAsync();
+        else if (e.Key == "Escape") CancelRename();
+    }
+
+    private async Task SaveRenameAsync()
+    {
+        if (selectedNode == null || string.IsNullOrWhiteSpace(renamingValue)) return;
+
+        var trimmed = renamingValue.Trim();
+        if (trimmed == selectedNode.Name)
+        {
+            isRenaming = false;
+            return;
+        }
+
+        await using var db = await DbFactory.CreateDbContextAsync();
+
+        if (selectedNode.EntityType == "CaCertificate")
+        {
+            var ca = await db.CaCertificates.FindAsync(selectedNode.Id);
+            if (ca != null)
+            {
+                ca.Name = trimmed;
+                await db.SaveChangesAsync();
+            }
+        }
+        else if (selectedNode.EntityType == "IssuedCertificate")
+        {
+            var issued = await db.IssuedCertificates.FindAsync(selectedNode.Id);
+            if (issued != null)
+            {
+                issued.Name = trimmed;
+                await db.SaveChangesAsync();
+            }
+        }
+
+        // Update the tree node in-place so the tree reflects the new name
+        selectedNode.Name = trimmed;
+        isRenaming = false;
+        StateHasChanged();
     }
 
     private string GetCerDownloadUrl()
@@ -1847,6 +1947,7 @@ public partial class CertificateExplorer
 
     private async Task ShowIssuanceDialog(int? issuingCaId, string? issuingCaName)
     {
+        isRenewMode = false;
         issuingCaIdForIssuance = issuingCaId;
         issuingCaNameForIssuance = issuingCaName;
         issuingCaNotAfter = null;
@@ -1904,25 +2005,35 @@ public partial class CertificateExplorer
             desiredNotAfter = issuingCaNotAfter.Value;
         issuanceNotAfterNullable = desiredNotAfter;
 
-        issuanceSubjectDn = template.SubjectTemplate ?? string.Empty;
-        issuanceCdpUrl = template.CdpUrlTemplate ?? string.Empty;
-        issuanceAiaUrl = template.AiaUrlTemplate ?? string.Empty;
+        issuanceCdpUrl = ExpandUrlTemplate(template.CdpUrlTemplate);
+        issuanceAiaUrl = ExpandUrlTemplate(template.AiaUrlTemplate);
 
-        // Pre-populate SAN entries from template's SubjectAltNameTypes
-        issuanceSans.Clear();
-        if (!string.IsNullOrWhiteSpace(template.SubjectAltNameTypes))
+        if (isRenewMode)
         {
-            foreach (var sanType in template.SubjectAltNameTypes.Split(';', StringSplitOptions.RemoveEmptyEntries))
+            // Preserve the original cert's subject DN and SANs across template changes
+            issuanceSubjectDn = renewalSubjectDn;
+            issuanceSans = renewalSans.Select(s => new IssuanceSanEntry { Type = s.Type, Value = s.Value }).ToList();
+        }
+        else
+        {
+            issuanceSubjectDn = template.SubjectTemplate ?? string.Empty;
+
+            // Pre-populate SAN entries from template's SubjectAltNameTypes
+            issuanceSans.Clear();
+            if (!string.IsNullOrWhiteSpace(template.SubjectAltNameTypes))
             {
-                var type = sanType.Trim().ToUpperInvariant() switch
+                foreach (var sanType in template.SubjectAltNameTypes.Split(';', StringSplitOptions.RemoveEmptyEntries))
                 {
-                    "URI" => SanType.Uri,
-                    "DNS" => SanType.Dns,
-                    "EMAIL" => SanType.Email,
-                    "IP" => SanType.IpAddress,
-                    _ => SanType.Uri
-                };
-                issuanceSans.Add(new IssuanceSanEntry { Type = type, Value = string.Empty });
+                    var type = sanType.Trim().ToUpperInvariant() switch
+                    {
+                        "URI" => SanType.Uri,
+                        "DNS" => SanType.Dns,
+                        "EMAIL" => SanType.Email,
+                        "IP" => SanType.IpAddress,
+                        _ => SanType.Uri
+                    };
+                    issuanceSans.Add(new IssuanceSanEntry { Type = type, Value = string.Empty });
+                }
             }
         }
     }
@@ -1941,6 +2052,31 @@ public partial class CertificateExplorer
     {
         if (selectedTemplate == null || string.IsNullOrWhiteSpace(issuanceSubjectDn)) return;
 
+        var cdpUrl = selectedTemplate.IncludeCdp && !string.IsNullOrWhiteSpace(issuanceCdpUrl) ? issuanceCdpUrl : null;
+        var aiaUrl = selectedTemplate.IncludeAia && !string.IsNullOrWhiteSpace(issuanceAiaUrl) ? issuanceAiaUrl : null;
+
+        // Warn about missing CDP/AIA when the template expects them
+        var warnings = new List<string>();
+        if (selectedTemplate.IncludeCdp && string.IsNullOrWhiteSpace(issuanceCdpUrl))
+            warnings.Add("CRL Distribution Point (CDP) URL is empty but the template has CDP enabled.");
+        if (selectedTemplate.IncludeAia && string.IsNullOrWhiteSpace(issuanceAiaUrl))
+            warnings.Add("Authority Information Access (AIA) URL is empty but the template has AIA enabled.");
+
+        // Validate that provided CDP and AIA URLs resolve
+        var unreachableUrls = await ValidateEndpointUrlsAsync(cdpUrl, aiaUrl);
+        foreach (var u in unreachableUrls)
+            warnings.Add($"{u.Url}: {u.Error}");
+
+        if (warnings.Count > 0)
+        {
+            var warningList = string.Join("\n", warnings.Select(w => $"  \u2022 {w}"));
+            var dialog = await DialogService.ShowConfirmationAsync(
+                $"The following issue(s) were detected:\n\n{warningList}\n\nCertificates issued without valid CDP/AIA endpoints may cause chain validation failures. Continue anyway?",
+                "Issue Anyway", "Cancel", "Endpoint Warnings");
+            var dialogResult = await dialog.Result;
+            if (dialogResult.Cancelled) return;
+        }
+
         isIssuing = true;
         StateHasChanged();
 
@@ -1957,8 +2093,8 @@ public partial class CertificateExplorer
                     .Where(s => !string.IsNullOrWhiteSpace(s.Value))
                     .Select(s => new SanEntry(s.Type, s.Value))
                     .ToList(),
-                CdpUrl = selectedTemplate.IncludeCdp && !string.IsNullOrWhiteSpace(issuanceCdpUrl) ? issuanceCdpUrl : null,
-                AiaUrl = selectedTemplate.IncludeAia && !string.IsNullOrWhiteSpace(issuanceAiaUrl) ? issuanceAiaUrl : null,
+                CdpUrl = cdpUrl,
+                AiaUrl = aiaUrl,
                 NotBefore = issuanceNotBeforeNullable.HasValue ? new DateTimeOffset(issuanceNotBeforeNullable.Value, TimeSpan.Zero) : null,
                 NotAfter = issuanceNotAfterNullable.HasValue ? new DateTimeOffset(issuanceNotAfterNullable.Value, TimeSpan.Zero) : null,
                 PfxPassword = issuancePfxPassword,
@@ -1988,9 +2124,79 @@ public partial class CertificateExplorer
         }
     }
 
+    private async Task<List<(string Url, string Error)>> ValidateEndpointUrlsAsync(string? cdpUrl, string? aiaUrl)
+    {
+        var unreachable = new List<(string Url, string Error)>();
+        var urlsToCheck = new List<(string Url, string Label)>();
+
+        if (!string.IsNullOrWhiteSpace(cdpUrl))
+            urlsToCheck.Add((cdpUrl, "CDP"));
+        if (!string.IsNullOrWhiteSpace(aiaUrl))
+            urlsToCheck.Add((aiaUrl, "AIA"));
+
+        if (urlsToCheck.Count == 0) return unreachable;
+
+        using var httpClient = HttpClientFactory.CreateClient("SigilCrl");
+        httpClient.Timeout = TimeSpan.FromSeconds(5);
+
+        var tasks = urlsToCheck.Select(async entry =>
+        {
+            try
+            {
+                using var response = await httpClient.SendAsync(
+                    new HttpRequestMessage(HttpMethod.Head, entry.Url),
+                    HttpCompletionOption.ResponseHeadersRead);
+
+                if (!response.IsSuccessStatusCode)
+                {
+                    return (entry.Url, Error: $"HTTP {(int)response.StatusCode} {response.ReasonPhrase}");
+                }
+
+                return (entry.Url, Error: (string?)null)!;
+            }
+            catch (TaskCanceledException)
+            {
+                return (entry.Url, Error: "Connection timed out");
+            }
+            catch (HttpRequestException ex)
+            {
+                return (entry.Url, Error: ex.InnerException?.Message ?? ex.Message);
+            }
+        });
+
+        var results = await Task.WhenAll(tasks);
+        unreachable.AddRange(results.Where(r => r.Error != null)!);
+
+        return unreachable;
+    }
+
     private async Task ShowRenewDialog()
     {
         if (selectedNode == null || selectedCert == null) return;
+
+        // Extract SANs and subject from existing cert BEFORE opening the dialog,
+        // so they survive template selection changes
+        renewalSubjectDn = selectedCert.Subject;
+        renewalSans.Clear();
+        foreach (var san in subjectAltNames)
+        {
+            var trimmed = san.Trim();
+            if (TryParseSan(trimmed, "URL=", SanType.Uri, out var entry) ||
+                TryParseSan(trimmed, "URI:", SanType.Uri, out entry) ||
+                TryParseSan(trimmed, "Uri:", SanType.Uri, out entry) ||
+                TryParseSan(trimmed, "DNS Name=", SanType.Dns, out entry) ||
+                TryParseSan(trimmed, "DNS:", SanType.Dns, out entry) ||
+                TryParseSan(trimmed, "Dns:", SanType.Dns, out entry) ||
+                TryParseSan(trimmed, "RFC822 Name=", SanType.Email, out entry) ||
+                TryParseSan(trimmed, "email:", SanType.Email, out entry) ||
+                TryParseSan(trimmed, "Email:", SanType.Email, out entry) ||
+                TryParseSan(trimmed, "IP Address=", SanType.IpAddress, out entry) ||
+                TryParseSan(trimmed, "IP:", SanType.IpAddress, out entry) ||
+                TryParseSan(trimmed, "IpAddress:", SanType.IpAddress, out entry))
+            {
+                renewalSans.Add(entry);
+            }
+        }
 
         // Determine the issuing CA
         int? issuingCaId = null;
@@ -2022,19 +2228,21 @@ public partial class CertificateExplorer
         }
         else if (selectedNode.CertificateRole == "RootCA")
         {
-            // Root CA renewal = new self-signed root
             issuingCaId = null;
             issuingCaName = null;
         }
 
+        // Set renewal mode BEFORE opening the dialog so OnTemplateSelected preserves SANs
+        isRenewMode = true;
         await ShowIssuanceDialog(issuingCaId, issuingCaName);
+        isRenewMode = true; // ShowIssuanceDialog resets it — restore
 
         // Pre-select a template matching the original cert's role
         var targetType = selectedNode.CertificateRole switch
         {
             "RootCA" => CertificateType.RootCa,
             "IntermediateCA" => CertificateType.IntermediateCa,
-            "EndEntity" => CertificateType.EndEntityClient, // default to client for end-entity
+            "EndEntity" => CertificateType.EndEntityClient,
             _ => CertificateType.EndEntityClient
         };
 
@@ -2065,33 +2273,7 @@ public partial class CertificateExplorer
             }
         }
 
-        // Pre-fill from existing cert
-        issuanceSubjectDn = selectedCert.Subject;
         issuanceCertName = selectedNode.Name + " (renewed)";
-
-        // Extract SANs from existing cert
-        // Format varies: "URL=https://..." or "DNS Name=example.com" or "URI:https://..."
-        // or from DB storage: "Uri:https://..." / semicolon-delimited
-        issuanceSans.Clear();
-        foreach (var san in subjectAltNames)
-        {
-            var trimmed = san.Trim();
-            if (TryParseSan(trimmed, "URL=", SanType.Uri, out var entry) ||
-                TryParseSan(trimmed, "URI:", SanType.Uri, out entry) ||
-                TryParseSan(trimmed, "Uri:", SanType.Uri, out entry) ||
-                TryParseSan(trimmed, "DNS Name=", SanType.Dns, out entry) ||
-                TryParseSan(trimmed, "DNS:", SanType.Dns, out entry) ||
-                TryParseSan(trimmed, "Dns:", SanType.Dns, out entry) ||
-                TryParseSan(trimmed, "RFC822 Name=", SanType.Email, out entry) ||
-                TryParseSan(trimmed, "email:", SanType.Email, out entry) ||
-                TryParseSan(trimmed, "Email:", SanType.Email, out entry) ||
-                TryParseSan(trimmed, "IP Address=", SanType.IpAddress, out entry) ||
-                TryParseSan(trimmed, "IP:", SanType.IpAddress, out entry) ||
-                TryParseSan(trimmed, "IpAddress:", SanType.IpAddress, out entry))
-            {
-                issuanceSans.Add(entry);
-            }
-        }
     }
 
     // --- Re-sign Methods ---
@@ -2176,6 +2358,20 @@ public partial class CertificateExplorer
         }
         entry = null!;
         return false;
+    }
+
+    /// <summary>
+    /// Expands URL template tokens like {CAName} using current issuance context.
+    /// </summary>
+    private string ExpandUrlTemplate(string? template)
+    {
+        if (string.IsNullOrWhiteSpace(template)) return string.Empty;
+
+        var result = template;
+        if (issuingCaNameForIssuance != null)
+            result = result.Replace("{CAName}", issuingCaNameForIssuance, StringComparison.OrdinalIgnoreCase);
+
+        return result;
     }
 
     private static string GetCertTypeLabel(CertificateType ct) => ct switch

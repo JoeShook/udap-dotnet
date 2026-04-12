@@ -154,6 +154,224 @@ public class ChainValidationService
         return await ValidateChainAsync(issued.X509CertificatePem, issued.Name, allCas, allCrls, ct);
     }
 
+    /// <summary>
+    /// Validates a certificate chain using only online resolution (CDP for CRLs, AIA for
+    /// intermediate certs). The only data used from the database is the root CA trust anchor(s)
+    /// for the community. This simulates how an external relying party would validate the chain.
+    /// </summary>
+    public async Task<ChainValidationResult> ValidateOnlineAsync(
+        string leafPem, string leafName, int communityId, CancellationToken ct = default)
+    {
+        await using var db = await _dbFactory.CreateDbContextAsync(ct);
+
+        // Only load root CAs as trust anchors
+        var rootCas = await db.CaCertificates
+            .Where(c => c.CommunityId == communityId && c.ParentId == null)
+            .ToListAsync(ct);
+
+        if (rootCas.Count == 0)
+            return ChainValidationResult.Failed("No root CA trust anchors found in this community");
+
+        var parser = new X509CertificateParser();
+
+        // Parse root CAs
+        var trustedRoots = new List<(CaCertificate entity, BcX509Certificate bcCert)>();
+        foreach (var root in rootCas)
+        {
+            try
+            {
+                using var dotNetCa = X509Certificate2.CreateFromPem(root.X509CertificatePem);
+                var bcCa = parser.ReadCertificate(dotNetCa.RawData);
+                trustedRoots.Add((root, bcCa));
+            }
+            catch (Exception ex)
+            {
+                _logger.LogWarning(ex, "Cannot parse root CA certificate {Name}", root.Name);
+            }
+        }
+
+        // Parse the leaf
+        BcX509Certificate bcLeaf;
+        try
+        {
+            using var dotNetLeaf = X509Certificate2.CreateFromPem(leafPem);
+            bcLeaf = parser.ReadCertificate(dotNetLeaf.RawData);
+        }
+        catch (Exception ex)
+        {
+            return ChainValidationResult.Failed($"Cannot parse certificate: {ex.Message}");
+        }
+
+        // Walk the chain, resolving intermediates via AIA and CRLs via CDP
+        var chainLinks = new List<ChainLink>();
+        var resolvedCas = new List<(CaCertificate entity, BcX509Certificate bcCert)>(trustedRoots);
+        var current = bcLeaf;
+        var currentName = leafName;
+        var visited = new HashSet<string>();
+        bool reachedRoot = false;
+        const int maxDepth = 10;
+
+        for (int depth = 0; depth < maxDepth; depth++)
+        {
+            var thumbprint = Convert.ToHexString(current.GetEncoded().Take(20).ToArray());
+            if (!visited.Add(thumbprint))
+            {
+                chainLinks.Add(ChainLink.Problem(currentName, current, "Circular chain detected"));
+                break;
+            }
+
+            var link = new ChainLink
+            {
+                Name = currentName,
+                Subject = current.SubjectDN.ToString(),
+                Issuer = current.IssuerDN.ToString()
+            };
+
+            // Check time validity
+            var now = DateTime.UtcNow;
+            if (now < current.NotBefore.ToUniversalTime())
+                link.Problems.Add("Not yet valid (NotBefore is in the future)");
+            if (now > current.NotAfter.ToUniversalTime())
+                link.Problems.Add($"Expired (NotAfter: {current.NotAfter:yyyy-MM-dd})");
+
+            // Check basic constraints for non-leaf certs
+            if (depth > 0)
+            {
+                var basicConstraints = current.GetBasicConstraints();
+                if (basicConstraints < 0)
+                    link.Problems.Add("Not a CA (BasicConstraints CA=false or missing)");
+            }
+
+            // Self-signed root
+            if (current.IssuerDN.Equivalent(current.SubjectDN))
+            {
+                try
+                {
+                    current.Verify(current.GetPublicKey());
+                    link.SignatureValid = true;
+                }
+                catch
+                {
+                    link.Problems.Add("Self-signature verification failed");
+                    link.SignatureValid = false;
+                }
+
+                var matchedRoot = trustedRoots.FirstOrDefault(ca =>
+                    ca.bcCert.SubjectDN.Equivalent(current.SubjectDN));
+                if (matchedRoot.entity != null)
+                {
+                    link.IsTrustAnchor = true;
+                    reachedRoot = true;
+                }
+                else
+                {
+                    link.Problems.Add("Root CA not found in community trust store");
+                }
+
+                chainLinks.Add(link);
+                break;
+            }
+
+            // Find issuer in already-resolved certs
+            BcX509Certificate? issuerBc = null;
+            string? issuerName = null;
+
+            foreach (var (caEntity, caCert) in resolvedCas)
+            {
+                if (MatchesKeyIdentifiers(current, caCert) || caCert.SubjectDN.Equivalent(current.IssuerDN))
+                {
+                    try
+                    {
+                        current.Verify(caCert.GetPublicKey());
+                        issuerBc = caCert;
+                        issuerName = caEntity.Name;
+                        link.SignatureValid = true;
+                        break;
+                    }
+                    catch { }
+                }
+            }
+
+            // If issuer not found locally, try to resolve via AIA
+            if (issuerBc == null)
+            {
+                var aiaResult = await ResolveIssuerViaAiaAsync(current, ct);
+                if (aiaResult != null)
+                {
+                    issuerBc = aiaResult.Value.bcCert;
+                    issuerName = aiaResult.Value.bcCert.SubjectDN.ToString();
+                    link.AiaResolved = true;
+
+                    // Add to resolved set so deeper links can find it
+                    resolvedCas.Add((new CaCertificate { Name = issuerName }, aiaResult.Value.bcCert));
+
+                    try
+                    {
+                        current.Verify(issuerBc.GetPublicKey());
+                        link.SignatureValid = true;
+                    }
+                    catch
+                    {
+                        link.SignatureValid = false;
+                        link.Problems.Add("Signature verification against AIA-resolved issuer failed");
+                    }
+                }
+            }
+
+            if (issuerBc == null)
+            {
+                link.SignatureValid = false;
+                link.Problems.Add("Issuer not found — no AIA extension or AIA download failed");
+                chainLinks.Add(link);
+                break;
+            }
+
+            // Check CRL revocation online only — must happen after issuer resolution
+            // because the CRL signature is verified against the issuer's public key
+            await CheckCrlRevocationOnlineAsync(current, link, resolvedCas, ct);
+
+            chainLinks.Add(link);
+            current = issuerBc;
+            currentName = issuerName ?? issuerBc.SubjectDN.ToString();
+        }
+
+        var isValid = reachedRoot && chainLinks.All(l => l.Problems.Count == 0);
+
+        return new ChainValidationResult
+        {
+            IsValid = isValid,
+            ReachedTrustAnchor = reachedRoot,
+            ChainLinks = chainLinks
+        };
+    }
+
+    /// <summary>
+    /// Online-only validation entry point for a CA certificate by ID.
+    /// </summary>
+    public async Task<ChainValidationResult> ValidateCaCertificateOnlineAsync(
+        int caCertificateId, CancellationToken ct = default)
+    {
+        await using var db = await _dbFactory.CreateDbContextAsync(ct);
+        var caCert = await db.CaCertificates.FindAsync(new object[] { caCertificateId }, ct);
+        if (caCert == null) return ChainValidationResult.Failed("Certificate not found");
+        return await ValidateOnlineAsync(caCert.X509CertificatePem, caCert.Name, caCert.CommunityId, ct);
+    }
+
+    /// <summary>
+    /// Online-only validation entry point for an issued certificate by ID.
+    /// </summary>
+    public async Task<ChainValidationResult> ValidateIssuedCertificateOnlineAsync(
+        int issuedCertificateId, CancellationToken ct = default)
+    {
+        await using var db = await _dbFactory.CreateDbContextAsync(ct);
+        var issued = await db.IssuedCertificates
+            .Include(i => i.IssuingCaCertificate)
+            .FirstOrDefaultAsync(i => i.Id == issuedCertificateId, ct);
+        if (issued == null) return ChainValidationResult.Failed("Certificate not found");
+        return await ValidateOnlineAsync(issued.X509CertificatePem, issued.Name,
+            issued.IssuingCaCertificate.CommunityId, ct);
+    }
+
     public async Task<ChainValidationResult> ValidateChainAsync(
         string leafPem,
         string leafName,
@@ -512,6 +730,178 @@ public class ChainValidationService
         }
     }
 
+    /// <summary>
+    /// Checks CRL revocation using only online CDP URLs — does not consult stored CRLs.
+    /// </summary>
+    private async Task CheckCrlRevocationOnlineAsync(
+        BcX509Certificate cert,
+        ChainLink link,
+        List<(CaCertificate entity, BcX509Certificate bcCert)> resolvedCas,
+        CancellationToken ct)
+    {
+        if (cert.IssuerDN.Equivalent(cert.SubjectDN))
+            return; // Self-signed root — no CRL check needed
+
+        // Find issuer for signature verification of the CRL
+        BcX509Certificate? issuerBcCert = null;
+        foreach (var (_, caCert) in resolvedCas)
+        {
+            if (MatchesKeyIdentifiers(cert, caCert) || caCert.SubjectDN.Equivalent(cert.IssuerDN))
+            {
+                try
+                {
+                    cert.Verify(caCert.GetPublicKey());
+                    issuerBcCert = caCert;
+                    break;
+                }
+                catch { }
+            }
+        }
+
+        if (issuerBcCert == null)
+        {
+            link.CrlStatus = CrlCheckStatus.IssuerNotFound;
+            return;
+        }
+
+        var cdpUrls = ExtractCdpUrls(cert);
+        if (cdpUrls.Count == 0)
+        {
+            link.CrlStatus = CrlCheckStatus.NoCrlAvailable;
+            link.Problems.Add("No CDP extension — cannot verify revocation status online");
+            return;
+        }
+
+        foreach (var url in cdpUrls)
+        {
+            try
+            {
+                var crlBytes = await DownloadCrlAsync(url, ct);
+                if (crlBytes == null) continue;
+
+                var crlParser = new X509CrlParser();
+                var downloadedCrl = crlParser.ReadCrl(crlBytes);
+
+                try
+                {
+                    downloadedCrl.Verify(issuerBcCert.GetPublicKey());
+                }
+                catch
+                {
+                    _logger.LogWarning("Online CRL from {Url} failed signature verification", url);
+                    continue;
+                }
+
+                var now = DateTime.UtcNow;
+                if (downloadedCrl.NextUpdate.HasValue && now > downloadedCrl.NextUpdate.Value.ToUniversalTime())
+                {
+                    link.Problems.Add($"CRL from {url} is expired (NextUpdate: {downloadedCrl.NextUpdate.Value:yyyy-MM-dd})");
+                }
+
+                var isRevoked = downloadedCrl.IsRevoked(cert);
+                if (isRevoked)
+                {
+                    link.CrlStatus = CrlCheckStatus.Revoked;
+                    link.CrlSource = CrlSource.Downloaded;
+                    link.CrlSourceUrl = url;
+                    var entry = downloadedCrl.GetRevokedCertificate(cert.SerialNumber);
+                    var reason = GetRevocationReason(entry);
+                    long crlNumber = 0;
+                    var crlNumExt = downloadedCrl.GetExtensionValue(X509Extensions.CrlNumber);
+                    if (crlNumExt != null)
+                    {
+                        var asn1Num = Org.BouncyCastle.X509.Extension.X509ExtensionUtilities
+                            .FromExtensionValue(crlNumExt);
+                        crlNumber = DerInteger.GetInstance(asn1Num).LongValueExact;
+                    }
+                    link.Problems.Add($"REVOKED on {entry?.RevocationDate:yyyy-MM-dd} — {reason} (CRL #{crlNumber} from {url})");
+                }
+                else
+                {
+                    link.CrlStatus = CrlCheckStatus.Good;
+                    link.CrlSource = CrlSource.Downloaded;
+                    link.CrlSourceUrl = url;
+                }
+
+                _logger.LogInformation("Online validation: resolved CRL from {Url}", url);
+                return;
+            }
+            catch (Exception ex)
+            {
+                _logger.LogWarning(ex, "Online validation: failed to download/parse CRL from {Url}", url);
+            }
+        }
+
+        link.CrlStatus = CrlCheckStatus.CrlFetchFailed;
+        link.Problems.Add($"CRL download failed from all CDP URLs: {string.Join(", ", cdpUrls)}");
+    }
+
+    /// <summary>
+    /// Attempts to download the issuing CA certificate via the AIA extension (caIssuers method).
+    /// </summary>
+    private async Task<(CaCertificate entity, BcX509Certificate bcCert)?> ResolveIssuerViaAiaAsync(
+        BcX509Certificate cert, CancellationToken ct)
+    {
+        try
+        {
+            var aiaExt = cert.GetExtensionValue(X509Extensions.AuthorityInfoAccess);
+            if (aiaExt == null) return null;
+
+            var aiaObj = Asn1OctetString.GetInstance(aiaExt).GetOctets();
+            var aiaSeq = Asn1Sequence.GetInstance(Asn1Object.FromByteArray(aiaObj));
+
+            var caIssuersUrls = new List<string>();
+            foreach (Asn1Encodable accessDesc in aiaSeq)
+            {
+                var seq = Asn1Sequence.GetInstance(accessDesc);
+                var oid = DerObjectIdentifier.GetInstance(seq[0]);
+                // 1.3.6.1.5.5.7.48.2 = caIssuers
+                if (oid.Id == "1.3.6.1.5.5.7.48.2")
+                {
+                    var gn = GeneralName.GetInstance(seq[1]);
+                    if (gn.TagNo == GeneralName.UniformResourceIdentifier)
+                    {
+                        var url = gn.Name.ToString();
+                        if (url != null && (url.StartsWith("http://") || url.StartsWith("https://")))
+                            caIssuersUrls.Add(url);
+                    }
+                }
+            }
+
+            foreach (var url in caIssuersUrls)
+            {
+                try
+                {
+                    var client = _httpClientFactory.CreateClient("SigilCrl");
+                    using var cts = CancellationTokenSource.CreateLinkedTokenSource(ct);
+                    cts.CancelAfter(TimeSpan.FromSeconds(5));
+
+                    var certBytes = await client.GetByteArrayAsync(url, cts.Token);
+                    var parser = new X509CertificateParser();
+                    var issuerBc = parser.ReadCertificate(certBytes);
+
+                    if (issuerBc != null)
+                    {
+                        _logger.LogInformation("Resolved issuer via AIA from {Url}: {Subject}",
+                            url, issuerBc.SubjectDN);
+                        var placeholder = new CaCertificate { Name = issuerBc.SubjectDN.ToString() };
+                        return (placeholder, issuerBc);
+                    }
+                }
+                catch (Exception ex)
+                {
+                    _logger.LogWarning(ex, "Failed to download issuer cert from AIA URL {Url}", url);
+                }
+            }
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "Failed to parse AIA extension");
+        }
+
+        return null;
+    }
+
     private void CheckRevocationInCrl(BcX509Certificate cert, ChainLink link, Crl storedCrl, CrlSource source)
     {
         var serialHex = cert.SerialNumber.ToString(16).ToUpperInvariant();
@@ -680,6 +1070,7 @@ public class ChainLink
     public CrlCheckStatus CrlStatus { get; set; } = CrlCheckStatus.NotChecked;
     public CrlSource CrlSource { get; set; } = CrlSource.None;
     public string? CrlSourceUrl { get; set; }
+    public bool AiaResolved { get; set; }
     public List<string> Problems { get; set; } = new();
 
     public bool HasProblems => Problems.Count > 0;
