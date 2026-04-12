@@ -1037,7 +1037,7 @@ public partial class CertificateExplorer
 
     // --- Delete & Move ---
 
-    private async Task DeleteSelectedAsync()
+    private async Task ArchiveSelectedAsync()
     {
         if (selectedNode == null) return;
 
@@ -1070,8 +1070,71 @@ public partial class CertificateExplorer
         await db.SaveChangesAsync();
         ToastService.ShowCopyableSuccess($"Archived '{selectedNode.Name}'");
 
-        // Clear all selection state including the FluentTreeItem reference
-        // to prevent the tree view from holding a stale DOM reference
+        await ClearSelectionAndReloadTreeAsync();
+    }
+
+    private async Task DeleteSelectedAsync()
+    {
+        if (selectedNode == null) return;
+
+        var dialog = await DialogService.ShowConfirmationAsync(
+            $"Permanently delete '{selectedNode.Name}'? This cannot be undone.",
+            "Delete Forever", "Cancel", "Confirm Delete");
+        var result = await dialog.Result;
+
+        if (result.Cancelled) return;
+
+        await using var db = await DbFactory.CreateDbContextAsync();
+
+        switch (selectedNode.EntityType)
+        {
+            case "CaCertificate":
+                var ca = await db.CaCertificates
+                    .Include(c => c.IssuedCertificates)
+                    .Include(c => c.Crls).ThenInclude(c => c.Revocations)
+                    .Include(c => c.Children)
+                    .FirstOrDefaultAsync(c => c.Id == selectedNode.Id);
+                if (ca != null)
+                {
+                    if (ca.Children.Count > 0 || ca.IssuedCertificates.Count > 0)
+                    {
+                        ToastService.ShowCopyableError(
+                            $"Cannot delete '{ca.Name}': it has {ca.Children.Count} child CA(s) and {ca.IssuedCertificates.Count} issued cert(s). Delete or move them first.");
+                        return;
+                    }
+                    // Remove associated CRLs and their revocations
+                    foreach (var crl in ca.Crls.ToList())
+                    {
+                        db.CertificateRevocations.RemoveRange(crl.Revocations);
+                        db.Crls.Remove(crl);
+                    }
+                    db.CaCertificates.Remove(ca);
+                }
+                break;
+            case "IssuedCertificate":
+                var issued = await db.IssuedCertificates.FindAsync(selectedNode.Id);
+                if (issued != null) db.IssuedCertificates.Remove(issued);
+                break;
+            case "Crl":
+                var crl2 = await db.Crls
+                    .Include(c => c.Revocations)
+                    .FirstOrDefaultAsync(c => c.Id == selectedNode.Id);
+                if (crl2 != null)
+                {
+                    db.CertificateRevocations.RemoveRange(crl2.Revocations);
+                    db.Crls.Remove(crl2);
+                }
+                break;
+        }
+
+        await db.SaveChangesAsync();
+        ToastService.ShowCopyableSuccess($"Permanently deleted '{selectedNode.Name}'");
+
+        await ClearSelectionAndReloadTreeAsync();
+    }
+
+    private async Task ClearSelectionAndReloadTreeAsync()
+    {
         selectedTreeItem = null;
         selectedNode = null;
         selectedCert?.Dispose();
@@ -1480,6 +1543,23 @@ public partial class CertificateExplorer
             await using var db = await DbFactory.CreateDbContextAsync();
             var cert = parsedCert.Certificate;
 
+            // Validate issuer relationship if a parent CA was matched
+            if (matchedParentCaId.HasValue)
+            {
+                var parentCaEntity = await db.CaCertificates.FindAsync(matchedParentCaId.Value);
+                if (parentCaEntity != null)
+                {
+                    using var parentCert = X509Certificate2.CreateFromPem(parentCaEntity.X509CertificatePem);
+                    var issuerError = CertificateIssuanceService.VerifyIssuedBy(cert, parentCert);
+                    if (issuerError != null)
+                    {
+                        importError = $"Cannot link to '{parentCaEntity.Name}': {issuerError}";
+                        confirmDialogHidden = true;
+                        return;
+                    }
+                }
+            }
+
             if (parsedCert.DetectedRole is DetectedCertRole.RootCa or DetectedCertRole.IntermediateCa)
             {
                 var entity = new CaCertificate
@@ -1726,13 +1806,27 @@ public partial class CertificateExplorer
             return;
         }
 
+        // Validate the cert was actually signed by the selected CA
+        var selectedCaEntity = await db.CaCertificates.FindAsync(selectedCaForAssignment!.Id);
+        if (selectedCaEntity != null)
+        {
+            using var caCert = X509Certificate2.CreateFromPem(selectedCaEntity.X509CertificatePem);
+            var issuerError = CertificateIssuanceService.VerifyIssuedBy(cert, caCert);
+            if (issuerError != null)
+            {
+                parsed.Certificate.Dispose();
+                ToastService.ShowCopyableError($"Cannot assign under '{selectedCaEntity.Name}': {issuerError}");
+                return;
+            }
+        }
+
         // New cert — assign under selected CA
         if (parsed.DetectedRole is DetectedCertRole.RootCa or DetectedCertRole.IntermediateCa)
         {
             db.CaCertificates.Add(new CaCertificate
             {
                 CommunityId = CommunityId,
-                ParentId = selectedCaForAssignment!.Id,
+                ParentId = selectedCaForAssignment.Id,
                 Name = Path.GetFileNameWithoutExtension(pendingFileName),
                 Subject = cert.Subject,
                 X509CertificatePem = cert.ExportCertificatePem(),

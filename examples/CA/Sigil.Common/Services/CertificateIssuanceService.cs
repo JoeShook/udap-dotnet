@@ -137,6 +137,14 @@ public class CertificateIssuanceService
 
             using (cert)
             {
+                // Verify the new cert was actually signed by the issuing CA
+                if (!isSelfSigned)
+                {
+                    var issuerError = VerifyIssuedBy(cert, issuingCert!);
+                    if (issuerError != null)
+                        return CertificateIssuanceResult.Failure(issuerError);
+                }
+
                 // Export
                 var pfxBytes = cert.Export(X509ContentType.Pkcs12, request.PfxPassword);
                 var pem = cert.ExportCertificatePem();
@@ -367,6 +375,14 @@ public class CertificateIssuanceService
 
             using (newCert)
             {
+                // Verify the re-signed cert is actually signed by the parent CA
+                if (!isSelfSigned)
+                {
+                    var issuerError = VerifyIssuedBy(newCert, parentCert!);
+                    if (issuerError != null)
+                        return CertificateIssuanceResult.Failure(issuerError);
+                }
+
                 var pfxBytes = newCert.Export(X509ContentType.Pkcs12, request.PfxPassword);
                 var pem = newCert.ExportCertificatePem();
 
@@ -408,6 +424,42 @@ public class CertificateIssuanceService
         {
             existingCert.Dispose();
             parentCert?.Dispose();
+        }
+    }
+
+    /// <summary>
+    /// Verifies that <paramref name="cert"/> was signed by <paramref name="issuer"/>
+    /// using BouncyCastle signature verification. Returns null on success or an error message.
+    /// </summary>
+    public static string? VerifyIssuedBy(X509Certificate2 cert, X509Certificate2 issuer)
+    {
+        try
+        {
+            var bcParser = new Org.BouncyCastle.X509.X509CertificateParser();
+            var bcCert = bcParser.ReadCertificate(cert.RawData);
+            var bcIssuer = bcParser.ReadCertificate(issuer.RawData);
+
+            // Check Issuer DN matches Subject DN of the alleged issuer
+            if (!bcCert.IssuerDN.Equivalent(bcIssuer.SubjectDN))
+            {
+                return $"Certificate Issuer DN '{bcCert.IssuerDN}' does not match the CA Subject DN '{bcIssuer.SubjectDN}'.";
+            }
+
+            // Verify the signature
+            bcCert.Verify(bcIssuer.GetPublicKey());
+            return null; // success
+        }
+        catch (Org.BouncyCastle.Security.InvalidKeyException)
+        {
+            return "Certificate signature verification failed: the certificate was not signed by the specified CA.";
+        }
+        catch (Org.BouncyCastle.Security.Certificates.CertificateException ex)
+        {
+            return $"Certificate signature verification failed: {ex.Message}";
+        }
+        catch (Exception ex)
+        {
+            return $"Certificate issuer validation failed: {ex.Message}";
         }
     }
 

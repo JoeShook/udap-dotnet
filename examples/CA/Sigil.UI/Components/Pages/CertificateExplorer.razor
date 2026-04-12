@@ -579,9 +579,16 @@ else if (treeNodes.Count > 0)
                             .crl
                         </FluentAnchor>
                         <FluentButton Appearance="Appearance.Outline"
+                                      IconStart="@(new Icons.Regular.Size16.Archive())"
+                                      OnClick="ArchiveSelectedAsync"
+                                      title="Archive this CRL (hidden but preserved)"
+                                      Style="color: #ff9800;">
+                            Archive
+                        </FluentButton>
+                        <FluentButton Appearance="Appearance.Outline"
                                       IconStart="@(new Icons.Regular.Size16.Delete())"
                                       OnClick="DeleteSelectedAsync"
-                                      title="Archive this CRL (hidden but preserved)"
+                                      title="Permanently delete this CRL"
                                       Style="color: #e94560;">
                             Delete
                         </FluentButton>
@@ -695,9 +702,16 @@ else if (treeNodes.Count > 0)
                             Move
                         </FluentButton>
                         <FluentButton Appearance="Appearance.Outline"
+                                      IconStart="@(new Icons.Regular.Size16.Archive())"
+                                      OnClick="ArchiveSelectedAsync"
+                                      title="Archive this certificate (hidden but preserved)"
+                                      Style="color: #ff9800;">
+                            Archive
+                        </FluentButton>
+                        <FluentButton Appearance="Appearance.Outline"
                                       IconStart="@(new Icons.Regular.Size16.Delete())"
                                       OnClick="DeleteSelectedAsync"
-                                      title="Archive this certificate (hidden but preserved)"
+                                      title="Permanently delete this certificate"
                                       Style="color: #e94560;">
                             Delete
                         </FluentButton>
