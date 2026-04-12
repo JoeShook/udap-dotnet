@@ -120,7 +120,12 @@ else
                 Expiring Soon (@expiringCerts.Count)
             </FluentLabel>
             <FluentDataGrid Items="@expiringCerts.AsQueryable()" Class="dashboard-grid" Style="width: 100%;" GridTemplateColumns="1fr 0.6fr 0.8fr 0.5fr 0.5fr">
-                <PropertyColumn Property="@(c => c.Name)" Title="Name" Align="Align.Start" />
+                <TemplateColumn Title="Name" Align="Align.Start">
+                    <a href="/explorer/@context.CommunityId?thumbprint=@context.Thumbprint" style="color: #1976d2; cursor: pointer;"
+                       @onclick="() => NavigateToCert(context.CommunityId, context.Thumbprint)" @onclick:preventDefault>
+                        @context.Name
+                    </a>
+                </TemplateColumn>
                 <PropertyColumn Property="@(c => c.CommunityName)" Title="Community" Align="Align.Start" />
                 <TemplateColumn Title="Expires" Align="Align.Start">
                     <span style="color: @(context.DaysRemaining <= 7 ? "#e94560" : context.DaysRemaining <= 30 ? "#ff9800" : "inherit");">
@@ -147,7 +152,12 @@ else
                 Expired Certificates (@expiredCerts.Count)
             </FluentLabel>
             <FluentDataGrid Items="@expiredCerts.AsQueryable()" Class="dashboard-grid" Style="width: 100%;" GridTemplateColumns="1fr 0.6fr 0.8fr 0.5fr 0.5fr">
-                <PropertyColumn Property="@(c => c.Name)" Title="Name" Align="Align.Start" />
+                <TemplateColumn Title="Name" Align="Align.Start">
+                    <a href="/explorer/@context.CommunityId?thumbprint=@context.Thumbprint" style="color: #1976d2; cursor: pointer;"
+                       @onclick="() => NavigateToCert(context.CommunityId, context.Thumbprint)" @onclick:preventDefault>
+                        @context.Name
+                    </a>
+                </TemplateColumn>
                 <PropertyColumn Property="@(c => c.CommunityName)" Title="Community" Align="Align.Start" />
                 <TemplateColumn Title="Expired On" Align="Align.Start">
                     <span style="color: #e94560;">@context.NotAfter.ToString("yyyy-MM-dd")</span>
@@ -171,7 +181,12 @@ else
                 Overdue CRLs (@overdueCrls.Count)
             </FluentLabel>
             <FluentDataGrid Items="@overdueCrls.AsQueryable()" Class="dashboard-grid" Style="width: 100%;" GridTemplateColumns="0.4fr 1fr 0.8fr 0.8fr 0.5fr">
-                <PropertyColumn Property="@(c => c.CrlNumber)" Title="CRL #" Align="Align.Start" />
+                <TemplateColumn Title="CRL #" Align="Align.Start">
+                    <a href="/explorer/@context.CommunityId?thumbprint=@context.CaThumbprint" style="color: #1976d2; cursor: pointer;"
+                       @onclick="() => NavigateToCert(context.CommunityId, context.CaThumbprint)" @onclick:preventDefault>
+                        #@context.CrlNumber
+                    </a>
+                </TemplateColumn>
                 <PropertyColumn Property="@(c => c.CaName)" Title="Issuing CA" Align="Align.Start" />
                 <PropertyColumn Property="@(c => c.CommunityName)" Title="Community" Align="Align.Start" />
                 <TemplateColumn Title="Next Update" Align="Align.Start">

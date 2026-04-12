@@ -25,6 +25,7 @@ namespace Sigil.UI.Components.Pages;
 public partial class CertificateExplorer
 {
     [Parameter] public int CommunityId { get; set; }
+    [SupplyParameterFromQuery(Name = "thumbprint")] public string? SelectedThumbprint { get; set; }
 
     [Inject] private IDbContextFactory<SigilDbContext> DbFactory { get; set; } = null!;
     [Inject] private CertificateParsingService ParsingService { get; set; } = null!;
@@ -36,6 +37,7 @@ public partial class CertificateExplorer
     [Inject] private CertificateIssuanceService IssuanceService { get; set; } = null!;
     [Inject] private IHttpClientFactory HttpClientFactory { get; set; } = null!;
     [Inject] private IJSRuntime JS { get; set; } = null!;
+    [Inject] private NavigationManager Navigation { get; set; } = null!;
 
     // Tree state
     private List<CommunityOption> communityList = new();
@@ -53,6 +55,7 @@ public partial class CertificateExplorer
     private int treeVersion;
     private bool isRevalidating;
     private bool isValidatingOnline;
+    private bool pendingHighlight;
     private Dictionary<string, ChainValidationResult> communityValidations = new();
 
     // Rename state
@@ -135,6 +138,30 @@ public partial class CertificateExplorer
         {
             selectedCommunity = communityList.FirstOrDefault(c => c.Id == CommunityId);
             await LoadCommunityTreeAsync(CommunityId);
+
+            // Auto-select cert if thumbprint was provided via query string
+            if (!string.IsNullOrEmpty(SelectedThumbprint))
+            {
+                var node = FindNodeByThumbprint(treeNodes, SelectedThumbprint);
+                if (node != null)
+                {
+                    await SelectNode(node);
+                    pendingHighlight = true;
+                }
+
+                // Clear the query string so it doesn't linger as the user navigates
+                SelectedThumbprint = null;
+                Navigation.NavigateTo($"/explorer/{CommunityId}", replace: true);
+            }
+        }
+    }
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (pendingHighlight)
+        {
+            pendingHighlight = false;
+            await UpdateTreeHighlightsAsync();
         }
     }
 

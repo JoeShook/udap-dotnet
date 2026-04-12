@@ -91,6 +91,7 @@ public partial class Home
             {
                 Name = c.Name,
                 Subject = c.Subject,
+                Thumbprint = c.Thumbprint,
                 NotAfter = c.NotAfter,
                 CommunityName = c.Community.Name,
                 CommunityId = c.CommunityId,
@@ -105,6 +106,7 @@ public partial class Home
             {
                 Name = i.Name,
                 Subject = i.Subject,
+                Thumbprint = i.Thumbprint,
                 NotAfter = i.NotAfter,
                 CommunityName = i.IssuingCaCertificate.Community.Name,
                 CommunityId = i.IssuingCaCertificate.CommunityId,
@@ -124,6 +126,7 @@ public partial class Home
             {
                 Name = c.Name,
                 Subject = c.Subject,
+                Thumbprint = c.Thumbprint,
                 NotAfter = c.NotAfter,
                 CommunityName = c.Community.Name,
                 CommunityId = c.CommunityId,
@@ -138,6 +141,7 @@ public partial class Home
             {
                 Name = i.Name,
                 Subject = i.Subject,
+                Thumbprint = i.Thumbprint,
                 NotAfter = i.NotAfter,
                 CommunityName = i.IssuingCaCertificate.Community.Name,
                 CommunityId = i.IssuingCaCertificate.CommunityId,
@@ -158,6 +162,7 @@ public partial class Home
             {
                 CrlNumber = c.CrlNumber,
                 CaName = c.CaCertificate.Name,
+                CaThumbprint = c.CaCertificate.Thumbprint,
                 CommunityName = c.CaCertificate.Community.Name,
                 CommunityId = c.CaCertificate.CommunityId,
                 NextUpdate = c.NextUpdate,
@@ -175,7 +180,12 @@ public partial class Home
 
     private void NavigateToCommunity(int communityId)
     {
-        Navigation.NavigateTo($"/explorer?community={communityId}");
+        Navigation.NavigateTo($"/explorer/{communityId}");
+    }
+
+    private void NavigateToCert(int communityId, string thumbprint)
+    {
+        Navigation.NavigateTo($"/explorer/{communityId}?thumbprint={thumbprint}");
     }
 
     // --- View Models ---
@@ -201,6 +211,7 @@ public partial class Home
     {
         public string Name { get; set; } = string.Empty;
         public string Subject { get; set; } = string.Empty;
+        public string Thumbprint { get; set; } = string.Empty;
         public DateTime NotAfter { get; set; }
         public string CommunityName { get; set; } = string.Empty;
         public int CommunityId { get; set; }
@@ -212,6 +223,7 @@ public partial class Home
     {
         public long CrlNumber { get; set; }
         public string CaName { get; set; } = string.Empty;
+        public string CaThumbprint { get; set; } = string.Empty;
         public string CommunityName { get; set; } = string.Empty;
         public int CommunityId { get; set; }
         public DateTime NextUpdate { get; set; }
