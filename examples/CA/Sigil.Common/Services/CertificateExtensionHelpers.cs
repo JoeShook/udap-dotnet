@@ -45,6 +45,28 @@ public static class CertificateExtensionHelpers
     }
 
     /// <summary>
+    /// Adds an Authority Key Identifier extension to a list of extensions (for remote signing path).
+    /// </summary>
+    public static void AddAuthorityKeyIdentifierToList(
+        X509Certificate2 issuerCert,
+        List<X509Extension> extensions)
+    {
+        var issuerSubjectKey = issuerCert.Extensions["2.5.29.14"]?.RawData;
+        if (issuerSubjectKey == null || issuerSubjectKey.Length < 4)
+            return;
+
+        var segment = new ArraySegment<byte>(issuerSubjectKey, 2, issuerSubjectKey.Length - 2);
+        var authorityKeyIdentifier = new byte[segment.Count + 4];
+        authorityKeyIdentifier[0] = 0x30; // SEQUENCE
+        authorityKeyIdentifier[1] = 0x16;
+        authorityKeyIdentifier[2] = 0x80; // [0] implicit KeyIdentifier
+        authorityKeyIdentifier[3] = 0x14;
+        segment.CopyTo(authorityKeyIdentifier, 4);
+
+        extensions.Add(new X509Extension("2.5.29.35", authorityKeyIdentifier, false));
+    }
+
+    /// <summary>
     /// Builds a CRL Distribution Points extension (OID 2.5.29.31) for a single HTTP URL.
     /// Supports URLs up to 119 characters.
     /// </summary>

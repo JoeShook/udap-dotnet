@@ -14,9 +14,12 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.FluentUI.AspNetCore.Components;
 using Serilog;
 using Sigil.Components;
+using Microsoft.Extensions.Options;
 using Sigil.Common.Data;
+using Sigil.ServiceDefaults;
 using Sigil.Common.Data.Entities;
 using Sigil.Common.Services;
+using Sigil.Common.Services.Signing;
 
 Log.Logger = new LoggerConfiguration()
     .WriteTo.Console()
@@ -25,6 +28,12 @@ Log.Logger = new LoggerConfiguration()
 try
 {
     var builder = WebApplication.CreateBuilder(args);
+
+    // Aspire service defaults (active when running under Aspire AppHost)
+    if (builder.Configuration["OTEL_EXPORTER_OTLP_ENDPOINT"] is not null)
+    {
+        builder.AddServiceDefaults();
+    }
 
     // Serilog
     builder.Host.UseSerilog((context, config) => config
@@ -41,9 +50,27 @@ try
     builder.Services.AddScoped<Asn1ParsingService>();
     builder.Services.AddScoped<CrlImportService>();
     builder.Services.AddScoped<ChainValidationService>();
-    builder.Services.AddScoped<CertificateIssuanceService>();
     builder.Services.AddHttpClient("SigilCrl");
     builder.Services.AddHttpClient();
+
+    // Signing provider configuration
+    builder.Services.Configure<SigningProviderOptions>(
+        builder.Configuration.GetSection("Signing"));
+    builder.Services.Configure<VaultTransitOptions>(
+        builder.Configuration.GetSection("Vault"));
+    builder.Services.AddHttpClient("VaultTransit");
+    builder.Services.AddSingleton<LocalSigningProvider>();
+    builder.Services.AddSingleton<VaultTransitSigningProvider>();
+    builder.Services.AddSingleton<ISigningProvider>(sp =>
+    {
+        var options = sp.GetRequiredService<IOptions<SigningProviderOptions>>().Value;
+        return options.Provider switch
+        {
+            "vault-transit" => sp.GetRequiredService<VaultTransitSigningProvider>(),
+            _ => sp.GetRequiredService<LocalSigningProvider>()
+        };
+    });
+    builder.Services.AddScoped<CertificateIssuanceService>();
 
     // Blazor Server + Fluent UI
     builder.Services.AddRazorComponents()
@@ -81,6 +108,7 @@ try
     app.UseStaticFiles();
     app.MapStaticAssets();
     app.UseAntiforgery();
+    app.MapDefaultEndpoints(); // Aspire health checks (/health, /alive)
 
     app.MapRazorComponents<App>()
         .AddInteractiveServerRenderMode()

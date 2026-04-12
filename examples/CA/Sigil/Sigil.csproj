@@ -20,6 +20,7 @@
 
   <ItemGroup>
     <ProjectReference Include="..\Sigil.Common\Sigil.Common.csproj" />
+    <ProjectReference Include="..\Sigil.ServiceDefaults\Sigil.ServiceDefaults.csproj" />
     <ProjectReference Include="..\Sigil.UI\Sigil.UI.csproj" />
   </ItemGroup>
 

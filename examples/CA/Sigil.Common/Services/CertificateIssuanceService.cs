@@ -15,6 +15,7 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
 using Sigil.Common.Data;
 using Sigil.Common.Data.Entities;
+using Sigil.Common.Services.Signing;
 using Sigil.Common.ViewModels;
 
 namespace Sigil.Common.Services;
@@ -23,17 +24,28 @@ namespace Sigil.Common.Services;
 /// Certificate generation engine. Creates Root CAs, Intermediate CAs, and end-entity
 /// certificates using .NET's CertificateRequest API with extension helpers extracted
 /// from Udap.PKI.Generator. Designed for consumption by UI, CLI, and API hosts.
+/// Supports local (PFX) and remote (Vault Transit) signing via ISigningProvider.
 /// </summary>
 public class CertificateIssuanceService
 {
     private readonly IDbContextFactory<SigilDbContext> _dbFactory;
     private readonly ILogger<CertificateIssuanceService> _logger;
+    private readonly ISigningProvider _signingProvider;
 
-    public CertificateIssuanceService(IDbContextFactory<SigilDbContext> dbFactory, ILogger<CertificateIssuanceService> logger)
+    public CertificateIssuanceService(
+        IDbContextFactory<SigilDbContext> dbFactory,
+        ILogger<CertificateIssuanceService> logger,
+        ISigningProvider? signingProvider = null)
     {
         _dbFactory = dbFactory;
         _logger = logger;
+        _signingProvider = signingProvider ?? new LocalSigningProvider();
     }
+
+    /// <summary>
+    /// Whether the active signing provider is remote (keys don't leave the provider).
+    /// </summary>
+    public bool IsRemoteProvider => _signingProvider.ProviderName != "local";
 
     /// <summary>
     /// Issues a certificate based on the given request and template.
@@ -57,7 +69,8 @@ public class CertificateIssuanceService
         if (string.IsNullOrWhiteSpace(request.SubjectDn))
             return CertificateIssuanceResult.Failure("Subject DN is required.");
 
-        if (string.IsNullOrWhiteSpace(request.PfxPassword))
+        // PFX password is only required for local signing
+        if (!IsRemoteProvider && string.IsNullOrWhiteSpace(request.PfxPassword))
             return CertificateIssuanceResult.Failure("PFX password is required.");
 
         // Determine if self-signed (root CA)
@@ -72,6 +85,7 @@ public class CertificateIssuanceService
         // Load issuing CA if not self-signed
         X509Certificate2? issuingCert = null;
         CaCertificate? issuingCaEntity = null;
+        SigningKeyReference? issuerKeyRef = null;
 
         if (!isSelfSigned)
         {
@@ -79,20 +93,41 @@ public class CertificateIssuanceService
             if (issuingCaEntity == null)
                 return CertificateIssuanceResult.Failure("Issuing CA not found.");
 
-            if (issuingCaEntity.EncryptedPfxBytes == null || string.IsNullOrEmpty(issuingCaEntity.PfxPassword))
-                return CertificateIssuanceResult.Failure("Issuing CA does not have a private key. Import the PFX first.");
+            // Check if the issuing CA uses a remote signing provider
+            if (issuingCaEntity.StoreProviderHint?.StartsWith("vault-transit:") == true)
+            {
+                var vaultKeyName = issuingCaEntity.StoreProviderHint["vault-transit:".Length..];
+                issuerKeyRef = new SigningKeyReference(
+                    "vault-transit", vaultKeyName, issuingCaEntity.KeyAlgorithm, issuingCaEntity.KeySize);
 
-            try
-            {
-                issuingCert = X509CertificateLoader.LoadPkcs12(
-                    issuingCaEntity.EncryptedPfxBytes,
-                    issuingCaEntity.PfxPassword,
-                    X509KeyStorageFlags.Exportable);
+                // Load the cert (public only) for issuer DN and extensions
+                issuingCert = X509Certificate2.CreateFromPem(issuingCaEntity.X509CertificatePem);
             }
-            catch (Exception ex)
+            else
             {
-                return CertificateIssuanceResult.Failure($"Failed to load issuing CA private key: {ex.Message}");
+                // Local signing — need the PFX with private key
+                if (issuingCaEntity.EncryptedPfxBytes == null || string.IsNullOrEmpty(issuingCaEntity.PfxPassword))
+                    return CertificateIssuanceResult.Failure("Issuing CA does not have a private key. Import the PFX first.");
+
+                try
+                {
+                    issuingCert = X509CertificateLoader.LoadPkcs12(
+                        issuingCaEntity.EncryptedPfxBytes,
+                        issuingCaEntity.PfxPassword,
+                        X509KeyStorageFlags.Exportable);
+                }
+                catch (Exception ex)
+                {
+                    return CertificateIssuanceResult.Failure($"Failed to load issuing CA private key: {ex.Message}");
+                }
             }
+        }
+
+        // Route to remote signing path if using a remote provider
+        if (IsRemoteProvider || issuerKeyRef != null)
+        {
+            return await IssueCertificateRemoteAsync(
+                db, template, request, isSelfSigned, issuingCert, issuingCaEntity, issuerKeyRef);
         }
 
         try
@@ -425,6 +460,239 @@ public class CertificateIssuanceService
             existingCert.Dispose();
             parentCert?.Dispose();
         }
+    }
+
+    /// <summary>
+    /// Issues a certificate using a remote signing provider (Vault Transit, Cloud KMS).
+    /// Uses BouncyCastle's X509V3CertificateGenerator with a pluggable ISignatureFactory
+    /// so the private key never leaves the provider boundary.
+    /// </summary>
+    private async Task<CertificateIssuanceResult> IssueCertificateRemoteAsync(
+        SigilDbContext db,
+        CertificateTemplate template,
+        CertificateIssuanceRequest request,
+        bool isSelfSigned,
+        X509Certificate2? issuingCert,
+        CaCertificate? issuingCaEntity,
+        SigningKeyReference? issuerKeyRef)
+    {
+        try
+        {
+            var hashAlg = template.HashAlgorithm?.ToUpperInvariant() switch
+            {
+                "SHA384" => HashAlgorithmName.SHA384,
+                "SHA512" => HashAlgorithmName.SHA512,
+                _ => HashAlgorithmName.SHA256
+            };
+
+            // Generate new key in the remote provider
+            var newKeyRef = await _signingProvider.GenerateKeyAsync(
+                template.KeyAlgorithm, template.KeySize, template.EcdsaCurve);
+
+            // Get the public key to build extensions
+            using var publicKey = await _signingProvider.GetPublicKeyAsync(newKeyRef);
+
+            // Build extensions using the same logic as local path
+            var extensions = BuildExtensionsForRemote(template, request, publicKey, issuingCert);
+
+            // Determine validity
+            var notBefore = request.NotBefore ?? DateTimeOffset.UtcNow;
+            var notAfter = request.NotAfter ?? notBefore.AddDays(template.ValidityDays);
+            if (issuingCert != null && notAfter > issuingCert.NotAfter)
+                notAfter = new DateTimeOffset(issuingCert.NotAfter.ToUniversalTime(), TimeSpan.Zero);
+
+            // For self-signed: sign with own key. For CA-signed: sign with issuer's key.
+            var signingKeyRef = isSelfSigned ? newKeyRef : (issuerKeyRef ?? newKeyRef);
+
+            X509Certificate2 cert;
+            if (isSelfSigned)
+            {
+                cert = await RemoteCertificateBuilder.CreateSelfSignedAsync(
+                    _signingProvider, signingKeyRef, request.SubjectDn,
+                    notBefore, notAfter, extensions, hashAlg);
+            }
+            else
+            {
+                cert = await RemoteCertificateBuilder.CreateSignedAsync(
+                    _signingProvider, signingKeyRef, issuingCert!,
+                    publicKey, request.SubjectDn,
+                    notBefore, notAfter, extensions, hashAlg);
+            }
+
+            using (cert)
+            {
+                // Verify issuer relationship
+                if (!isSelfSigned)
+                {
+                    var issuerError = VerifyIssuedBy(cert, issuingCert!);
+                    if (issuerError != null)
+                        return CertificateIssuanceResult.Failure(issuerError);
+                }
+
+                var pem = cert.ExportCertificatePem();
+                var certName = string.IsNullOrWhiteSpace(request.CertificateName)
+                    ? ExtractCnFromDn(request.SubjectDn) ?? request.SubjectDn
+                    : request.CertificateName;
+
+                int keySize = GetKeySize(cert);
+                bool isCaType = template.CertificateType is CertificateType.RootCa or CertificateType.IntermediateCa;
+
+                if (isCaType)
+                {
+                    var caEntity = new CaCertificate
+                    {
+                        CommunityId = request.CommunityId,
+                        ParentId = isSelfSigned ? null : request.IssuingCaCertificateId,
+                        Name = certName,
+                        Subject = cert.Subject,
+                        X509CertificatePem = pem,
+                        EncryptedPfxBytes = null, // No PFX — key is in Vault
+                        PfxPassword = null,
+                        Thumbprint = cert.Thumbprint,
+                        SerialNumber = cert.SerialNumber,
+                        KeyAlgorithm = template.KeyAlgorithm,
+                        KeySize = keySize,
+                        NotBefore = cert.NotBefore.ToUniversalTime(),
+                        NotAfter = cert.NotAfter.ToUniversalTime(),
+                        CrlDistributionPoint = request.CdpUrl,
+                        AuthorityInfoAccessUri = request.AiaUrl,
+                        CertSecurityLevel = CertSecurityLevel.CloudKms,
+                        StoreProviderHint = $"{_signingProvider.ProviderName}:{newKeyRef.KeyIdentifier}",
+                    };
+
+                    db.CaCertificates.Add(caEntity);
+                    await db.SaveChangesAsync();
+
+                    return new CertificateIssuanceResult
+                    {
+                        Success = true,
+                        EntityId = caEntity.Id,
+                        EntityType = "CaCertificate",
+                        Thumbprint = cert.Thumbprint,
+                        SerialNumber = cert.SerialNumber
+                    };
+                }
+                else
+                {
+                    var sanString = request.SubjectAltNames.Count > 0
+                        ? string.Join(";", request.SubjectAltNames.Select(s => $"{s.Type}:{s.Value}"))
+                        : null;
+
+                    var issuedEntity = new IssuedCertificate
+                    {
+                        IssuingCaCertificateId = request.IssuingCaCertificateId!.Value,
+                        TemplateId = request.TemplateId,
+                        Name = certName,
+                        Subject = cert.Subject,
+                        SubjectAltNames = sanString,
+                        X509CertificatePem = pem,
+                        EncryptedPfxBytes = null, // No PFX — key is in Vault
+                        PfxPassword = null,
+                        Thumbprint = cert.Thumbprint,
+                        SerialNumber = cert.SerialNumber,
+                        KeyAlgorithm = template.KeyAlgorithm,
+                        KeySize = keySize,
+                        NotBefore = cert.NotBefore.ToUniversalTime(),
+                        NotAfter = cert.NotAfter.ToUniversalTime(),
+                    };
+
+                    db.IssuedCertificates.Add(issuedEntity);
+                    await db.SaveChangesAsync();
+
+                    return new CertificateIssuanceResult
+                    {
+                        Success = true,
+                        EntityId = issuedEntity.Id,
+                        EntityType = "IssuedCertificate",
+                        Thumbprint = cert.Thumbprint,
+                        SerialNumber = cert.SerialNumber
+                    };
+                }
+            }
+        }
+        catch (Exception ex)
+        {
+            return CertificateIssuanceResult.Failure($"Remote certificate generation failed: {ex.Message}");
+        }
+        finally
+        {
+            issuingCert?.Dispose();
+        }
+    }
+
+    /// <summary>
+    /// Builds X509Extensions for the remote signing path using .NET's extension types.
+    /// These are later converted to BouncyCastle format by RemoteCertificateBuilder.
+    /// </summary>
+    private static X509Extension[] BuildExtensionsForRemote(
+        CertificateTemplate template,
+        CertificateIssuanceRequest request,
+        AsymmetricAlgorithm subjectPublicKey,
+        X509Certificate2? issuingCert)
+    {
+        var extensions = new List<X509Extension>();
+
+        // BasicConstraints
+        bool hasPathLength = template.IsBasicConstraintsCa && template.PathLengthConstraint.HasValue;
+        extensions.Add(new X509BasicConstraintsExtension(
+            template.IsBasicConstraintsCa,
+            hasPathLength,
+            hasPathLength ? template.PathLengthConstraint!.Value : 0,
+            template.IsBasicConstraintsCritical));
+
+        // Key Usage
+        var keyUsage = (X509KeyUsageFlags)template.KeyUsageFlags;
+        extensions.Add(new X509KeyUsageExtension(keyUsage, template.IsKeyUsageCritical));
+
+        // Subject Key Identifier — need a temporary CertificateRequest to get the PublicKey
+        var tempRequest = subjectPublicKey is ECDsa ecdsa
+            ? new CertificateRequest("CN=temp", ecdsa, HashAlgorithmName.SHA256)
+            : new CertificateRequest("CN=temp", (RSA)subjectPublicKey, HashAlgorithmName.SHA256, RSASignaturePadding.Pkcs1);
+        extensions.Add(new X509SubjectKeyIdentifierExtension(tempRequest.PublicKey, false));
+
+        // Authority Key Identifier
+        if (issuingCert != null)
+        {
+            CertificateExtensionHelpers.AddAuthorityKeyIdentifierToList(issuingCert, extensions);
+        }
+
+        // Extended Key Usage
+        if (!string.IsNullOrWhiteSpace(template.ExtendedKeyUsageOids))
+        {
+            var oids = new OidCollection();
+            foreach (var oid in template.ExtendedKeyUsageOids.Split(';',
+                         StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries))
+                oids.Add(new Oid(oid));
+            if (oids.Count > 0)
+                extensions.Add(new X509EnhancedKeyUsageExtension(oids, template.IsExtendedKeyUsageCritical));
+        }
+
+        // CDP
+        if (template.IncludeCdp && !string.IsNullOrWhiteSpace(request.CdpUrl))
+            extensions.Add(CertificateExtensionHelpers.MakeCdp(request.CdpUrl));
+
+        // AIA
+        if (template.IncludeAia && !string.IsNullOrWhiteSpace(request.AiaUrl))
+            extensions.Add(CertificateExtensionHelpers.BuildAiaExtension(new Uri(request.AiaUrl)));
+
+        // SANs
+        if (request.SubjectAltNames.Count > 0)
+        {
+            var sanBuilder = new SubjectAlternativeNameBuilder();
+            foreach (var san in request.SubjectAltNames)
+            {
+                switch (san.Type)
+                {
+                    case SanType.Uri: sanBuilder.AddUri(new Uri(san.Value)); break;
+                    case SanType.Dns: sanBuilder.AddDnsName(san.Value); break;
+                    case SanType.Email: sanBuilder.AddEmailAddress(san.Value); break;
+                    case SanType.IpAddress: sanBuilder.AddIpAddress(System.Net.IPAddress.Parse(san.Value)); break;
+                }
+            }
+            extensions.Add(sanBuilder.Build());
+        }
+
+        return extensions.ToArray();
     }
 
     /// <summary>
