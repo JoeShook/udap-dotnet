@@ -446,7 +446,8 @@
                 <FluentLabel Typo="Typography.Subject" Style="margin-bottom: 0.5rem;">
                     @selectedCommunityName
                 </FluentLabel>
-                <FluentTreeView CurrentSelected="@selectedTreeItem"
+                <FluentTreeView @key="@treeVersion"
+                                CurrentSelected="@selectedTreeItem"
                                 CurrentSelectedChanged="OnTreeItemSelected">
                     @foreach (var root in treeNodes)
                     {
@@ -474,6 +475,10 @@
                                                     CustomColor="@(IsError(intermediate.Status) ? NodeColor(intermediate.Status) : "#1976d2")" />
                                         <CertBadge Status="@intermediate.Status" />
                                     </span>
+                                    @foreach (var subCa in intermediate.Children.Where(c => c.CertificateRole == "IntermediateCA"))
+                                    {
+                                        @RenderCaTreeItem(subCa)
+                                    }
                                     @foreach (var child in intermediate.Children.Where(c => c.CertificateRole == "EndEntity"))
                                     {
                                         <FluentTreeItem Text="@child.Name"
@@ -505,7 +510,6 @@
                                     }
                                 </FluentTreeItem>
                             }
-                            @* End-entity certs directly under root *@
                             @foreach (var issued in root.Children.Where(c => c.CertificateRole == "EndEntity"))
                             {
                                 <FluentTreeItem Text="@issued.Name"
@@ -521,7 +525,6 @@
                                     </span>
                                 </FluentTreeItem>
                             }
-                            @* CRLs directly under root *@
                             @foreach (var crl in root.Children.Where(c => c.CertificateRole == "CRL"))
                             {
                                 <FluentTreeItem Text="@crl.Name"
@@ -648,9 +651,9 @@
                         {
                             <FluentAnchor Href="@GetPfxDownloadUrl()"
                                           Appearance="Appearance.Outline"
-                                          title="Download certificate + private key (.pfx)">
+                                          title="Download certificate + private key (.p12)">
                                 <FluentIcon Value="@(new Icons.Regular.Size16.ArrowDownload())" />
-                                .pfx
+                                .p12
                             </FluentAnchor>
                         }
                         <FluentButton Appearance="Appearance.Outline"
@@ -923,4 +926,66 @@ else if (CommunityId > 0 && !showDropZone)
             <FluentAnchor Href="javascript:void(0)" OnClick="@(() => showDropZone = true)">Import a certificate</FluentAnchor> to get started.
         </p>
     </FluentCard>
+}
+
+@code {
+    private RenderFragment RenderCaTreeItem(CertificateChainNodeViewModel caNode) => __builder =>
+    {
+        <FluentTreeItem Text="@caNode.Name"
+                        @key="@($"ca-{caNode.Id}")"
+                        Id="@($"tree-{caNode.Thumbprint}")"
+                        Data="@caNode"
+                        InitiallyExpanded="true"
+                        Style="@(IsError(caNode.Status) ? $"color: {NodeColor(caNode.Status)};" : "")">
+            <span slot="start" style="display: flex; align-items: center; gap: 0.35rem;">
+                @if (caNode.CertificateRole == "RootCA")
+                {
+                    <FluentIcon Value="@(new Icons.Regular.Size16.ShieldKeyhole())" Color="Color.Custom"
+                                CustomColor="@(IsError(caNode.Status) ? NodeColor(caNode.Status) : "#2d6a4f")" />
+                }
+                else
+                {
+                    <FluentIcon Value="@(new Icons.Regular.Size16.Shield())" Color="Color.Custom"
+                                CustomColor="@(IsError(caNode.Status) ? NodeColor(caNode.Status) : "#1976d2")" />
+                }
+                <CertBadge Status="@caNode.Status" />
+            </span>
+            @* Recursive: sub-CA nodes *@
+            @foreach (var subCa in caNode.Children.Where(c => c.CertificateRole is "IntermediateCA" or "RootCA"))
+            {
+                @RenderCaTreeItem(subCa)
+            }
+            @* End-entity certs *@
+            @foreach (var issued in caNode.Children.Where(c => c.CertificateRole == "EndEntity"))
+            {
+                <FluentTreeItem Text="@issued.Name"
+                                @key="@($"ee-{issued.Id}")"
+                                Id="@($"tree-{issued.Thumbprint}")"
+                                Data="@issued"
+                                Style="@(IsError(issued.Status) ? $"color: {NodeColor(issued.Status)};" : "")">
+                    <span slot="start" style="display: flex; align-items: center; gap: 0.35rem;">
+                        <FluentIcon Value="@(new Icons.Regular.Size16.Certificate())" Color="Color.Custom"
+                                    CustomColor="@(IsError(issued.Status) ? NodeColor(issued.Status) : "")"
+                                    Style="@(IsError(issued.Status) ? "" : "opacity: 0.7;")" />
+                        <CertBadge Status="@issued.Status" />
+                    </span>
+                </FluentTreeItem>
+            }
+            @* CRL nodes *@
+            @foreach (var crl in caNode.Children.Where(c => c.CertificateRole == "CRL"))
+            {
+                <FluentTreeItem Text="@crl.Name"
+                                @key="@($"crl-{crl.Id}")"
+                                Data="@crl"
+                                Style="@(IsError(crl.Status) ? $"color: {NodeColor(crl.Status)};" : "font-style: italic; opacity: 0.8;")">
+                    <span slot="start" style="display: flex; align-items: center; gap: 0.35rem;">
+                        <FluentIcon Value="@(new Icons.Regular.Size16.DocumentBulletList())" Color="Color.Custom"
+                                    CustomColor="@(IsError(crl.Status) ? NodeColor(crl.Status) : "")"
+                                    Style="@(IsError(crl.Status) ? "" : "opacity: 0.6;")" />
+                        <CrlBadge Status="@(crl.Status == CertificateStatus.Expired ? CrlTimeStatus.Expired : crl.Status == CertificateStatus.Expiring ? CrlTimeStatus.ExpiringSoon : CrlTimeStatus.Valid)" />
+                    </span>
+                </FluentTreeItem>
+            }
+        </FluentTreeItem>
+    };
 }

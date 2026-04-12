@@ -49,6 +49,7 @@ public partial class CertificateExplorer
     private bool selectedNodeHasPrivateKey;
     private List<string> subjectAltNames = new();
     private FluentTreeItem? selectedTreeItem;
+    private int treeVersion;
     private bool isRevalidating;
     private Dictionary<string, ChainValidationResult> communityValidations = new();
 
@@ -145,13 +146,18 @@ public partial class CertificateExplorer
         var community = await db.Communities.FindAsync(communityId);
         selectedCommunityName = community?.Name ?? "Unknown";
 
+        // Load ALL CAs for this community in a flat list — EF will fix up
+        // the navigation properties (Parent/Children) automatically since
+        // all entities are in the same DbContext tracking scope.
         var caCerts = await db.CaCertificates
             .Where(ca => ca.CommunityId == communityId)
-            .Include(ca => ca.Children)
             .Include(ca => ca.IssuedCertificates)
             .Include(ca => ca.Crls)
             .OrderBy(ca => ca.Name)
             .ToListAsync();
+
+        // EF relationship fix-up populates ca.Children for all loaded entities,
+        // so BuildTreeNode's recursive walk works at any depth.
 
         // Validate all certs in one pass (parses CAs once, stored CRLs only)
         communityValidations = await ChainValidator.ValidateCommunityAsync(communityId);
@@ -161,6 +167,8 @@ public partial class CertificateExplorer
             .Select(rootCa => BuildTreeNode(rootCa, caCerts, communityValidations))
             .ToList();
 
+        treeVersion++;
+        selectedTreeItem = null;
         selectedNode = null;
         selectedCert?.Dispose();
         selectedCert = null;
@@ -439,8 +447,8 @@ public partial class CertificateExplorer
     {
         if (selectedNode == null) return "#";
         return selectedNode.EntityType == "CaCertificate"
-            ? $"/api/ca/{selectedNode.Id}/download/pfx"
-            : $"/api/issued/{selectedNode.Id}/download/pfx";
+            ? $"/api/ca/{selectedNode.Id}/download/p12"
+            : $"/api/issued/{selectedNode.Id}/download/p12";
     }
 
     private async Task<int?> FindCaBySkiAsync(SigilDbContext db, string authorityKeyIdentifier)
@@ -929,11 +937,16 @@ public partial class CertificateExplorer
         await db.SaveChangesAsync();
         ToastService.ShowCopyableSuccess($"Deleted '{selectedNode.Name}'");
 
+        // Clear all selection state including the FluentTreeItem reference
+        // to prevent the tree view from holding a stale DOM reference
+        selectedTreeItem = null;
         selectedNode = null;
         selectedCert?.Dispose();
         selectedCert = null;
         selectedCrl = null;
         chainValidation = null;
+        asn1Root = null;
+        CloseIssuerDetails();
 
         await LoadCommunityTreeAsync(CommunityId);
     }
@@ -2015,6 +2028,42 @@ public partial class CertificateExplorer
         }
 
         await ShowIssuanceDialog(issuingCaId, issuingCaName);
+
+        // Pre-select a template matching the original cert's role
+        var targetType = selectedNode.CertificateRole switch
+        {
+            "RootCA" => CertificateType.RootCa,
+            "IntermediateCA" => CertificateType.IntermediateCa,
+            "EndEntity" => CertificateType.EndEntityClient, // default to client for end-entity
+            _ => CertificateType.EndEntityClient
+        };
+
+        // Try to match the original cert's template if it had one
+        if (selectedNode.CertificateRole == "EndEntity")
+        {
+            var issued = await db.IssuedCertificates.FindAsync(selectedNode.Id);
+            if (issued?.TemplateId != null)
+            {
+                var match = availableTemplates.FirstOrDefault(t => t.Id == issued.TemplateId);
+                if (match != null)
+                {
+                    selectedTemplate = match;
+                    OnTemplateSelected(match);
+                }
+            }
+        }
+
+        // Fallback: match by cert type
+        if (selectedTemplate == null || selectedTemplate.CertificateType != targetType)
+        {
+            var match = availableTemplates.FirstOrDefault(t => t.CertificateType == targetType)
+                        ?? availableTemplates.FirstOrDefault();
+            if (match != null)
+            {
+                selectedTemplate = match;
+                OnTemplateSelected(match);
+            }
+        }
 
         // Pre-fill from existing cert
         issuanceSubjectDn = selectedCert.Subject;

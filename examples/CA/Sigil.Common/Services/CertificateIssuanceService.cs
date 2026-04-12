@@ -12,6 +12,7 @@ using System.Net;
 using System.Security.Cryptography;
 using System.Security.Cryptography.X509Certificates;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Logging;
 using Sigil.Common.Data;
 using Sigil.Common.Data.Entities;
 using Sigil.Common.ViewModels;
@@ -26,10 +27,12 @@ namespace Sigil.Common.Services;
 public class CertificateIssuanceService
 {
     private readonly IDbContextFactory<SigilDbContext> _dbFactory;
+    private readonly ILogger<CertificateIssuanceService> _logger;
 
-    public CertificateIssuanceService(IDbContextFactory<SigilDbContext> dbFactory)
+    public CertificateIssuanceService(IDbContextFactory<SigilDbContext> dbFactory, ILogger<CertificateIssuanceService> logger)
     {
         _dbFactory = dbFactory;
+        _logger = logger;
     }
 
     /// <summary>
@@ -369,6 +372,9 @@ public class CertificateIssuanceService
 
                 // Update the existing entity in-place so all child relationships
                 // (issued certs, CRLs, sub-CAs) remain attached to this CA.
+                _logger.LogInformation("Re-sign: updating CA entity Id={Id} in-place (EntityState={State})",
+                    caEntity.Id, db.Entry(caEntity).State);
+
                 caEntity.X509CertificatePem = pem;
                 caEntity.EncryptedPfxBytes = pfxBytes;
                 caEntity.PfxPassword = request.PfxPassword;
@@ -377,7 +383,12 @@ public class CertificateIssuanceService
                 caEntity.NotBefore = newCert.NotBefore.ToUniversalTime();
                 caEntity.NotAfter = newCert.NotAfter.ToUniversalTime();
 
+                _logger.LogInformation("Re-sign: after property update EntityState={State}, NotAfter={NotAfter}",
+                    db.Entry(caEntity).State, caEntity.NotAfter);
+
                 await db.SaveChangesAsync();
+
+                _logger.LogInformation("Re-sign: SaveChanges complete for CA Id={Id}", caEntity.Id);
 
                 return new CertificateIssuanceResult
                 {

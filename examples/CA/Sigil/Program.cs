@@ -99,13 +99,13 @@ try
         return Results.File(cerBytes, "application/x-pem-file", $"{ca.Name}.cer");
     });
 
-    app.MapGet("/api/ca/{id}/download/pfx", async (int id, IDbContextFactory<SigilDbContext> dbFactory) =>
+    app.MapGet("/api/ca/{id}/download/p12", async (int id, IDbContextFactory<SigilDbContext> dbFactory) =>
     {
         await using var db = await dbFactory.CreateDbContextAsync();
         var ca = await db.CaCertificates.FindAsync(id);
         if (ca?.EncryptedPfxBytes == null) return Results.NotFound("No private key available");
 
-        return Results.File(ca.EncryptedPfxBytes, "application/x-pkcs12", $"{ca.Name}.pfx");
+        return Results.File(ca.EncryptedPfxBytes, "application/x-pkcs12", $"{ca.Name}.p12");
     });
 
     app.MapGet("/api/issued/{id}/download/cer", async (int id, IDbContextFactory<SigilDbContext> dbFactory) =>
@@ -118,13 +118,13 @@ try
         return Results.File(cerBytes, "application/x-pem-file", $"{cert.Name}.cer");
     });
 
-    app.MapGet("/api/issued/{id}/download/pfx", async (int id, IDbContextFactory<SigilDbContext> dbFactory) =>
+    app.MapGet("/api/issued/{id}/download/p12", async (int id, IDbContextFactory<SigilDbContext> dbFactory) =>
     {
         await using var db = await dbFactory.CreateDbContextAsync();
         var cert = await db.IssuedCertificates.FindAsync(id);
         if (cert?.EncryptedPfxBytes == null) return Results.NotFound("No private key available");
 
-        return Results.File(cert.EncryptedPfxBytes, "application/x-pkcs12", $"{cert.Name}.pfx");
+        return Results.File(cert.EncryptedPfxBytes, "application/x-pkcs12", $"{cert.Name}.p12");
     });
 
     app.MapGet("/api/crl/{id}/download", async (int id, IDbContextFactory<SigilDbContext> dbFactory) =>
