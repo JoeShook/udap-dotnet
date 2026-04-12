@@ -61,7 +61,12 @@
 - **Online CRL resolution** via CDP (CRL Distribution Points) extension
 - Parallel async CRL downloads with 5-second timeout per download
 - Pre-computed validation results during tree load (batch validation)
-- On-demand revalidation button
+- On-demand revalidation button ("Revalidate" — uses stored CRLs from database)
+- **Online-only validation** ("Validate Online" — resolves intermediates via AIA, CRLs via CDP only, no database CRLs)
+  - Simulates external relying party behavior
+  - Issuer resolution via AIA `caIssuers` OID (1.3.6.1.5.5.7.48.2)
+  - "Issuer resolved via AIA" annotation in chain display
+  - CRL check runs after issuer resolution (CRL signature verified against issuer's public key)
 - CRL status indicators: CRL OK, Revoked, No CRL, CRL Expired, CRL Fetch Failed
 - Downloaded CRL source URL display
 
@@ -74,12 +79,43 @@
 - `GET /api/issued/{id}/download/pem` — PEM format (.pem extension)
 - `GET /api/crl/{id}/download` — DER-encoded CRL
 
+### Dashboard (Home Page)
+- **Quick stats**: Community count, CA count, Issued cert count, Template count
+- **Community health cards**: Per-community summary with CA/Issued counts, expired/expiring/overdue CRL counts, healthy indicator
+- **Expiring certificates table**: Certs within 60 days of expiry (not yet expired), sorted by NotAfter
+- **Expired certificates table**: Most recent 20 expired certs
+- **Overdue CRLs table**: CRLs past NextUpdate, sorted by days overdue
+- **Revoked certificate count**
+- **Deep-linking**: Clickable names navigate to `/explorer/{communityId}?thumbprint={thumbprint}` for auto-selection
+- All tables filter out archived items
+
+### Certificate Management
+- **Rename**: Inline rename of certificate display name (pencil icon, Enter to save, Escape to cancel)
+- **Archive** (soft-delete): Hides certificate/CRL from tree, preserves in database with `IsArchived` + `ArchivedAt` timestamp
+- **Permanent delete**: Full removal from database with cascade cleanup (CRLs, revocations)
+  - Safety check: CAs with children or issued certs cannot be deleted until dependents are removed/moved
+- **Move**: Relocate certificates between communities with AKI/SKI chain re-linking
+
+### Pre-issuance Validation
+- **CDP/AIA URL validation**: HEAD requests to verify endpoints are reachable (5s timeout)
+- Warns about missing CDP/AIA when template has them enabled
+- Warns about unreachable endpoints with HTTP status or error details
+- User can proceed anyway or cancel to fix URLs
+- **Template URL token expansion**: `{CAName}` replaced with issuing CA name in CDP/AIA URL templates
+
+### Issuer Verification (Backend)
+- **Signature verification guard** (`CertificateIssuanceService.VerifyIssuedBy`): BouncyCastle DN match + signature verification
+- Validates before saving in: issuance, re-sign, manual CA assignment during import, and confirmed import
+- Prevents certificates from being linked to a CA that didn't sign them
+
 ### UI
 - Dark/light theme toggle with FluentDesignTheme
 - Collapsible navigation menu (FluentNavMenu)
 - Draggable splitter between tree and detail panels
 - Copyable toast notifications (icon-only copy button on error/warning toasts, 15s timeout)
 - Communication toasts for success messages (5s timeout)
+- **Loading indicator**: Progress ring with "Loading certificates..." shown during tree load
+- **Deep-link auto-selection**: Thumbprint query parameter consumed once, then cleared from URL to prevent stale state
 
 ---
 

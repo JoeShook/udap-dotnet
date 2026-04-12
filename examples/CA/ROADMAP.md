@@ -2,7 +2,7 @@
 
 **Vision**: A modern, .NET-native Certificate Authority and PKI management platform with first-class UDAP/FHIR support. Lightweight enough for dev/test, capable enough for production.
 
-## Phase 1: Foundation (Current — In Progress)
+## Phase 1: Foundation (Complete)
 - [x] Project scaffolding (Blazor Server, FluentUI v4, PostgreSQL, Serilog)
 - [x] Data model: Community, CaCertificate (self-ref hierarchy), IssuedCertificate, CRL, CertificateRevocation, CertificateTemplate, Job/JobExecution
 - [x] Certificate Explorer: tree view + detail panel (extensions, SANs, general info)
@@ -11,18 +11,18 @@
 - [x] Bulk import from PKI generator certstores directory
 - [x] Communities page (CRUD)
 - [x] ASN.1 structure viewer (collapsible tree with OID friendly names, parsed values)
-- [ ] Dashboard page (expiry warnings, community summary, recent activity)
+- [x] Dashboard page (expiry warnings, community summary, deep-linking to certs)
 
-## Phase 2: Certificate Issuance & Templates
-- [ ] Template CRUD page with preset profiles (Root CA, Intermediate CA, UDAP Client, SSL Server)
-- [ ] Certificate generation engine using .NET CertificateRequest + BouncyCastle
-- [ ] "Issue Certificate" flow from Explorer: select issuing CA → pick template → fill subject/SANs → generate
-- [ ] Root CA self-signed generation
-- [ ] Intermediate CA generation (signed by parent)
-- [ ] End-entity cert generation with full extension control
-- [ ] ECDSA support alongside RSA
-- [ ] Certificate download (.pfx, .cer, .pem)
-- [ ] Certificate renewal (re-issue with same subject/SANs, new key, new validity)
+## Phase 2: Certificate Issuance & Templates (Complete)
+- [x] Template CRUD page with preset profiles (Root CA, Intermediate CA, UDAP Client, SSL Server)
+- [x] Certificate generation engine using .NET CertificateRequest + BouncyCastle
+- [x] "Issue Certificate" flow from Explorer: select issuing CA → pick template → fill subject/SANs → generate
+- [x] Root CA self-signed generation
+- [x] Intermediate CA generation (signed by parent)
+- [x] End-entity cert generation with full extension control
+- [x] ECDSA support alongside RSA
+- [x] Certificate download (.pfx, .cer, .pem)
+- [x] Certificate renewal (re-key with new key pair, re-sign with same key)
 
 ## Phase 3: Revocation & CRL Management
 - [ ] Revoke certificate action from Explorer (select reason code)
@@ -100,13 +100,13 @@
 - [ ] Certificate hold / unrevoke (reason code 6)
 - [ ] Name constraints (permitted/excluded subtrees)
 - [ ] Policy mapping between communities
-- [ ] Certificate archival (soft delete with retention)
+- [x] Certificate archival (soft delete with retention)
 - [ ] Subordinate CA provisioning (issue sub-CA certs for external CAs)
 - [ ] Multi-algorithm support (RSA, ECDSA, Ed25519, Ed448)
 
 ## Architecture Notes
 - **Stack**: .NET 10+, Blazor Server (InteractiveServer), FluentUI v4, PostgreSQL, BouncyCastle, Serilog
-- **Location**: `examples/Sigil/` in udap-dotnet repo
+- **Location**: `examples/CA/` in udap-dotnet repo
 - **UI patterns**: Follow TouchStoneNginxProxy and MimeScope (FluentUI v4, code-behind, dark theme)
 - **Communities**: Generic PKI hierarchy separator, not tied to UDAP semantics
 - **Key principle**: Import-first + generate. Support both bringing in existing PKI and creating new hierarchies.
