@@ -68,8 +68,17 @@ public class CertificateIssuanceRequest
 
     /// <summary>
     /// Password for the exported PFX (PKCS#12) file containing the private key.
+    /// Not required when using a remote signing provider (e.g. Vault Transit).
     /// </summary>
     public string PfxPassword { get; set; } = string.Empty;
+
+    /// <summary>
+    /// Override for the signing provider to use for this request.
+    /// "local" = PFX-based local signing (default).
+    /// "vault-transit" = HashiCorp Vault Transit remote signing.
+    /// Null = use the globally configured provider.
+    /// </summary>
+    public string? SigningProviderOverride { get; set; }
 }
 
 /// <summary>

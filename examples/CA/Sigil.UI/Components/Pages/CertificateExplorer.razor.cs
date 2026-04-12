@@ -17,6 +17,7 @@ using Microsoft.JSInterop;
 using Sigil.Common.Data;
 using Sigil.Common.Data.Entities;
 using Sigil.Common.Services;
+using Sigil.Common.Services.Signing;
 using Sigil.Common.ViewModels;
 using Sigil.UI.Services;
 
@@ -35,6 +36,7 @@ public partial class CertificateExplorer
     [Inject] private CrlImportService CrlImporter { get; set; } = null!;
     [Inject] private ChainValidationService ChainValidator { get; set; } = null!;
     [Inject] private CertificateIssuanceService IssuanceService { get; set; } = null!;
+    [Inject] private ISigningProvider SigningProvider { get; set; } = null!;
     [Inject] private IHttpClientFactory HttpClientFactory { get; set; } = null!;
     [Inject] private IJSRuntime JS { get; set; } = null!;
     [Inject] private NavigationManager Navigation { get; set; } = null!;
@@ -115,6 +117,7 @@ public partial class CertificateExplorer
     private string issuanceAiaUrl = string.Empty;
     private List<IssuanceSanEntry> issuanceSans = new();
     private string issuancePfxPassword = string.Empty;
+    private string issuanceKeyStorage = "local"; // "local" or "vault-transit"
     private bool isRenewMode;
     private List<IssuanceSanEntry> renewalSans = new();
     private string renewalSubjectDn = string.Empty;
@@ -2113,6 +2116,7 @@ public partial class CertificateExplorer
 
         issuanceSans.Clear();
         issuancePfxPassword = string.Empty;
+        issuanceKeyStorage = "local";
         issuanceCertName = string.Empty;
         issuanceSubjectDn = string.Empty;
         isIssuing = false;
@@ -2225,6 +2229,7 @@ public partial class CertificateExplorer
                 NotBefore = issuanceNotBeforeNullable.HasValue ? new DateTimeOffset(issuanceNotBeforeNullable.Value, TimeSpan.Zero) : null,
                 NotAfter = issuanceNotAfterNullable.HasValue ? new DateTimeOffset(issuanceNotAfterNullable.Value, TimeSpan.Zero) : null,
                 PfxPassword = issuancePfxPassword,
+                SigningProviderOverride = issuanceKeyStorage,
             };
 
             var result = await IssuanceService.IssueCertificateAsync(request);

@@ -342,11 +342,32 @@
                 Add SAN
             </FluentButton>
 
-            @* PFX Password *@
-            <FluentTextField @bind-Value="issuancePfxPassword"
-                             Label="PFX Password (for private key storage)"
-                             TextFieldType="TextFieldType.Password"
-                             Style="width: 100%;" />
+            @* Key Storage *@
+            @if (SigningProvider.ProviderName != "local")
+            {
+                <FluentSelect TOption="string"
+                              Items="@(new[] { "local", "vault-transit" })"
+                              OptionText="@(s => s == "local" ? "Local (PFX)" : "Vault Transit (remote signing)")"
+                              @bind-SelectedOption="issuanceKeyStorage"
+                              Label="Key Storage"
+                              Style="width: 100%;" />
+            }
+
+            @* PFX Password — only for local key storage *@
+            @if (issuanceKeyStorage == "local")
+            {
+                <FluentTextField @bind-Value="issuancePfxPassword"
+                                 Label="PFX Password (for private key storage)"
+                                 TextFieldType="TextFieldType.Password"
+                                 Style="width: 100%;" />
+            }
+            else
+            {
+                <div style="border: 1px solid var(--neutral-stroke-rest); border-radius: 4px; padding: 0.5rem; font-size: 0.8rem; color: var(--accent-fill-rest);">
+                    <FluentIcon Value="@(new Icons.Regular.Size16.ShieldKeyhole())" Style="vertical-align: middle;" />
+                    Private key will be generated and stored in Vault Transit — it never leaves the provider.
+                </div>
+            }
 
             @* Template summary *@
             @if (selectedTemplate != null)
@@ -377,7 +398,7 @@
     </FluentDialogBody>
     <FluentDialogFooter>
         <FluentButton Appearance="Appearance.Accent" OnClick="IssueCertificateAsync"
-                      Disabled="@(isIssuing || string.IsNullOrWhiteSpace(issuanceSubjectDn) || string.IsNullOrWhiteSpace(issuancePfxPassword) || selectedTemplate == null)">
+                      Disabled="@(isIssuing || string.IsNullOrWhiteSpace(issuanceSubjectDn) || (issuanceKeyStorage == "local" && string.IsNullOrWhiteSpace(issuancePfxPassword)) || selectedTemplate == null)">
             @(isIssuing ? "Generating..." : "Generate Certificate")
         </FluentButton>
         <FluentButton Appearance="Appearance.Outline" OnClick="@(() => issuanceDialogHidden = true)"

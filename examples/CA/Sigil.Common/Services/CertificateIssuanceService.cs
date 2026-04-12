@@ -69,8 +69,13 @@ public class CertificateIssuanceService
         if (string.IsNullOrWhiteSpace(request.SubjectDn))
             return CertificateIssuanceResult.Failure("Subject DN is required.");
 
+        // Determine effective signing mode for this request
+        bool useRemoteSigning = request.SigningProviderOverride != null
+            ? request.SigningProviderOverride != "local"
+            : IsRemoteProvider;
+
         // PFX password is only required for local signing
-        if (!IsRemoteProvider && string.IsNullOrWhiteSpace(request.PfxPassword))
+        if (!useRemoteSigning && string.IsNullOrWhiteSpace(request.PfxPassword))
             return CertificateIssuanceResult.Failure("PFX password is required.");
 
         // Determine if self-signed (root CA)
@@ -124,7 +129,7 @@ public class CertificateIssuanceService
         }
 
         // Route to remote signing path if using a remote provider
-        if (IsRemoteProvider || issuerKeyRef != null)
+        if (useRemoteSigning || issuerKeyRef != null)
         {
             return await IssueCertificateRemoteAsync(
                 db, template, request, isSelfSigned, issuingCert, issuingCaEntity, issuerKeyRef);
