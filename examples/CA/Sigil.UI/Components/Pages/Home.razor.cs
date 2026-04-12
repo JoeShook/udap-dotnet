@@ -86,7 +86,7 @@ public partial class Home
 
         // Expiring certs (within 60 days, not yet expired)
         var expiringCas = await db.CaCertificates
-            .Where(c => c.NotAfter > now && c.NotAfter <= expiringSoonThreshold)
+            .Where(c => c.NotAfter > now && c.NotAfter <= expiringSoonThreshold && !c.IsArchived)
             .Select(c => new CertRow
             {
                 Name = c.Name,
@@ -101,7 +101,7 @@ public partial class Home
             .ToListAsync();
 
         var expiringIssued = await db.IssuedCertificates
-            .Where(i => i.NotAfter > now && i.NotAfter <= expiringSoonThreshold && !i.IsRevoked)
+            .Where(i => i.NotAfter > now && i.NotAfter <= expiringSoonThreshold && !i.IsRevoked && !i.IsArchived)
             .Select(i => new CertRow
             {
                 Name = i.Name,
@@ -121,7 +121,7 @@ public partial class Home
 
         // Expired certs (most recent 20)
         var expiredCas = await db.CaCertificates
-            .Where(c => c.NotAfter <= now)
+            .Where(c => c.NotAfter <= now && !c.IsArchived)
             .Select(c => new CertRow
             {
                 Name = c.Name,
@@ -136,7 +136,7 @@ public partial class Home
             .ToListAsync();
 
         var expiredIssued = await db.IssuedCertificates
-            .Where(i => i.NotAfter <= now && !i.IsRevoked)
+            .Where(i => i.NotAfter <= now && !i.IsRevoked && !i.IsArchived)
             .Select(i => new CertRow
             {
                 Name = i.Name,
@@ -157,7 +157,7 @@ public partial class Home
 
         // Overdue CRLs
         overdueCrls = await db.Crls
-            .Where(c => c.NextUpdate < now)
+            .Where(c => c.NextUpdate < now && !c.IsArchived)
             .Select(c => new CrlRow
             {
                 CrlNumber = c.CrlNumber,

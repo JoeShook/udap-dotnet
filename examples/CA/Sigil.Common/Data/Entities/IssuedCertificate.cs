@@ -35,5 +35,7 @@ public class IssuedCertificate
     public bool IsRevoked { get; set; }
     public DateTime? RevokedAt { get; set; }
     public bool Enabled { get; set; } = true;
+    public bool IsArchived { get; set; }
+    public DateTime? ArchivedAt { get; set; }
     public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
 }

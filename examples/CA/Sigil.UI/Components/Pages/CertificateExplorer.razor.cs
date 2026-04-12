@@ -53,6 +53,7 @@ public partial class CertificateExplorer
     private List<string> subjectAltNames = new();
     private FluentTreeItem? selectedTreeItem;
     private int treeVersion;
+    private bool isLoadingTree;
     private bool isRevalidating;
     private bool isValidatingOnline;
     private bool pendingHighlight;
@@ -177,6 +178,9 @@ public partial class CertificateExplorer
 
     private async Task LoadCommunityTreeAsync(int communityId)
     {
+        isLoadingTree = true;
+        StateHasChanged();
+
         await using var db = await DbFactory.CreateDbContextAsync();
 
         var community = await db.Communities.FindAsync(communityId);
@@ -186,9 +190,9 @@ public partial class CertificateExplorer
         // the navigation properties (Parent/Children) automatically since
         // all entities are in the same DbContext tracking scope.
         var caCerts = await db.CaCertificates
-            .Where(ca => ca.CommunityId == communityId)
-            .Include(ca => ca.IssuedCertificates)
-            .Include(ca => ca.Crls)
+            .Where(ca => ca.CommunityId == communityId && !ca.IsArchived)
+            .Include(ca => ca.IssuedCertificates.Where(i => !i.IsArchived))
+            .Include(ca => ca.Crls.Where(c => !c.IsArchived))
             .OrderBy(ca => ca.Name)
             .ToListAsync();
 
@@ -212,6 +216,7 @@ public partial class CertificateExplorer
         chainValidation = null;
         asn1Root = null;
         subjectAltNames.Clear();
+        isLoadingTree = false;
     }
 
     private static CertificateChainNodeViewModel BuildTreeNode(
@@ -1037,32 +1042,33 @@ public partial class CertificateExplorer
         if (selectedNode == null) return;
 
         var dialog = await DialogService.ShowConfirmationAsync(
-            $"Delete '{selectedNode.Name}'? This cannot be undone.",
-            "Delete", "Cancel", "Confirm Delete");
+            $"Archive '{selectedNode.Name}'? It will be hidden from the tree but preserved in the database.",
+            "Archive", "Cancel", "Confirm Archive");
         var result = await dialog.Result;
 
         if (result.Cancelled) return;
 
         await using var db = await DbFactory.CreateDbContextAsync();
+        var now = DateTime.UtcNow;
 
         switch (selectedNode.EntityType)
         {
             case "CaCertificate":
                 var ca = await db.CaCertificates.FindAsync(selectedNode.Id);
-                if (ca != null) { db.CaCertificates.Remove(ca); }
+                if (ca != null) { ca.IsArchived = true; ca.ArchivedAt = now; }
                 break;
             case "IssuedCertificate":
                 var issued = await db.IssuedCertificates.FindAsync(selectedNode.Id);
-                if (issued != null) { db.IssuedCertificates.Remove(issued); }
+                if (issued != null) { issued.IsArchived = true; issued.ArchivedAt = now; }
                 break;
             case "Crl":
                 var crl = await db.Crls.FindAsync(selectedNode.Id);
-                if (crl != null) { db.Crls.Remove(crl); }
+                if (crl != null) { crl.IsArchived = true; crl.ArchivedAt = now; }
                 break;
         }
 
         await db.SaveChangesAsync();
-        ToastService.ShowCopyableSuccess($"Deleted '{selectedNode.Name}'");
+        ToastService.ShowCopyableSuccess($"Archived '{selectedNode.Name}'");
 
         // Clear all selection state including the FluentTreeItem reference
         // to prevent the tree view from holding a stale DOM reference

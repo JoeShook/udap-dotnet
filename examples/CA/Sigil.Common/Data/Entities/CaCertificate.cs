@@ -46,6 +46,8 @@ public class CaCertificate
     public CertSecurityLevel CertSecurityLevel { get; set; } = CertSecurityLevel.Software;
     public string? StoreProviderHint { get; set; }
     public bool Enabled { get; set; } = true;
+    public bool IsArchived { get; set; }
+    public DateTime? ArchivedAt { get; set; }
     public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
 
     public bool IsRootCa => ParentId == null;

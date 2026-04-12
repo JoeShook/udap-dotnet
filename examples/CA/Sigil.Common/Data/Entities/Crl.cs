@@ -55,6 +55,8 @@ public class Crl
     /// </summary>
     public bool SignatureValid { get; set; }
 
+    public bool IsArchived { get; set; }
+    public DateTime? ArchivedAt { get; set; }
     public DateTime ImportedAt { get; set; } = DateTime.UtcNow;
 
     public ICollection<CertificateRevocation> Revocations { get; set; } = new List<CertificateRevocation>();
