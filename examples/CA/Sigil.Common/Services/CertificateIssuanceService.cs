@@ -128,11 +128,21 @@ public class CertificateIssuanceService
             }
         }
 
-        // Route to remote signing path if using a remote provider
-        if (useRemoteSigning || issuerKeyRef != null)
+        // Route to appropriate signing path:
+        // 1. Full remote: new cert key AND signing both in remote provider
+        // 2. Hybrid: new cert key is LOCAL (PFX), but issuer signs via remote provider (Vault Transit)
+        // 3. Full local: both key and signing are local (existing code below)
+        if (useRemoteSigning)
         {
             return await IssueCertificateRemoteAsync(
                 db, template, request, isSelfSigned, issuingCert, issuingCaEntity, issuerKeyRef);
+        }
+
+        if (issuerKeyRef != null)
+        {
+            // Hybrid: local key + remote signing (e.g., end-entity with PFX, signed by Vault CA)
+            return await IssueCertificateHybridAsync(
+                db, template, request, issuingCert!, issuingCaEntity!, issuerKeyRef);
         }
 
         try
@@ -624,6 +634,155 @@ public class CertificateIssuanceService
         finally
         {
             issuingCert?.Dispose();
+        }
+    }
+
+    /// <summary>
+    /// Issues a certificate with a LOCAL private key but signed by a REMOTE provider (Vault Transit).
+    /// This is the hybrid path: the end-entity gets a PFX (exportable private key),
+    /// while the issuing CA's signature comes from the remote signing provider.
+    /// </summary>
+    private async Task<CertificateIssuanceResult> IssueCertificateHybridAsync(
+        SigilDbContext db,
+        CertificateTemplate template,
+        CertificateIssuanceRequest request,
+        X509Certificate2 issuingCert,
+        CaCertificate issuingCaEntity,
+        SigningKeyReference issuerKeyRef)
+    {
+        try
+        {
+            var hashAlg = template.HashAlgorithm?.ToUpperInvariant() switch
+            {
+                "SHA384" => HashAlgorithmName.SHA384,
+                "SHA512" => HashAlgorithmName.SHA512,
+                _ => HashAlgorithmName.SHA256
+            };
+
+            // Generate key pair LOCALLY
+            using var keyHolder = GenerateKeyPair(template);
+            AsymmetricAlgorithm localKey = (AsymmetricAlgorithm?)keyHolder.Ecdsa ?? keyHolder.Rsa!;
+
+            // Build extensions using local public key
+            var extensions = BuildExtensionsForRemote(template, request, localKey, issuingCert);
+
+            // Determine validity
+            var notBefore = request.NotBefore ?? DateTimeOffset.UtcNow;
+            var notAfter = request.NotAfter ?? notBefore.AddDays(template.ValidityDays);
+            if (notAfter > issuingCert.NotAfter)
+                notAfter = new DateTimeOffset(issuingCert.NotAfter.ToUniversalTime(), TimeSpan.Zero);
+
+            // Sign via remote provider (issuer's key is in Vault) but subject key is local
+            var cert = await RemoteCertificateBuilder.CreateSignedAsync(
+                _signingProvider, issuerKeyRef, issuingCert,
+                localKey, request.SubjectDn,
+                notBefore, notAfter, extensions, hashAlg);
+
+            // Attach the LOCAL private key so we can export as PFX
+            X509Certificate2 certWithKey;
+            if (keyHolder.Ecdsa != null)
+                certWithKey = cert.CopyWithPrivateKey(keyHolder.Ecdsa);
+            else
+                certWithKey = cert.CopyWithPrivateKey(keyHolder.Rsa!);
+            cert.Dispose();
+
+            using (certWithKey)
+            {
+                // Verify issuer relationship
+                var issuerError = VerifyIssuedBy(certWithKey, issuingCert);
+                if (issuerError != null)
+                    return CertificateIssuanceResult.Failure(issuerError);
+
+                var pfxBytes = certWithKey.Export(X509ContentType.Pkcs12, request.PfxPassword);
+                var pem = certWithKey.ExportCertificatePem();
+
+                var certName = string.IsNullOrWhiteSpace(request.CertificateName)
+                    ? ExtractCnFromDn(request.SubjectDn) ?? request.SubjectDn
+                    : request.CertificateName;
+
+                int keySize = GetKeySize(certWithKey);
+                bool isCaType = template.CertificateType is CertificateType.RootCa or CertificateType.IntermediateCa;
+
+                if (isCaType)
+                {
+                    var caEntity = new CaCertificate
+                    {
+                        CommunityId = request.CommunityId,
+                        ParentId = request.IssuingCaCertificateId,
+                        Name = certName,
+                        Subject = certWithKey.Subject,
+                        X509CertificatePem = pem,
+                        EncryptedPfxBytes = pfxBytes,
+                        PfxPassword = request.PfxPassword,
+                        Thumbprint = certWithKey.Thumbprint,
+                        SerialNumber = certWithKey.SerialNumber,
+                        KeyAlgorithm = template.KeyAlgorithm,
+                        KeySize = keySize,
+                        NotBefore = certWithKey.NotBefore.ToUniversalTime(),
+                        NotAfter = certWithKey.NotAfter.ToUniversalTime(),
+                        CrlDistributionPoint = request.CdpUrl,
+                        AuthorityInfoAccessUri = request.AiaUrl,
+                        // Local key — standard software level, no provider hint
+                    };
+
+                    db.CaCertificates.Add(caEntity);
+                    await db.SaveChangesAsync();
+
+                    return new CertificateIssuanceResult
+                    {
+                        Success = true,
+                        EntityId = caEntity.Id,
+                        EntityType = "CaCertificate",
+                        Thumbprint = certWithKey.Thumbprint,
+                        SerialNumber = certWithKey.SerialNumber
+                    };
+                }
+                else
+                {
+                    var sanString = request.SubjectAltNames.Count > 0
+                        ? string.Join(";", request.SubjectAltNames.Select(s => $"{s.Type}:{s.Value}"))
+                        : null;
+
+                    var issuedEntity = new IssuedCertificate
+                    {
+                        IssuingCaCertificateId = request.IssuingCaCertificateId!.Value,
+                        TemplateId = request.TemplateId,
+                        Name = certName,
+                        Subject = certWithKey.Subject,
+                        SubjectAltNames = sanString,
+                        X509CertificatePem = pem,
+                        EncryptedPfxBytes = pfxBytes,
+                        PfxPassword = request.PfxPassword,
+                        Thumbprint = certWithKey.Thumbprint,
+                        SerialNumber = certWithKey.SerialNumber,
+                        KeyAlgorithm = template.KeyAlgorithm,
+                        KeySize = keySize,
+                        NotBefore = certWithKey.NotBefore.ToUniversalTime(),
+                        NotAfter = certWithKey.NotAfter.ToUniversalTime(),
+                        // Local key — no StoreProviderHint, standard security level
+                    };
+
+                    db.IssuedCertificates.Add(issuedEntity);
+                    await db.SaveChangesAsync();
+
+                    return new CertificateIssuanceResult
+                    {
+                        Success = true,
+                        EntityId = issuedEntity.Id,
+                        EntityType = "IssuedCertificate",
+                        Thumbprint = certWithKey.Thumbprint,
+                        SerialNumber = certWithKey.SerialNumber
+                    };
+                }
+            }
+        }
+        catch (Exception ex)
+        {
+            return CertificateIssuanceResult.Failure($"Hybrid certificate generation failed: {ex.Message}");
+        }
+        finally
+        {
+            issuingCert.Dispose();
         }
     }
 

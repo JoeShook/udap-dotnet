@@ -29,5 +29,10 @@ public class CertificateChainNodeViewModel
     /// </summary>
     public string EntityType { get; set; } = string.Empty;
 
+    /// <summary>
+    /// Key storage type: "local", "vault-transit", or null (no private key / CRL).
+    /// </summary>
+    public string? KeyStorage { get; set; }
+
     public List<CertificateChainNodeViewModel> Children { get; set; } = new();
 }

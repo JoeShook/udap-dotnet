@@ -241,7 +241,10 @@ public partial class CertificateExplorer
             NotAfter = ca.NotAfter,
             CertificateRole = ca.ParentId == null ? "RootCA" : "IntermediateCA",
             EntityType = "CaCertificate",
-            Status = caStatus
+            Status = caStatus,
+            KeyStorage = !string.IsNullOrEmpty(ca.StoreProviderHint) ? "vault-transit"
+                : ca.EncryptedPfxBytes != null ? "local"
+                : null
         };
 
         foreach (var child in ca.Children.OrderBy(c => c.Name))
@@ -262,7 +265,10 @@ public partial class CertificateExplorer
                 NotAfter = issued.NotAfter,
                 CertificateRole = "EndEntity",
                 EntityType = "IssuedCertificate",
-                Status = issuedStatus
+                Status = issuedStatus,
+                KeyStorage = !string.IsNullOrEmpty(issued.StoreProviderHint) ? "vault-transit"
+                    : issued.EncryptedPfxBytes != null ? "local"
+                    : null
             });
         }
 

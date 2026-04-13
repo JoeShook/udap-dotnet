@@ -490,6 +490,10 @@ else if (treeNodes.Count > 0)
                                             CustomColor="@(IsError(root.Status) ? NodeColor(root.Status) : "#2d6a4f")" />
                                 <CertBadge Status="@root.Status" />
                             </span>
+                            @if (root.KeyStorage == "vault-transit")
+                            {
+                                <span slot="end" title="Vault Transit"><FluentIcon Value="@(new Icons.Regular.Size16.LockShield())" Color="Color.Custom" CustomColor="#1565c0" /></span>
+                            }
                             @foreach (var intermediate in root.Children.Where(c => c.CertificateRole == "IntermediateCA"))
                             {
                                 <FluentTreeItem Text="@intermediate.Name"
@@ -503,6 +507,10 @@ else if (treeNodes.Count > 0)
                                                     CustomColor="@(IsError(intermediate.Status) ? NodeColor(intermediate.Status) : "#1976d2")" />
                                         <CertBadge Status="@intermediate.Status" />
                                     </span>
+                                    @if (intermediate.KeyStorage == "vault-transit")
+                                    {
+                                        <span slot="end" title="Vault Transit"><FluentIcon Value="@(new Icons.Regular.Size16.LockShield())" Color="Color.Custom" CustomColor="#1565c0" /></span>
+                                    }
                                     @foreach (var subCa in intermediate.Children.Where(c => c.CertificateRole == "IntermediateCA"))
                                     {
                                         @RenderCaTreeItem(subCa)
@@ -520,6 +528,10 @@ else if (treeNodes.Count > 0)
                                                             Style="@(IsError(child.Status) ? "" : "opacity: 0.7;")" />
                                                 <CertBadge Status="@child.Status" />
                                             </span>
+                                            @if (child.KeyStorage == "vault-transit")
+                                            {
+                                                <span slot="end" title="Vault Transit"><FluentIcon Value="@(new Icons.Regular.Size16.LockShield())" Color="Color.Custom" CustomColor="#1565c0" /></span>
+                                            }
                                         </FluentTreeItem>
                                     }
                                     @foreach (var crl in intermediate.Children.Where(c => c.CertificateRole == "CRL"))
@@ -551,6 +563,10 @@ else if (treeNodes.Count > 0)
                                                     Style="@(IsError(issued.Status) ? "" : "opacity: 0.7;")" />
                                         <CertBadge Status="@issued.Status" />
                                     </span>
+                                    @if (issued.KeyStorage == "vault-transit")
+                                    {
+                                        <span slot="end" title="Vault Transit"><FluentIcon Value="@(new Icons.Regular.Size16.LockShield())" Color="Color.Custom" CustomColor="#1565c0" /></span>
+                                    }
                                 </FluentTreeItem>
                             }
                             @foreach (var crl in root.Children.Where(c => c.CertificateRole == "CRL"))
@@ -1033,6 +1049,10 @@ else if (CommunityId > 0 && !showDropZone)
                 }
                 <CertBadge Status="@caNode.Status" />
             </span>
+            @if (caNode.KeyStorage == "vault-transit")
+            {
+                <span slot="end" title="Vault Transit"><FluentIcon Value="@(new Icons.Regular.Size16.LockShield())" Color="Color.Custom" CustomColor="#1565c0" /></span>
+            }
             @* Recursive: sub-CA nodes *@
             @foreach (var subCa in caNode.Children.Where(c => c.CertificateRole is "IntermediateCA" or "RootCA"))
             {
@@ -1052,6 +1072,10 @@ else if (CommunityId > 0 && !showDropZone)
                                     Style="@(IsError(issued.Status) ? "" : "opacity: 0.7;")" />
                         <CertBadge Status="@issued.Status" />
                     </span>
+                    @if (issued.KeyStorage == "vault-transit")
+                    {
+                        <span slot="end" title="Vault Transit"><FluentIcon Value="@(new Icons.Regular.Size16.LockShield())" Color="Color.Custom" CustomColor="#1565c0" /></span>
+                    }
                 </FluentTreeItem>
             }
             @* CRL nodes *@
