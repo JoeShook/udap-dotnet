@@ -117,6 +117,9 @@ Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "specifications", "specifica
 	EndProjectSection
 EndProject
 Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "CA", "CA", "{0CAF81E6-F0D7-4E13-B2FF-E8409AD819BB}"
+	ProjectSection(SolutionItems) = preProject
+		examples\CA\README.md = examples\CA\README.md
+	EndProjectSection
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Sigil.Common", "examples\CA\Sigil.Common\Sigil.Common.csproj", "{3805EA18-B451-063D-B22C-8342113DBFBF}"
 EndProject
