@@ -693,6 +693,10 @@ else if (treeNodes.Count > 0)
                         {
                             <FluentBadge BackgroundColor="#2d6a4f" Color="white" Style="font-size: 0.75rem;">Operational</FluentBadge>
                         }
+                        else if (selectedNodeHasRemoteKey)
+                        {
+                            <FluentBadge BackgroundColor="#1565c0" Color="white" Style="font-size: 0.75rem;">Vault Transit</FluentBadge>
+                        }
                         else
                         {
                             <FluentBadge BackgroundColor="#666" Color="white" Style="font-size: 0.75rem;">Trust Only</FluentBadge>
@@ -736,7 +740,7 @@ else if (treeNodes.Count > 0)
                                       Style="color: #e94560;">
                             Delete
                         </FluentButton>
-                        @if (selectedNodeHasPrivateKey && selectedNode?.CertificateRole is "RootCA" or "IntermediateCA")
+                        @if (selectedNodeCanSign && selectedNode?.CertificateRole is "RootCA" or "IntermediateCA")
                         {
                             <FluentButton Appearance="Appearance.Accent"
                                           IconStart="@(new Icons.Regular.Size16.Add())"
@@ -751,7 +755,7 @@ else if (treeNodes.Count > 0)
                                       title="Re-key: new key pair, new serial, new validity. Downstream certs need re-issuance.">
                             Re-key
                         </FluentButton>
-                        @if (selectedNodeHasPrivateKey && selectedNode?.CertificateRole is "RootCA" or "IntermediateCA")
+                        @if (selectedNodeCanSign && selectedNode?.CertificateRole is "RootCA" or "IntermediateCA")
                         {
                             <FluentButton Appearance="Appearance.Outline"
                                           IconStart="@(new Icons.Regular.Size16.ArrowRepeatAll())"
@@ -792,7 +796,7 @@ else if (treeNodes.Count > 0)
                                 <strong>Public Key</strong>
                                 <span>@GetPublicKeyInfo()</span>
                                 <strong>Private Key</strong>
-                                <span>@(selectedNodeHasPrivateKey ? "Yes (stored)" : "No (public cert only)")</span>
+                                <span>@(selectedNodeHasPrivateKey ? "Yes (stored locally)" : selectedNodeHasRemoteKey ? "Yes (Vault Transit)" : "No (public cert only)")</span>
                             </div>
                         </FluentAccordionItem>
 

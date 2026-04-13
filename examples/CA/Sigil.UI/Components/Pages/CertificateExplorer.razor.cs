@@ -37,6 +37,7 @@ public partial class CertificateExplorer
     [Inject] private ChainValidationService ChainValidator { get; set; } = null!;
     [Inject] private CertificateIssuanceService IssuanceService { get; set; } = null!;
     [Inject] private ISigningProvider SigningProvider { get; set; } = null!;
+    [Inject] private VaultTransitSigningProvider VaultTransitProvider { get; set; } = null!;
     [Inject] private IHttpClientFactory HttpClientFactory { get; set; } = null!;
     [Inject] private IJSRuntime JS { get; set; } = null!;
     [Inject] private NavigationManager Navigation { get; set; } = null!;
@@ -52,6 +53,8 @@ public partial class CertificateExplorer
     private CrlViewModel? selectedCrl;
     private ChainValidationResult? chainValidation;
     private bool selectedNodeHasPrivateKey;
+    private bool selectedNodeHasRemoteKey;
+    private bool selectedNodeCanSign => selectedNodeHasPrivateKey || selectedNodeHasRemoteKey;
     private List<string> subjectAltNames = new();
     private FluentTreeItem? selectedTreeItem;
     private int treeVersion;
@@ -332,6 +335,7 @@ public partial class CertificateExplorer
         selectedCert = null;
         selectedCrl = null;
         selectedNodeHasPrivateKey = false;
+        selectedNodeHasRemoteKey = false;
         chainValidation = null;
         asn1Root = null;
         subjectAltNames.Clear();
@@ -389,6 +393,7 @@ public partial class CertificateExplorer
             var ca = await db.CaCertificates.FindAsync(node.Id);
             pem = ca?.X509CertificatePem;
             selectedNodeHasPrivateKey = ca?.EncryptedPfxBytes != null;
+            selectedNodeHasRemoteKey = !string.IsNullOrEmpty(ca?.StoreProviderHint);
         }
         else
         {
@@ -1105,6 +1110,8 @@ public partial class CertificateExplorer
                             $"Cannot delete '{ca.Name}': it has {ca.Children.Count} child CA(s) and {ca.IssuedCertificates.Count} issued cert(s). Delete or move them first.");
                         return;
                     }
+                    // Delete Vault Transit key if applicable
+                    await DeleteVaultTransitKeyAsync(ca.StoreProviderHint);
                     // Remove associated CRLs and their revocations
                     foreach (var crl in ca.Crls.ToList())
                     {
@@ -1116,7 +1123,11 @@ public partial class CertificateExplorer
                 break;
             case "IssuedCertificate":
                 var issued = await db.IssuedCertificates.FindAsync(selectedNode.Id);
-                if (issued != null) db.IssuedCertificates.Remove(issued);
+                if (issued != null)
+                {
+                    await DeleteVaultTransitKeyAsync(issued.StoreProviderHint);
+                    db.IssuedCertificates.Remove(issued);
+                }
                 break;
             case "Crl":
                 var crl2 = await db.Crls
@@ -1134,6 +1145,32 @@ public partial class CertificateExplorer
         ToastService.ShowCopyableSuccess($"Permanently deleted '{selectedNode.Name}'");
 
         await ClearSelectionAndReloadTreeAsync();
+    }
+
+    /// <summary>
+    /// Deletes a Vault Transit key if the StoreProviderHint indicates one.
+    /// Vault keys are protected from deletion by default — this first enables deletion,
+    /// then deletes the key.
+    /// </summary>
+    private async Task DeleteVaultTransitKeyAsync(string? storeProviderHint)
+    {
+        if (string.IsNullOrEmpty(storeProviderHint) ||
+            !storeProviderHint.StartsWith("vault-transit:"))
+            return;
+
+        var keyName = storeProviderHint["vault-transit:".Length..];
+        if (string.IsNullOrEmpty(keyName)) return;
+
+        try
+        {
+            await VaultTransitProvider.DeleteKeyAsync(keyName);
+        }
+        catch (Exception ex)
+        {
+            // Log but don't block the DB delete — the Vault key is orphaned but that's better
+            // than leaving the DB record pointing to a deleted cert
+            ToastService.ShowCopyableError($"Vault Transit key cleanup failed: {ex.Message}");
+        }
     }
 
     private async Task ClearSelectionAndReloadTreeAsync()

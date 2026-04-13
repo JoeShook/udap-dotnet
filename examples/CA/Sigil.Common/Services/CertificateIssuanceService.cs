@@ -599,6 +599,8 @@ public class CertificateIssuanceService
                         KeySize = keySize,
                         NotBefore = cert.NotBefore.ToUniversalTime(),
                         NotAfter = cert.NotAfter.ToUniversalTime(),
+                        CertSecurityLevel = CertSecurityLevel.CloudKms,
+                        StoreProviderHint = $"{_signingProvider.ProviderName}:{newKeyRef.KeyIdentifier}",
                     };
 
                     db.IssuedCertificates.Add(issuedEntity);

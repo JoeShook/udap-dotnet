@@ -78,6 +78,7 @@ public class SigilDbContext : DbContext
             entity.Property(e => e.Thumbprint).HasMaxLength(64).IsRequired();
             entity.Property(e => e.SerialNumber).HasMaxLength(100).IsRequired();
             entity.Property(e => e.KeyAlgorithm).HasMaxLength(20);
+            entity.Property(e => e.StoreProviderHint).HasMaxLength(200);
 
             entity.HasOne(e => e.IssuingCaCertificate)
                 .WithMany(ca => ca.IssuedCertificates)

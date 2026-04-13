@@ -156,6 +156,45 @@ public sealed class VaultTransitSigningProvider : ISigningProvider
     }
 
     /// <summary>
+    /// Deletes a Transit key from Vault. Vault keys are deletion-protected by default,
+    /// so this first enables deletion via config update, then deletes.
+    /// </summary>
+    public async Task DeleteKeyAsync(string keyName, CancellationToken ct = default)
+    {
+        using var client = CreateClient();
+
+        // Step 1: Enable deletion (Vault protects keys by default)
+        var configResponse = await client.PostAsync(
+            $"/v1/{_options.MountPath}/keys/{keyName}/config",
+            JsonContent(new { deletion_allowed = true }),
+            ct);
+
+        if (!configResponse.IsSuccessStatusCode)
+        {
+            var body = await configResponse.Content.ReadAsStringAsync(ct);
+            _logger.LogWarning("Failed to enable deletion for Transit key '{Name}': {Status} {Body}",
+                keyName, configResponse.StatusCode, body);
+            return;
+        }
+
+        // Step 2: Delete the key
+        var deleteResponse = await client.DeleteAsync(
+            $"/v1/{_options.MountPath}/keys/{keyName}",
+            ct);
+
+        if (deleteResponse.IsSuccessStatusCode)
+        {
+            _logger.LogInformation("Deleted Vault Transit key '{Name}'", keyName);
+        }
+        else
+        {
+            var body = await deleteResponse.Content.ReadAsStringAsync(ct);
+            _logger.LogWarning("Failed to delete Transit key '{Name}': {Status} {Body}",
+                keyName, deleteResponse.StatusCode, body);
+        }
+    }
+
+    /// <summary>
     /// Converts IEEE P1363 format (r || s) to DER-encoded ECDSA signature.
     /// </summary>
     private static byte[] ConvertP1363ToDer(byte[] p1363Signature)
