@@ -12,6 +12,32 @@
         "DOTNET_RESOURCE_SERVICE_ENDPOINT_URL": "https://localhost:22100"
       }
     },
+    "https-docker": {
+      "commandName": "Project",
+      "dotnetRunMessages": true,
+      "launchBrowser": true,
+      "applicationUrl": "https://localhost:17100;http://localhost:15100",
+      "environmentVariables": {
+        "ASPNETCORE_ENVIRONMENT": "Development",
+        "DOTNET_ENVIRONMENT": "Development",
+        "DOTNET_DASHBOARD_OTLP_ENDPOINT_URL": "https://localhost:21100",
+        "DOTNET_RESOURCE_SERVICE_ENDPOINT_URL": "https://localhost:22100",
+        "Sigil__HostMode": "docker"
+      }
+    },
+    "https-docker-gcp": {
+      "commandName": "Project",
+      "dotnetRunMessages": true,
+      "launchBrowser": true,
+      "applicationUrl": "https://localhost:17100;http://localhost:15100",
+      "environmentVariables": {
+        "ASPNETCORE_ENVIRONMENT": "Development",
+        "DOTNET_ENVIRONMENT": "Development",
+        "DOTNET_DASHBOARD_OTLP_ENDPOINT_URL": "https://localhost:21100",
+        "DOTNET_RESOURCE_SERVICE_ENDPOINT_URL": "https://localhost:22100",
+        "Sigil__HostMode": "docker-gcp"
+      }
+    },
     "http": {
       "commandName": "Project",
       "dotnetRunMessages": true,

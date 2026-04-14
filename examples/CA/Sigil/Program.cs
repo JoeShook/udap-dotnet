@@ -30,7 +30,8 @@ try
     var builder = WebApplication.CreateBuilder(args);
 
     // Aspire service defaults (active when running under Aspire AppHost)
-    if (builder.Configuration["OTEL_EXPORTER_OTLP_ENDPOINT"] is not null)
+    var useServiceDefaults = builder.Configuration["OTEL_EXPORTER_OTLP_ENDPOINT"] is not null;
+    if (useServiceDefaults)
     {
         builder.AddServiceDefaults();
     }
@@ -108,7 +109,10 @@ try
     app.UseStaticFiles();
     app.MapStaticAssets();
     app.UseAntiforgery();
-    app.MapDefaultEndpoints(); // Aspire health checks (/health, /alive)
+    if (useServiceDefaults)
+    {
+        app.MapDefaultEndpoints(); // Aspire health checks (/health, /alive)
+    }
 
     app.MapRazorComponents<App>()
         .AddInteractiveServerRenderMode()
