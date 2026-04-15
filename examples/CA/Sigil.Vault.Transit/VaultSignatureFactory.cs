@@ -13,8 +13,9 @@ using Org.BouncyCastle.Asn1;
 using Org.BouncyCastle.Asn1.X509;
 using Org.BouncyCastle.Asn1.X9;
 using Org.BouncyCastle.Crypto;
+using Sigil.Common.Services.Signing;
 
-namespace Sigil.Common.Services.Signing;
+namespace Sigil.Vault.Transit;
 
 /// <summary>
 /// BouncyCastle ISignatureFactory that delegates signing to an ISigningProvider.

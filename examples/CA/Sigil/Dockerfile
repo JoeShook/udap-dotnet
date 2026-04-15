@@ -15,6 +15,8 @@ COPY Sigil/Sigil.csproj                                 Sigil/
 COPY Sigil.Common/Sigil.Common.csproj                    Sigil.Common/
 COPY Sigil.UI/Sigil.UI.csproj                            Sigil.UI/
 COPY Sigil.ServiceDefaults/Sigil.ServiceDefaults.csproj  Sigil.ServiceDefaults/
+COPY Sigil.Vault.Transit/Sigil.Vault.Transit.csproj      Sigil.Vault.Transit/
+COPY Sigil.Gcp.Kms/Sigil.Gcp.Kms.csproj                 Sigil.Gcp.Kms/
 
 RUN dotnet restore Sigil/Sigil.csproj
 
@@ -22,6 +24,8 @@ COPY Sigil/               Sigil/
 COPY Sigil.Common/        Sigil.Common/
 COPY Sigil.UI/            Sigil.UI/
 COPY Sigil.ServiceDefaults/ Sigil.ServiceDefaults/
+COPY Sigil.Vault.Transit/ Sigil.Vault.Transit/
+COPY Sigil.Gcp.Kms/      Sigil.Gcp.Kms/
 
 ARG BUILD_CONFIGURATION=Release
 RUN dotnet publish Sigil/Sigil.csproj -c $BUILD_CONFIGURATION -o /app/publish

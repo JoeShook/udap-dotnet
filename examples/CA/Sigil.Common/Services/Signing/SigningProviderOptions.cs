@@ -16,28 +16,7 @@ namespace Sigil.Common.Services.Signing;
 public class SigningProviderOptions
 {
     /// <summary>
-    /// The active signing provider: "local" (default) or "vault-transit".
+    /// The active signing provider: "local", "vault-transit", or "gcp-kms".
     /// </summary>
     public string Provider { get; set; } = "local";
-}
-
-/// <summary>
-/// Configuration for connecting to Vault Transit.
-/// </summary>
-public class VaultTransitOptions
-{
-    /// <summary>
-    /// Vault HTTP address, e.g. "http://localhost:8200".
-    /// </summary>
-    public string Address { get; set; } = "http://localhost:8200";
-
-    /// <summary>
-    /// Authentication token for Vault API calls.
-    /// </summary>
-    public string Token { get; set; } = string.Empty;
-
-    /// <summary>
-    /// Mount path for the Transit engine. Defaults to "transit".
-    /// </summary>
-    public string MountPath { get; set; } = "transit";
 }

@@ -19,7 +19,9 @@ using Sigil.Common.Data.Entities;
 using Sigil.Common.Services;
 using Sigil.Common.Services.Signing;
 using Sigil.Common.ViewModels;
+using Sigil.Gcp.Kms;
 using Sigil.UI.Services;
+using Sigil.Vault.Transit;
 
 namespace Sigil.UI.Components.Pages;
 
@@ -38,6 +40,7 @@ public partial class CertificateExplorer
     [Inject] private CertificateIssuanceService IssuanceService { get; set; } = null!;
     [Inject] private ISigningProvider SigningProvider { get; set; } = null!;
     [Inject] private VaultTransitSigningProvider VaultTransitProvider { get; set; } = null!;
+    [Inject] private GcpKmsSigningProvider GcpKmsProvider { get; set; } = null!;
     [Inject] private IHttpClientFactory HttpClientFactory { get; set; } = null!;
     [Inject] private IJSRuntime JS { get; set; } = null!;
     [Inject] private NavigationManager Navigation { get; set; } = null!;
@@ -242,7 +245,8 @@ public partial class CertificateExplorer
             CertificateRole = ca.ParentId == null ? "RootCA" : "IntermediateCA",
             EntityType = "CaCertificate",
             Status = caStatus,
-            KeyStorage = !string.IsNullOrEmpty(ca.StoreProviderHint) ? "vault-transit"
+            KeyStorage = !string.IsNullOrEmpty(ca.StoreProviderHint)
+                    ? ca.StoreProviderHint[..ca.StoreProviderHint.IndexOf(':')]
                 : ca.EncryptedPfxBytes != null ? "local"
                 : null
         };
@@ -266,7 +270,8 @@ public partial class CertificateExplorer
                 CertificateRole = "EndEntity",
                 EntityType = "IssuedCertificate",
                 Status = issuedStatus,
-                KeyStorage = !string.IsNullOrEmpty(issued.StoreProviderHint) ? "vault-transit"
+                KeyStorage = !string.IsNullOrEmpty(issued.StoreProviderHint)
+                        ? issued.StoreProviderHint[..issued.StoreProviderHint.IndexOf(':')]
                     : issued.EncryptedPfxBytes != null ? "local"
                     : null
             });
@@ -1117,7 +1122,7 @@ public partial class CertificateExplorer
                         return;
                     }
                     // Delete Vault Transit key if applicable
-                    await DeleteVaultTransitKeyAsync(ca.StoreProviderHint);
+                    await DeleteRemoteKeyAsync(ca.StoreProviderHint);
                     // Remove associated CRLs and their revocations
                     foreach (var crl in ca.Crls.ToList())
                     {
@@ -1131,7 +1136,7 @@ public partial class CertificateExplorer
                 var issued = await db.IssuedCertificates.FindAsync(selectedNode.Id);
                 if (issued != null)
                 {
-                    await DeleteVaultTransitKeyAsync(issued.StoreProviderHint);
+                    await DeleteRemoteKeyAsync(issued.StoreProviderHint);
                     db.IssuedCertificates.Remove(issued);
                 }
                 break;
@@ -1154,28 +1159,33 @@ public partial class CertificateExplorer
     }
 
     /// <summary>
-    /// Deletes a Vault Transit key if the StoreProviderHint indicates one.
-    /// Vault keys are protected from deletion by default — this first enables deletion,
-    /// then deletes the key.
+    /// Deletes a remote signing key (Vault Transit or GCP KMS) if the StoreProviderHint indicates one.
     /// </summary>
-    private async Task DeleteVaultTransitKeyAsync(string? storeProviderHint)
+    private async Task DeleteRemoteKeyAsync(string? storeProviderHint)
     {
-        if (string.IsNullOrEmpty(storeProviderHint) ||
-            !storeProviderHint.StartsWith("vault-transit:"))
+        if (string.IsNullOrEmpty(storeProviderHint))
             return;
-
-        var keyName = storeProviderHint["vault-transit:".Length..];
-        if (string.IsNullOrEmpty(keyName)) return;
 
         try
         {
-            await VaultTransitProvider.DeleteKeyAsync(keyName);
+            if (storeProviderHint.StartsWith("vault-transit:"))
+            {
+                var keyName = storeProviderHint["vault-transit:".Length..];
+                if (!string.IsNullOrEmpty(keyName))
+                    await VaultTransitProvider.DeleteKeyAsync(keyName);
+            }
+            else if (storeProviderHint.StartsWith("gcp-kms:"))
+            {
+                var keyId = storeProviderHint["gcp-kms:".Length..];
+                if (!string.IsNullOrEmpty(keyId))
+                    await GcpKmsProvider.DestroyKeyVersionAsync(keyId);
+            }
         }
         catch (Exception ex)
         {
-            // Log but don't block the DB delete — the Vault key is orphaned but that's better
+            // Log but don't block the DB delete — the remote key is orphaned but that's better
             // than leaving the DB record pointing to a deleted cert
-            ToastService.ShowCopyableError($"Vault Transit key cleanup failed: {ex.Message}");
+            ToastService.ShowCopyableError($"Remote key cleanup failed: {ex.Message}");
         }
     }
 

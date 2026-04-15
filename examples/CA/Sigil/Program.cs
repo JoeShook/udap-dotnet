@@ -20,6 +20,8 @@ using Sigil.ServiceDefaults;
 using Sigil.Common.Data.Entities;
 using Sigil.Common.Services;
 using Sigil.Common.Services.Signing;
+using Sigil.Gcp.Kms;
+using Sigil.Vault.Transit;
 
 Log.Logger = new LoggerConfiguration()
     .WriteTo.Console()
@@ -59,15 +61,19 @@ try
         builder.Configuration.GetSection("Signing"));
     builder.Services.Configure<VaultTransitOptions>(
         builder.Configuration.GetSection("Vault"));
+    builder.Services.Configure<GcpKmsOptions>(
+        builder.Configuration.GetSection("GcpKms"));
     builder.Services.AddHttpClient("VaultTransit");
     builder.Services.AddSingleton<LocalSigningProvider>();
     builder.Services.AddSingleton<VaultTransitSigningProvider>();
+    builder.Services.AddSingleton<GcpKmsSigningProvider>();
     builder.Services.AddSingleton<ISigningProvider>(sp =>
     {
         var options = sp.GetRequiredService<IOptions<SigningProviderOptions>>().Value;
         return options.Provider switch
         {
             "vault-transit" => sp.GetRequiredService<VaultTransitSigningProvider>(),
+            "gcp-kms" => sp.GetRequiredService<GcpKmsSigningProvider>(),
             _ => sp.GetRequiredService<LocalSigningProvider>()
         };
     });

@@ -108,6 +108,14 @@ public class CertificateIssuanceService
                 // Load the cert (public only) for issuer DN and extensions
                 issuingCert = X509Certificate2.CreateFromPem(issuingCaEntity.X509CertificatePem);
             }
+            else if (issuingCaEntity.StoreProviderHint?.StartsWith("gcp-kms:") == true)
+            {
+                var kmsKeyId = issuingCaEntity.StoreProviderHint["gcp-kms:".Length..];
+                issuerKeyRef = new SigningKeyReference(
+                    "gcp-kms", kmsKeyId, issuingCaEntity.KeyAlgorithm, issuingCaEntity.KeySize);
+
+                issuingCert = X509Certificate2.CreateFromPem(issuingCaEntity.X509CertificatePem);
+            }
             else
             {
                 // Local signing — need the PFX with private key

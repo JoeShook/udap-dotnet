@@ -13,8 +13,9 @@ using System.Text;
 using System.Text.Json;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
+using Sigil.Common.Services.Signing;
 
-namespace Sigil.Common.Services.Signing;
+namespace Sigil.Vault.Transit;
 
 /// <summary>
 /// Signing provider that delegates to HashiCorp Vault's Transit secrets engine.
@@ -197,7 +198,7 @@ public sealed class VaultTransitSigningProvider : ISigningProvider
     /// <summary>
     /// Converts IEEE P1363 format (r || s) to DER-encoded ECDSA signature.
     /// </summary>
-    private static byte[] ConvertP1363ToDer(byte[] p1363Signature)
+    internal static byte[] ConvertP1363ToDer(byte[] p1363Signature)
     {
         int halfLen = p1363Signature.Length / 2;
         ReadOnlySpan<byte> r = p1363Signature.AsSpan(0, halfLen);

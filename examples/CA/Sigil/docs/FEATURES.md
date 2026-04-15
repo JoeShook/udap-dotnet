@@ -1,7 +1,7 @@
 # Sigil — Implemented Features
 
-**Stack**: .NET 10, Blazor Server (InteractiveServer), FluentUI v4, PostgreSQL, BouncyCastle, Serilog
-**Location**: `examples/CA/` in udap-dotnet repo (three projects: `Sigil`, `Sigil.Common`, `Sigil.UI`)
+**Stack**: .NET 10, Blazor Server (InteractiveServer), FluentUI v4, PostgreSQL, BouncyCastle, Serilog, Aspire
+**Location**: `examples/CA/` in udap-dotnet repo (see Architecture section for full project structure)
 
 ---
 
@@ -184,6 +184,56 @@
 
 ---
 
+---
+
+## Phase 5: Remote Signing & Aspire Orchestration (Complete)
+
+### Signing Provider Architecture
+- **`ISigningProvider` interface** in `Sigil.Common` — pluggable signing abstraction
+  - `GenerateKeyAsync` — creates key pair in the provider
+  - `GetPublicKeyAsync` — retrieves public key for certificate building
+  - `SignDataAsync` — signs TBS (to-be-signed) data
+- **`SigningKeyReference`** record — identifies a key across provider boundaries (provider, keyId, algorithm, size)
+- **`SigningProviderOptions`** — configuration-driven provider selection: `"local"`, `"vault-transit"`, or `"gcp-kms"`
+- **`RemoteCertificateBuilder`** — BouncyCastle-based certificate assembly with async remote signing (avoids sync-over-async deadlock in Blazor Server)
+
+### Signing Providers (Separate Projects)
+- **`LocalSigningProvider`** (in `Sigil.Common`) — in-memory RSA/ECDSA keys, default provider
+- **`Sigil.Vault.Transit`** — HashiCorp Vault Transit secrets engine
+  - Private keys never leave Vault; signs via REST API
+  - P1363→DER ECDSA signature format conversion
+  - Key lifecycle: create, get public key, sign, delete
+- **`Sigil.Gcp.Kms`** — Google Cloud KMS
+  - Private keys never leave Cloud HSM/KMS
+  - Uses Application Default Credentials (gcloud CLI or service account)
+  - Pre-computed digest signing via `AsymmetricSign` API
+  - Key ring auto-creation, key version lifecycle management
+
+### Three Signing Paths
+1. **Full Remote** — key generation AND signing in remote provider (Vault/GCP KMS); no PFX export; `StoreProviderHint = "{provider}:{keyId}"`
+2. **Hybrid** — local key generation (PFX exportable) + remote CA signing (e.g., end-entity cert with local key, signed by Vault-backed CA)
+3. **Full Local** — both key and signing local (existing behavior)
+
+### Docker & GCP Integration
+- **Dockerfile** — multi-stage build for VS Container Tools compatibility
+- **Dockerfile.gcp** — same + gcloud CLI installed, persistent credential volume
+- **VS launch profiles**: Sigil (desktop), Docker, Docker-GCP
+- **Aspire `WithHttpsCertificateConfiguration`** — injects trusted dev cert into containers
+- **GCP credential isolation** — Docker named volume (`sigil-gcloud-config`), never committed to source
+
+### Aspire Orchestration (`Sigil.AppHost`)
+- **Vault container** with Transit engine auto-configured (key creation via lifecycle hook)
+- **Switchable hosting modes** via launch profiles: `project`, `docker`, `docker-gcp`
+- **Switchable signing providers** via `Sigil:SigningProvider`: `vault-transit` or `gcp-kms`
+- **Launch profiles**: `https`, `https-docker`, `https-docker-gcp`, `https-docker-gcp-kms`, `http`
+
+### Unit Tests (`_tests/Sigil.Signing.Tests`)
+- **LocalSigningProvider**: key generation (RSA/ECDSA), signature verification round-trip, multi-hash support, error handling
+- **VaultTransitSigningProvider**: P1363→DER conversion correctness (P-256, P-384), high-bit padding, leading-zero trimming, fuzz-style round-trip
+- **SigningKeyReference**: record equality, deconstruction
+
+---
+
 ## Architecture
 
 ### Project Structure
@@ -193,17 +243,27 @@ examples/CA/
 ├── Sigil.Common/          # Class library (entities, services, ViewModels, migrations)
 │   ├── Data/Entities/     # Community, CaCertificate, IssuedCertificate, Crl, CertificateTemplate, Job
 │   ├── Services/          # Issuance, Validation, Parsing, Import, CRL, ASN.1, Extension helpers
+│   ├── Services/Signing/  # ISigningProvider, LocalSigningProvider, RemoteCertificateBuilder
 │   └── ViewModels/        # DTOs for UI and API consumers
-└── Sigil.UI/              # Razor Class Library (all components, pages, shared, layout)
-    ├── Components/Pages/  # Explorer, Communities, Templates, Import, Home, Jobs
-    ├── Components/Shared/ # Asn1TreeView, CertBadge, CrlBadge, ExtensionTable, CopyableToast
-    └── Services/          # Toast extensions
+├── Sigil.UI/              # Razor Class Library (all components, pages, shared, layout)
+│   ├── Components/Pages/  # Explorer, Communities, Templates, Import, Home, Jobs
+│   ├── Components/Shared/ # Asn1TreeView, CertBadge, CrlBadge, ExtensionTable, CopyableToast
+│   └── Services/          # Toast extensions
+├── Sigil.Vault.Transit/   # ISigningProvider implementation for HashiCorp Vault Transit
+├── Sigil.Gcp.Kms/         # ISigningProvider implementation for Google Cloud KMS
+├── Sigil.Vault.Hosting/   # Aspire hosting integration for Vault dev container
+├── Sigil.ServiceDefaults/  # Aspire service defaults (OpenTelemetry, health checks)
+├── Sigil.AppHost/         # Aspire orchestrator (Vault + Sigil)
+└── _tests/
+    └── Sigil.Signing.Tests/  # Unit tests for signing providers
 ```
 
 ### Key Design Decisions
 - **Sigil.Common has no UI dependencies** — reusable by CLI tools, APIs, tests
+- **Provider projects are separate assemblies** — `Sigil.Vault.Transit` and `Sigil.Gcp.Kms` implement `ISigningProvider` from `Sigil.Common`, keeping provider-specific dependencies (Vault HTTP, Google.Cloud.Kms) out of the core library
 - **CertificateIssuanceService** and all DTOs in Common for multi-host consumption
 - **Extension helpers** extracted from Udap.PKI.Generator test project into Sigil.Common
 - **Tree highlighting** via JS interop into FluentTreeItem shadow DOM (avoids Blazor re-render/collapse)
 - **Re-sign updates in-place** to preserve child relationships (vs creating new entity)
 - **Preset templates** seeded idempotently on startup
+- **`StoreProviderHint`** metadata tracks which provider holds each key (e.g., `"vault-transit:sigil-abc123"`, `"gcp-kms:sigil-def456"`)

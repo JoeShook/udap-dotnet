@@ -22,6 +22,10 @@ var vault = builder.AddVaultDev("vault")
 // Set via env var Sigil__HostMode in launch profile.
 var hostMode = builder.Configuration["Sigil:HostMode"]?.ToLowerInvariant() ?? "project";
 
+// Signing provider: "vault-transit" (default) or "gcp-kms"
+// When "gcp-kms", Vault is still started (may be used for other keys) but Sigil signs via GCP Cloud KMS.
+var signingProvider = builder.Configuration["Sigil:SigningProvider"]?.ToLowerInvariant() ?? "vault-transit";
+
 IResourceBuilder<IResourceWithEndpoints> sigil;
 
 switch (hostMode)
@@ -54,21 +58,49 @@ switch (hostMode)
             .WithEnvironment("ConnectionStrings__SigilDb", "Host=host.docker.internal;Database=sigil;Username=sigil;Password=sigil_pass;Search Path=sigil")
             .WithEnvironment("Vault__Address", vault.Resource.PrimaryEndpoint)
             .WithEnvironment("Vault__Token", "root-token")
-            .WithEnvironment("Signing__Provider", "vault-transit");
+            .WithEnvironment("Signing__Provider", signingProvider);
 
         if (hostMode == "docker-gcp")
             dockerResource.WithVolume("sigil-gcloud-config", "/root/.config/gcloud");
+
+        // GCP KMS configuration — project/location/keyring passed via env vars
+        if (signingProvider == "gcp-kms")
+        {
+            var gcpProject = builder.Configuration["GcpKms:ProjectId"] ?? "";
+            var gcpLocation = builder.Configuration["GcpKms:LocationId"] ?? "us-central1";
+            var gcpKeyRing = builder.Configuration["GcpKms:KeyRingId"] ?? "sigil";
+
+            dockerResource
+                .WithEnvironment("GcpKms__ProjectId", gcpProject)
+                .WithEnvironment("GcpKms__LocationId", gcpLocation)
+                .WithEnvironment("GcpKms__KeyRingId", gcpKeyRing);
+        }
 
         sigil = dockerResource;
         break;
     }
 
     default: // "project"
-        sigil = builder.AddProject<Projects.Sigil>("sigil")
+        var projectResource = builder.AddProject<Projects.Sigil>("sigil")
             .WithReference(vault)
             .WithEnvironment("Vault__Address", vault.Resource.PrimaryEndpoint)
             .WithEnvironment("Vault__Token", "root-token")
-            .WithEnvironment("Signing__Provider", "vault-transit");
+            .WithEnvironment("Signing__Provider", signingProvider);
+
+        // GCP KMS configuration for project mode
+        if (signingProvider == "gcp-kms")
+        {
+            var gcpProject = builder.Configuration["GcpKms:ProjectId"] ?? "";
+            var gcpLocation = builder.Configuration["GcpKms:LocationId"] ?? "us-central1";
+            var gcpKeyRing = builder.Configuration["GcpKms:KeyRingId"] ?? "sigil";
+
+            projectResource
+                .WithEnvironment("GcpKms__ProjectId", gcpProject)
+                .WithEnvironment("GcpKms__LocationId", gcpLocation)
+                .WithEnvironment("GcpKms__KeyRingId", gcpKeyRing);
+        }
+
+        sigil = projectResource;
         break;
 }
 
