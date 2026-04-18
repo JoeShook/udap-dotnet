@@ -34,6 +34,7 @@ public class IssuedCertificate
     public DateTime NotAfter { get; set; }
     public bool IsRevoked { get; set; }
     public DateTime? RevokedAt { get; set; }
+    public int RevocationReason { get; set; }
     public CertSecurityLevel CertSecurityLevel { get; set; } = CertSecurityLevel.Software;
     public string? StoreProviderHint { get; set; }
     public bool Enabled { get; set; } = true;

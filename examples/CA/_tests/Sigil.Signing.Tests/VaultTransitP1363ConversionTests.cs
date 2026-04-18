@@ -10,7 +10,7 @@
 
 using System.Security.Cryptography;
 using FluentAssertions;
-using Sigil.Vault.Transit;
+using Sigil.Vault;
 
 namespace Sigil.Signing.Tests;
 

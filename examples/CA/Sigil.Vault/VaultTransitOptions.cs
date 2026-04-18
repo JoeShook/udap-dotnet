@@ -8,7 +8,7 @@
 // */
 #endregion
 
-namespace Sigil.Vault.Transit;
+namespace Sigil.Vault;
 
 /// <summary>
 /// Configuration for connecting to Vault Transit.

@@ -16,8 +16,8 @@
 
   <ItemGroup>
     <ProjectReference Include="..\Sigil.Common\Sigil.Common.csproj" />
-    <ProjectReference Include="..\Sigil.Gcp.Kms\Sigil.Gcp.Kms.csproj" />
-    <ProjectReference Include="..\Sigil.Vault.Transit\Sigil.Vault.Transit.csproj" />
+    <ProjectReference Include="..\Sigil.Gcp\Sigil.Gcp.csproj" />
+    <ProjectReference Include="..\Sigil.Vault\Sigil.Vault.csproj" />
   </ItemGroup>
 
 </Project>

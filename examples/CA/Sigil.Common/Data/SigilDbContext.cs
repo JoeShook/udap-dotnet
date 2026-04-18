@@ -25,8 +25,6 @@ public class SigilDbContext : DbContext
     public DbSet<Crl> Crls => Set<Crl>();
     public DbSet<CertificateRevocation> CertificateRevocations => Set<CertificateRevocation>();
     public DbSet<CertificateTemplate> CertificateTemplates => Set<CertificateTemplate>();
-    public DbSet<Job> Jobs => Set<Job>();
-    public DbSet<JobExecution> JobExecutions => Set<JobExecution>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -134,26 +132,5 @@ public class SigilDbContext : DbContext
             entity.Property(e => e.SubjectAltNameTypes).HasMaxLength(100);
         });
 
-        // Job
-        modelBuilder.Entity<Job>(entity =>
-        {
-            entity.HasKey(e => e.Id);
-            entity.Property(e => e.Name).HasMaxLength(200).IsRequired();
-            entity.Property(e => e.CronExpression).HasMaxLength(100);
-            entity.Property(e => e.TargetEntityType).HasMaxLength(50);
-            entity.HasIndex(e => e.NextRunAt);
-        });
-
-        // JobExecution
-        modelBuilder.Entity<JobExecution>(entity =>
-        {
-            entity.HasKey(e => e.Id);
-            entity.HasIndex(e => e.JobId);
-
-            entity.HasOne(e => e.Job)
-                .WithMany(j => j.Executions)
-                .HasForeignKey(e => e.JobId)
-                .OnDelete(DeleteBehavior.Cascade);
-        });
     }
 }

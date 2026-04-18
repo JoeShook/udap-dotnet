@@ -8,7 +8,7 @@
 // */
 #endregion
 
-namespace Sigil.Gcp.Kms;
+namespace Sigil.Gcp;
 
 /// <summary>
 /// Configuration for connecting to GCP Cloud KMS.

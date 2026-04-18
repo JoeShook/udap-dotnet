@@ -151,7 +151,7 @@ public static class RemoteCertificateBuilder
         return certSeq.GetDerEncoded();
     }
 
-    private static AlgorithmIdentifier GetSignatureAlgorithmIdentifier(
+    internal static AlgorithmIdentifier GetSignatureAlgorithmIdentifier(
         string keyAlgorithm, HashAlgorithmName hashAlgorithm)
     {
         if (keyAlgorithm.Equals("RSA", StringComparison.OrdinalIgnoreCase))

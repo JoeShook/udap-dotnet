@@ -18,16 +18,20 @@
     </PackageReference>
     <PackageReference Include="Microsoft.EntityFrameworkCore.Relational" Version="10.0.4" />
     <PackageReference Include="Npgsql.EntityFrameworkCore.PostgreSQL" Version="10.0.0" />
+    <PackageReference Include="Hangfire.Core" Version="1.8.20" />
+    <PackageReference Include="Hangfire.AspNetCore" Version="1.8.20" />
+    <PackageReference Include="Hangfire.PostgreSql" Version="1.20.10" />
     <PackageReference Include="Serilog.AspNetCore" Version="10.0.0" />
     <PackageReference Include="Serilog.Sinks.Console" Version="6.1.1" />
   </ItemGroup>
 
   <ItemGroup>
     <ProjectReference Include="..\Sigil.Common\Sigil.Common.csproj" />
-    <ProjectReference Include="..\Sigil.Gcp.Kms\Sigil.Gcp.Kms.csproj" />
+    <ProjectReference Include="..\Sigil.FileSystem\Sigil.FileSystem.csproj" />
+    <ProjectReference Include="..\Sigil.Gcp\Sigil.Gcp.csproj" />
     <ProjectReference Include="..\Sigil.ServiceDefaults\Sigil.ServiceDefaults.csproj" />
     <ProjectReference Include="..\Sigil.UI\Sigil.UI.csproj" />
-    <ProjectReference Include="..\Sigil.Vault.Transit\Sigil.Vault.Transit.csproj" />
+    <ProjectReference Include="..\Sigil.Vault\Sigil.Vault.csproj" />
   </ItemGroup>
 
 </Project>

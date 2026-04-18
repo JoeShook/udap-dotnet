@@ -18,6 +18,9 @@ var vault = builder.AddVaultDev("vault")
         new TransitKeySpec("sigil-rsa-4096", "rsa-4096"),
         new TransitKeySpec("sigil-ecdsa-p384", "ecdsa-p384"));
 
+// Certificate server (static file host for CRLs and certs — always runs as a project)
+var certServer = builder.AddProject<Projects.Sigil_Certificate_Server>("certificate-server");
+
 // Sigil hosting mode: "project" (default), "docker", or "docker-gcp"
 // Set via env var Sigil__HostMode in launch profile.
 var hostMode = builder.Configuration["Sigil:HostMode"]?.ToLowerInvariant() ?? "project";

@@ -16,7 +16,7 @@ using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using Sigil.Common.Services.Signing;
 
-namespace Sigil.Gcp.Kms;
+namespace Sigil.Gcp;
 
 /// <summary>
 /// Signing provider that delegates to Google Cloud KMS.

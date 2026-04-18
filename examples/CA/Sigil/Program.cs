@@ -18,10 +18,18 @@ using Microsoft.Extensions.Options;
 using Sigil.Common.Data;
 using Sigil.ServiceDefaults;
 using Sigil.Common.Data.Entities;
+using Hangfire;
+using Hangfire.Dashboard;
+using Hangfire.PostgreSql;
+using Hangfire.Storage;
 using Sigil.Common.Services;
+using Sigil.Common.Services.Jobs;
+using Sigil.Common.Services.Publishing;
 using Sigil.Common.Services.Signing;
-using Sigil.Gcp.Kms;
-using Sigil.Vault.Transit;
+using Sigil.Services;
+using Sigil.FileSystem;
+using Sigil.Gcp;
+using Sigil.Vault;
 
 Log.Logger = new LoggerConfiguration()
     .WriteTo.Console()
@@ -78,6 +86,52 @@ try
         };
     });
     builder.Services.AddScoped<CertificateIssuanceService>();
+    builder.Services.AddScoped<CrlGenerationService>();
+    builder.Services.AddScoped<CrlAutoRenewalJob>();
+
+    // Publishing providers (domain-based routing from configuration)
+    builder.Services.Configure<PublishingOptions>(
+        builder.Configuration.GetSection("Publishing"));
+    builder.Services.AddSingleton<PublishingCoordinator>(sp =>
+    {
+        var pubOptions = sp.GetRequiredService<IOptions<PublishingOptions>>().Value;
+        var loggerFactory = sp.GetRequiredService<ILoggerFactory>();
+        var providers = new Dictionary<string, IPublishingProvider>(StringComparer.OrdinalIgnoreCase);
+
+        foreach (var config in pubOptions.Providers)
+        {
+            IPublishingProvider provider = config.Type.ToLowerInvariant() switch
+            {
+                "filesystem" => new FileSystemPublishingProvider(
+                    config.BaseDirectory ?? throw new InvalidOperationException(
+                        $"BaseDirectory required for filesystem publishing provider '{config.Domain}'"),
+                    loggerFactory.CreateLogger<FileSystemPublishingProvider>()),
+                "gcp" => new GcpPublishingProvider(
+                    new GcpPublisherOptions
+                    {
+                        BucketName = config.BucketName ?? throw new InvalidOperationException(
+                            $"BucketName required for GCP publishing provider '{config.Domain}'")
+                    },
+                    loggerFactory.CreateLogger<GcpPublishingProvider>()),
+                _ => throw new InvalidOperationException(
+                    $"Unknown publishing provider type: '{config.Type}' for domain '{config.Domain}'")
+            };
+            providers[config.Domain] = provider;
+        }
+
+        return new PublishingCoordinator(providers, loggerFactory.CreateLogger<PublishingCoordinator>());
+    });
+
+    // Hangfire
+    builder.Services.AddHangfire(config => config
+        .SetDataCompatibilityLevel(CompatibilityLevel.Version_180)
+        .UseSimpleAssemblyNameTypeSerializer()
+        .UseRecommendedSerializerSettings()
+        .UsePostgreSqlStorage(options =>
+            options.UseNpgsqlConnection(builder.Configuration.GetConnectionString("SigilDb")),
+            new PostgreSqlStorageOptions { SchemaName = "sigil" }));
+    builder.Services.AddHangfireServer();
+    builder.Services.AddSingleton<IRecurringJobScheduler, HangfireRecurringJobScheduler>();
 
     // Blazor Server + Fluent UI
     builder.Services.AddRazorComponents()
@@ -111,6 +165,27 @@ try
             return Serilog.Events.LogEventLevel.Information;
         };
     });
+
+    // Hangfire dashboard (Sigil is a dev/internal tool — open access)
+    app.MapHangfireDashboard("/hangfire", new DashboardOptions
+    {
+        Authorization = [new AllowAllDashboardAuthorizationFilter()]
+    });
+
+    // Register recurring CRL auto-renewal job only if not already configured
+    // (preserves cron schedule edited via the Jobs UI across restarts)
+    using (var connection = JobStorage.Current.GetConnection())
+    {
+        var existingJobs = connection.GetRecurringJobs();
+        if (!existingJobs.Any(j => j.Id == "crl-auto-renewal"))
+        {
+            var crlCron = builder.Configuration["Hangfire:CrlRenewalCron"] ?? Cron.Hourly();
+            RecurringJob.AddOrUpdate<CrlAutoRenewalJob>(
+                "crl-auto-renewal",
+                job => job.ExecuteAsync(CancellationToken.None),
+                crlCron);
+        }
+    }
 
     app.UseStaticFiles();
     app.MapStaticAssets();
@@ -288,4 +363,12 @@ static async Task SeedTemplatesAsync(SigilDbContext db)
     );
 
     await db.SaveChangesAsync();
+}
+
+/// <summary>
+/// Allows all requests to the Hangfire dashboard. Used in development only.
+/// </summary>
+class AllowAllDashboardAuthorizationFilter : IDashboardAuthorizationFilter
+{
+    public bool Authorize(DashboardContext context) => true;
 }

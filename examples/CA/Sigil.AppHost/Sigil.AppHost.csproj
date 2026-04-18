@@ -21,6 +21,7 @@
 
   <ItemGroup>
     <ProjectReference Include="..\Sigil\Sigil.csproj" />
+    <ProjectReference Include="..\Sigil.Certificate.Server\Sigil.Certificate.Server.csproj" />
   </ItemGroup>
 
 </Project>

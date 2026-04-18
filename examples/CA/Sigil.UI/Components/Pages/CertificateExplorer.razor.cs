@@ -19,9 +19,9 @@ using Sigil.Common.Data.Entities;
 using Sigil.Common.Services;
 using Sigil.Common.Services.Signing;
 using Sigil.Common.ViewModels;
-using Sigil.Gcp.Kms;
+using Sigil.Gcp;
 using Sigil.UI.Services;
-using Sigil.Vault.Transit;
+using Sigil.Vault;
 
 namespace Sigil.UI.Components.Pages;
 

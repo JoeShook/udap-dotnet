@@ -15,7 +15,7 @@ using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using Sigil.Common.Services.Signing;
 
-namespace Sigil.Vault.Transit;
+namespace Sigil.Vault;
 
 /// <summary>
 /// Signing provider that delegates to HashiCorp Vault's Transit secrets engine.
