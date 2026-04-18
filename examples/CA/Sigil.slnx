@@ -1,0 +1,13 @@
+<Solution>
+  <Folder Name="/_tests/">
+    <Project Path="_tests/Sigil.Signing.Tests/Sigil.Signing.Tests.csproj" />
+  </Folder>
+  <Project Path="Sigil.AppHost/Sigil.AppHost.csproj" />
+  <Project Path="Sigil.Common/Sigil.Common.csproj" />
+  <Project Path="Sigil.Gcp.Kms/Sigil.Gcp.Kms.csproj" />
+  <Project Path="Sigil.ServiceDefaults/Sigil.ServiceDefaults.csproj" />
+  <Project Path="Sigil.UI/Sigil.UI.csproj" />
+  <Project Path="Sigil.Vault.Hosting/Sigil.Vault.Hosting.csproj" />
+  <Project Path="Sigil.Vault.Transit/Sigil.Vault.Transit.csproj" />
+  <Project Path="Sigil/Sigil.csproj" />
+</Solution>

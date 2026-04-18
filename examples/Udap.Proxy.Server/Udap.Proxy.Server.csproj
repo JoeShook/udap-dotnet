@@ -29,10 +29,10 @@
   </ItemGroup>
 
   <ItemGroup Condition="'$(GCPDeploy)' == 'true'">
-    <PackageReference Include="Udap.CdsHooks.Endpoint" Version="0.6.*" />
-    <PackageReference Include="Udap.Metadata.Server" Version="0.6.*" />
-    <PackageReference Include="Udap.Smart.Metadata" Version="0.6.*" />
-    <PackageReference Include="Udap.Util" Version="0.6.*" />
+    <PackageReference Include="Udap.CdsHooks.Endpoint" Version="0.7.*" />
+    <PackageReference Include="Udap.Metadata.Server" Version="0.7.*" />
+    <PackageReference Include="Udap.Smart.Metadata" Version="0.7.*" />
+    <PackageReference Include="Udap.Util" Version="0.7.*" />
   </ItemGroup>
 
   <ItemGroup Condition="'$(GCPDeploy)' == '' OR '$(GCPDeploy)' != 'true' ">
@@ -91,6 +91,9 @@
     <None Update="CertStore\issued\fhirlabs.net.six.client.pfx">
       <CopyToOutputDirectory>Always</CopyToOutputDirectory>
     </None>
+    <None Update="CertStore\issued\fhirlabs.net.tefca.server.pfx">
+      <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+    </None>
     <None Update="CertStore\issued\fhirlabs.net.ten.client.pfx">
       <CopyToOutputDirectory>Always</CopyToOutputDirectory>
     </None>
@@ -118,7 +121,7 @@
     <None Update="CertStore\issued\sandbox.UdapLabsFhirStore.healthcare.client.pfx">
       <CopyToOutputDirectory>Always</CopyToOutputDirectory>
     </None>
-    <None Update="CertStore\issued\TefacaRce_FhirLabs.pfx">
+    <None Update="CertStore\issued\TefacaRce_EmrDirect_FhirLabs.pfx">
       <CopyToOutputDirectory>Always</CopyToOutputDirectory>
     </None>
     <None Update="CertStore\issued\touchstone.aegis.net.pfx">

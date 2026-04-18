@@ -61,6 +61,11 @@ public class UdapDynamicClientRegistrationContext
     public long? CommunityId { get; set; }
 
     /// <summary>
+    /// The community name (URI) resolved during chain validation.
+    /// </summary>
+    public string? CommunityName { get; set; }
+
+    /// <summary>
     /// Certificate expiration from the validated chain.
     /// </summary>
     public DateTime? CertificateExpiration { get; set; }

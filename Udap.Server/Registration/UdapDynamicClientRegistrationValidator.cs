@@ -710,6 +710,7 @@ public class UdapDynamicClientRegistrationValidator : IUdapDynamicClientRegistra
 
                 context.Issuer = jwtSecurityToken.Issuer;
                 context.CommunityId = result.CommunityId;
+                context.CommunityName = result.CommunityName;
                 context.CertificateExpiration = result.ChainElements.First().Certificate.NotAfter.ToUniversalTime();
 
                 return true;

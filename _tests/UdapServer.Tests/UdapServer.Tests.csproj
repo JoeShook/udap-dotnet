@@ -117,6 +117,8 @@
     <ProjectReference Include="..\..\Udap.Metadata.Server\Udap.Metadata.Server.csproj" />
     <ProjectReference Include="..\..\Udap.Server\Udap.Server.csproj" />
     <ProjectReference Include="..\..\Udap.Tefca.Model\Udap.Tefca.Model.csproj" />
+    <ProjectReference Include="..\..\Udap.Ssraa.Server\Udap.Ssraa.Server.csproj" />
+    <ProjectReference Include="..\..\Udap.Tefca.Server\Udap.Tefca.Server.csproj" />
     <ProjectReference Include="..\..\Udap.Util\Udap.Util.csproj" />
   </ItemGroup>
 
