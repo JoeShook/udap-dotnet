@@ -94,6 +94,17 @@ public class CrlGenerationService
             })
             .ToListAsync(ct);
 
+        // Collect revoked child CAs (intermediates signed by this CA)
+        var revokedChildCas = await db.CaCertificates
+            .Where(c => c.ParentId == caCertificateId && c.IsRevoked && !c.IsArchived)
+            .Select(c => new
+            {
+                c.SerialNumber,
+                c.RevokedAt,
+                c.RevocationReason
+            })
+            .ToListAsync(ct);
+
         // Carry forward revocations from the latest existing CRL (for certs revoked via CRL import)
         var latestCrl = ca.Crls
             .OrderByDescending(c => c.CrlNumber)
@@ -119,6 +130,11 @@ public class CrlGenerationService
         foreach (var cert in revokedCerts)
         {
             revocationEntries[cert.SerialNumber] = (cert.RevokedAt ?? now, cert.RevocationReason);
+        }
+
+        foreach (var childCa in revokedChildCas)
+        {
+            revocationEntries[childCa.SerialNumber] = (childCa.RevokedAt ?? now, childCa.RevocationReason);
         }
 
         foreach (var rev in carryForwardRevocations)

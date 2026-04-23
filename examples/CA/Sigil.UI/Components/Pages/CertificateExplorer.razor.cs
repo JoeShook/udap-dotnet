@@ -17,6 +17,7 @@ using Microsoft.JSInterop;
 using Sigil.Common.Data;
 using Sigil.Common.Data.Entities;
 using Sigil.Common.Services;
+using Sigil.Common.Services.Jobs;
 using Sigil.Common.Services.Signing;
 using Sigil.Common.ViewModels;
 using Sigil.Gcp;
@@ -44,6 +45,7 @@ public partial class CertificateExplorer
     [Inject] private IHttpClientFactory HttpClientFactory { get; set; } = null!;
     [Inject] private IJSRuntime JS { get; set; } = null!;
     [Inject] private NavigationManager Navigation { get; set; } = null!;
+    [Inject] private CrlGenerationService CrlGenService { get; set; } = null!;
 
     // Tree state
     private List<CommunityOption> communityList = new();
@@ -128,6 +130,21 @@ public partial class CertificateExplorer
     private List<IssuanceSanEntry> renewalSans = new();
     private string renewalSubjectDn = string.Empty;
 
+    // Revoke dialog
+    private bool revokeDialogHidden = true;
+    private bool isRevoking;
+    private RevokeReasonOption selectedRevokeReason = null!;
+    private static readonly List<RevokeReasonOption> revokeReasonOptions = new()
+    {
+        new(0, "Unspecified"),
+        new(1, "Key Compromise"),
+        new(2, "CA Compromise"),
+        new(3, "Affiliation Changed"),
+        new(4, "Superseded"),
+        new(5, "Cessation of Operation"),
+        new(9, "Privilege Withdrawn"),
+    };
+
     // Re-sign dialog
     private bool resignDialogHidden = true;
     private bool isResigning;
@@ -141,7 +158,7 @@ public partial class CertificateExplorer
 
         communityList = await db.Communities
             .OrderBy(c => c.Name)
-            .Select(c => new CommunityOption { Id = c.Id, Name = c.Name })
+            .Select(c => new CommunityOption { Id = c.Id, Name = c.Name, BaseUrl = c.BaseUrl })
             .ToListAsync();
 
         if (CommunityId > 0)
@@ -233,7 +250,7 @@ public partial class CertificateExplorer
         List<CaCertificate> allCas,
         Dictionary<string, ChainValidationResult> validationResults)
     {
-        var caStatus = DeriveStatus(ca.Thumbprint, ca.NotAfter, false, validationResults);
+        var caStatus = DeriveStatus(ca.Thumbprint, ca.NotAfter, ca.IsRevoked, validationResults);
 
         var node = new CertificateChainNodeViewModel
         {
@@ -2454,9 +2471,11 @@ public partial class CertificateExplorer
             if (match != null)
             {
                 selectedTemplate = match;
-                OnTemplateSelected(match);
             }
         }
+
+        // Always call OnTemplateSelected with isRenewMode=true to restore subject/SANs
+        OnTemplateSelected(selectedTemplate);
 
         issuanceCertName = selectedNode.Name + " (renewed)";
     }
@@ -2546,13 +2565,18 @@ public partial class CertificateExplorer
     }
 
     /// <summary>
-    /// Expands URL template tokens like {CAName} using current issuance context.
+    /// Expands URL template tokens like {BaseUrl} and {CAName} using current issuance context.
     /// </summary>
     private string ExpandUrlTemplate(string? template)
     {
         if (string.IsNullOrWhiteSpace(template)) return string.Empty;
 
         var result = template;
+
+        var baseUrl = selectedCommunity?.BaseUrl?.TrimEnd('/');
+        if (!string.IsNullOrEmpty(baseUrl))
+            result = result.Replace("{BaseUrl}", baseUrl, StringComparison.OrdinalIgnoreCase);
+
         if (issuingCaNameForIssuance != null)
             result = result.Replace("{CAName}", issuingCaNameForIssuance, StringComparison.OrdinalIgnoreCase);
 
@@ -2572,6 +2596,7 @@ public partial class CertificateExplorer
     {
         public int Id { get; set; }
         public string Name { get; set; } = string.Empty;
+        public string? BaseUrl { get; set; }
     }
 
     public class CaSelectOption
@@ -2588,4 +2613,90 @@ public partial class CertificateExplorer
         public SanType Type { get; set; } = SanType.Uri;
         public string Value { get; set; } = string.Empty;
     }
+
+    private void ShowRevokeDialog()
+    {
+        if (selectedNode == null) return;
+        selectedRevokeReason = revokeReasonOptions[0];
+        isRevoking = false;
+        revokeDialogHidden = false;
+    }
+
+    private async Task RevokeCertificateAsync()
+    {
+        if (selectedNode == null) return;
+
+        isRevoking = true;
+        StateHasChanged();
+
+        try
+        {
+            await using var db = await DbFactory.CreateDbContextAsync();
+            var now = DateTime.UtcNow;
+            int? issuingCaId = null;
+
+            if (selectedNode.EntityType == "CaCertificate")
+            {
+                var ca = await db.CaCertificates.FindAsync(selectedNode.Id);
+                if (ca != null)
+                {
+                    ca.IsRevoked = true;
+                    ca.RevokedAt = now;
+                    ca.RevocationReason = selectedRevokeReason.Code;
+                    issuingCaId = ca.ParentId; // parent CA's CRL should include this
+                    await db.SaveChangesAsync();
+                }
+            }
+            else
+            {
+                var issued = await db.IssuedCertificates.FindAsync(selectedNode.Id);
+                if (issued != null)
+                {
+                    issued.IsRevoked = true;
+                    issued.RevokedAt = now;
+                    issued.RevocationReason = selectedRevokeReason.Code;
+                    issuingCaId = issued.IssuingCaCertificateId;
+                    await db.SaveChangesAsync();
+                }
+            }
+
+            revokeDialogHidden = true;
+
+            // Regenerate the issuing CA's CRL to include the revoked certificate
+            if (issuingCaId.HasValue)
+            {
+                var crlResult = await CrlGenService.GenerateCrlAsync(issuingCaId.Value);
+                if (crlResult.IsSuccess)
+                {
+                    ToastService.ShowCopyableSuccess(
+                        $"Certificate '{selectedNode.Name}' revoked (reason: {selectedRevokeReason.Label}). CRL #{crlResult.CrlNumber} generated with {crlResult.RevokedCount} revocation(s).");
+                }
+                else
+                {
+                    ToastService.ShowCopyableSuccess(
+                        $"Certificate '{selectedNode.Name}' revoked (reason: {selectedRevokeReason.Label}).");
+                    ToastService.ShowCopyableError($"CRL regeneration failed: {crlResult.Error}");
+                }
+            }
+            else
+            {
+                // Root CA revoked — no parent CRL to update
+                ToastService.ShowCopyableSuccess(
+                    $"Certificate '{selectedNode.Name}' revoked (reason: {selectedRevokeReason.Label}).");
+            }
+
+            await LoadCommunityTreeAsync(CommunityId);
+        }
+        catch (Exception ex)
+        {
+            ToastService.ShowCopyableError($"Revocation failed: {ex.Message}");
+        }
+        finally
+        {
+            isRevoking = false;
+            StateHasChanged();
+        }
+    }
+
+    public record RevokeReasonOption(int Code, string Label);
 }

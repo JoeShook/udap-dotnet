@@ -22,6 +22,7 @@
     <FluentDataGrid Items="@communities.AsQueryable()" Style="margin-top: 0.5rem;">
         <PropertyColumn Property="@(c => c.Name)" Title="Name" Sortable="true" IsDefaultSortColumn="true" />
         <PropertyColumn Property="@(c => c.Description)" Title="Description" />
+        <PropertyColumn Property="@(c => c.BaseUrl)" Title="Base URL" />
         <TemplateColumn Title="Enabled">
             @if (context.Enabled)
             {
@@ -43,6 +44,12 @@
             </FluentButton>
             <FluentButton Size="ButtonSize.Small"
                           Appearance="Appearance.Outline"
+                          IconStart="@(new Icons.Regular.Size16.Edit())"
+                          OnClick="@(() => ShowEditDialog(context))">
+                Edit
+            </FluentButton>
+            <FluentButton Size="ButtonSize.Small"
+                          Appearance="Appearance.Outline"
                           IconStart="@(new Icons.Regular.Size16.Delete())"
                           OnClick="@(() => DeleteCommunityAsync(context))">
                 Delete
@@ -57,6 +64,7 @@
     <FluentDialogBody>
         <FluentTextField @bind-Value="newCommunityName" Label="Name" Style="width: 100%;" />
         <FluentTextField @bind-Value="newCommunityDescription" Label="Description" Style="width: 100%; margin-top: 0.5rem;" />
+        <FluentTextField @bind-Value="newCommunityBaseUrl" Label="Base URL" Placeholder="http://host.docker.internal:5033" Style="width: 100%; margin-top: 0.5rem;" />
     </FluentDialogBody>
     <FluentDialogFooter>
         <FluentButton Appearance="Appearance.Accent" OnClick="AddCommunityAsync"
@@ -64,6 +72,25 @@
             Create
         </FluentButton>
         <FluentButton Appearance="Appearance.Outline" OnClick="@(() => addDialogHidden = true)">
+            Cancel
+        </FluentButton>
+    </FluentDialogFooter>
+</FluentDialog>
+
+<FluentDialog @bind-Hidden="@editDialogHidden" Modal="true" TrapFocus="true"
+              Style="min-width: 400px;">
+    <FluentDialogHeader>Edit Community</FluentDialogHeader>
+    <FluentDialogBody>
+        <FluentTextField @bind-Value="editCommunityName" Label="Name" Style="width: 100%;" />
+        <FluentTextField @bind-Value="editCommunityDescription" Label="Description" Style="width: 100%; margin-top: 0.5rem;" />
+        <FluentTextField @bind-Value="editCommunityBaseUrl" Label="Base URL" Placeholder="http://host.docker.internal:5033" Style="width: 100%; margin-top: 0.5rem;" />
+    </FluentDialogBody>
+    <FluentDialogFooter>
+        <FluentButton Appearance="Appearance.Accent" OnClick="SaveEditAsync"
+                      Disabled="@(string.IsNullOrWhiteSpace(editCommunityName))">
+            Save
+        </FluentButton>
+        <FluentButton Appearance="Appearance.Outline" OnClick="@(() => editDialogHidden = true)">
             Cancel
         </FluentButton>
     </FluentDialogFooter>

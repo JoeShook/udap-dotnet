@@ -26,6 +26,14 @@ public partial class Communities
     private bool addDialogHidden = true;
     private string newCommunityName = string.Empty;
     private string newCommunityDescription = string.Empty;
+    private string newCommunityBaseUrl = string.Empty;
+
+    // Edit dialog
+    private bool editDialogHidden = true;
+    private int editCommunityId;
+    private string editCommunityName = string.Empty;
+    private string editCommunityDescription = string.Empty;
+    private string editCommunityBaseUrl = string.Empty;
 
     protected override async Task OnInitializedAsync()
     {
@@ -42,6 +50,7 @@ public partial class Communities
                 Id = c.Id,
                 Name = c.Name,
                 Description = c.Description,
+                BaseUrl = c.BaseUrl,
                 Enabled = c.Enabled,
                 CreatedAt = c.CreatedAt,
                 RootCaCount = c.CaCertificates.Count(ca => ca.ParentId == null),
@@ -56,6 +65,7 @@ public partial class Communities
     {
         newCommunityName = string.Empty;
         newCommunityDescription = string.Empty;
+        newCommunityBaseUrl = string.Empty;
         addDialogHidden = false;
     }
 
@@ -69,6 +79,7 @@ public partial class Communities
         {
             Name = newCommunityName.Trim(),
             Description = string.IsNullOrWhiteSpace(newCommunityDescription) ? null : newCommunityDescription.Trim(),
+            BaseUrl = string.IsNullOrWhiteSpace(newCommunityBaseUrl) ? null : newCommunityBaseUrl.Trim().TrimEnd('/'),
             Enabled = true
         });
 
@@ -96,6 +107,33 @@ public partial class Communities
 
             await LoadCommunitiesAsync();
         }
+    }
+
+    private void ShowEditDialog(CommunityViewModel community)
+    {
+        editCommunityId = community.Id;
+        editCommunityName = community.Name;
+        editCommunityDescription = community.Description ?? string.Empty;
+        editCommunityBaseUrl = community.BaseUrl ?? string.Empty;
+        editDialogHidden = false;
+    }
+
+    private async Task SaveEditAsync()
+    {
+        if (string.IsNullOrWhiteSpace(editCommunityName)) return;
+
+        await using var db = await DbFactory.CreateDbContextAsync();
+        var entity = await db.Communities.FindAsync(editCommunityId);
+        if (entity != null)
+        {
+            entity.Name = editCommunityName.Trim();
+            entity.Description = string.IsNullOrWhiteSpace(editCommunityDescription) ? null : editCommunityDescription.Trim();
+            entity.BaseUrl = string.IsNullOrWhiteSpace(editCommunityBaseUrl) ? null : editCommunityBaseUrl.Trim().TrimEnd('/');
+            await db.SaveChangesAsync();
+        }
+
+        editDialogHidden = true;
+        await LoadCommunitiesAsync();
     }
 
     private void NavigateToExplorer(int communityId)

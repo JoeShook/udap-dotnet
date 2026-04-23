@@ -47,7 +47,9 @@ public class PublishingCoordinator
 
         if (!_providersByDomain.TryGetValue(uri.Authority, out var provider))
         {
-            _logger.LogDebug("No publishing provider configured for domain '{Domain}'", uri.Authority);
+            _logger.LogWarning(
+                "No publishing provider configured for domain '{Domain}'. Configured domains: [{Domains}]",
+                uri.Authority, string.Join(", ", _providersByDomain.Keys));
             return;
         }
 
@@ -79,7 +81,9 @@ public class PublishingCoordinator
 
         if (!_providersByDomain.TryGetValue(uri.Authority, out var provider))
         {
-            _logger.LogDebug("No publishing provider configured for domain '{Domain}'", uri.Authority);
+            _logger.LogWarning(
+                "No publishing provider configured for domain '{Domain}'. Configured domains: [{Domains}]",
+                uri.Authority, string.Join(", ", _providersByDomain.Keys));
             return;
         }
 

@@ -453,6 +453,49 @@
     </FluentDialogFooter>
 </FluentDialog>
 
+<FluentDialog @bind-Hidden="@revokeDialogHidden" Modal="true" TrapFocus="true"
+              Style="min-width: 450px;">
+    <FluentDialogHeader>Revoke Certificate</FluentDialogHeader>
+    <FluentDialogBody>
+        <div style="display: flex; flex-direction: column; gap: 0.75rem;">
+            <FluentMessageBar Intent="MessageIntent.Warning">
+                Revoking a certificate is permanent. The certificate will be marked as revoked
+                and included in the next CRL generation.
+            </FluentMessageBar>
+
+            @if (selectedNode != null)
+            {
+                <div style="display: grid; grid-template-columns: 120px 1fr; gap: 0.4rem; font-size: 0.9rem;">
+                    <strong>Certificate</strong>
+                    <span>@selectedNode.Name</span>
+                    <strong>Subject</strong>
+                    <span>@selectedCert?.Subject</span>
+                    <strong>Type</strong>
+                    <span>@selectedNode.CertificateRole</span>
+                </div>
+            }
+
+            <FluentSelect TOption="RevokeReasonOption"
+                          Items="@revokeReasonOptions"
+                          OptionText="@(r => r.Label)"
+                          @bind-SelectedOption="selectedRevokeReason"
+                          Label="Revocation Reason"
+                          Style="width: 100%;" />
+        </div>
+    </FluentDialogBody>
+    <FluentDialogFooter>
+        <FluentButton Appearance="Appearance.Accent" OnClick="RevokeCertificateAsync"
+                      Disabled="@isRevoking"
+                      Style="background: #9c27b0;">
+            @(isRevoking ? "Revoking..." : "Revoke Certificate")
+        </FluentButton>
+        <FluentButton Appearance="Appearance.Outline" OnClick="@(() => revokeDialogHidden = true)"
+                      Disabled="@isRevoking">
+            Cancel
+        </FluentButton>
+    </FluentDialogFooter>
+</FluentDialog>
+
 @if (isLoadingTree && treeNodes.Count == 0)
 {
     <FluentCard Style="margin-top: 1rem; text-align: center; padding: 2rem;">
@@ -742,6 +785,16 @@ else if (treeNodes.Count > 0)
                                       title="Move to another community">
                             Move
                         </FluentButton>
+                        @if (selectedNode?.Status != CertificateStatus.Revoked)
+                        {
+                            <FluentButton Appearance="Appearance.Outline"
+                                          IconStart="@(new Icons.Regular.Size16.ShieldDismiss())"
+                                          OnClick="ShowRevokeDialog"
+                                          title="Revoke this certificate"
+                                          Style="color: #9c27b0;">
+                                Revoke
+                            </FluentButton>
+                        }
                         <FluentButton Appearance="Appearance.Outline"
                                       IconStart="@(new Icons.Regular.Size16.Archive())"
                                       OnClick="ArchiveSelectedAsync"
