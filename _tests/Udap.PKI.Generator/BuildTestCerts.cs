@@ -219,7 +219,7 @@ public partial class BuildTestCerts : CertificateBase
     /// Regenerate all end-entity certificates (UDAP client, ECDSA, SSL, CRLs) for the default community
     /// using the existing CA and intermediate from disk. Does NOT rebuild the PKI.
     /// </summary>
-    [Fact]//(Skip = "Enabled on desktop when needed.")]
+    [Fact(Skip = "Generates local PKI artifacts; requires existing certstores/*.pfx on disk (run MakeCaWithIntermediateUdapAndSSLForDefaultCommunity first). Not for CI. Set UDAP_RUN_PKI_GENERATOR_TESTS=true and enable manually on desktop when needed.")]
     public void MakeEndCertsForDefaultCommunity()
     {
         using var caCert = new X509Certificate2($"{SureFhirLabsCertStore}/SureFhirLabs_CA.pfx", "udap-test", X509KeyStorageFlags.Exportable);
@@ -621,7 +621,7 @@ public partial class BuildTestCerts : CertificateBase
             true);
     }
 
-    [Fact]
+    [Fact(Skip = "Generates local negative-test PKI artifacts; requires existing certstores/*.pfx on disk (run MakeCaWithIntermediateUdapAndSSLForDefaultCommunity first). Not for CI. Set UDAP_RUN_PKI_GENERATOR_TESTS=true and enable manually on desktop when needed.")]
     public void MakeNegativeTestCertsForFhirLabsReferenceImplementationServer() // ordered by method name.  Notice ITestCaseOrderer
     {
         using var rootCA = new X509Certificate2($"{SureFhirLabsCertStore}/SureFhirLabs_CA.pfx", "udap-test");
@@ -1421,7 +1421,7 @@ public partial class BuildTestCerts : CertificateBase
     /// unique Subject Alternative Name URI representing a different domain path.
     /// These are used to test multi-domain metadata signing within a single community.
     /// </summary>
-    [Fact] //(Skip = "Enabled on desktop when needed.")]
+    [Fact(Skip = "Generates local PKI artifacts; requires existing certstores/*.pfx on disk (run MakeCaWithIntermediateUdapAndSSLForDefaultCommunity first). Not for CI. Set UDAP_RUN_PKI_GENERATOR_TESTS=true and enable manually on desktop when needed.")]
     public void MakeMultiDomainCertsForSureFhirLabs()
     {
         using var rootCA = new X509Certificate2($"{SureFhirLabsCertStore}/SureFhirLabs_CA.pfx", "udap-test");
