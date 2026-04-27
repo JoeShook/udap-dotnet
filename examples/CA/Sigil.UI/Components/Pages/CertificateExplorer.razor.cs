@@ -121,8 +121,8 @@ public partial class CertificateExplorer
     private string issuanceCertName = string.Empty;
     private DateTime? issuanceNotBeforeNullable = DateTime.UtcNow;
     private DateTime? issuanceNotAfterNullable = DateTime.UtcNow.AddYears(1);
-    private string issuanceCdpUrl = string.Empty;
-    private string issuanceAiaUrl = string.Empty;
+    private List<IssuanceUrlEntry> issuanceCdpUrls = new();
+    private List<IssuanceUrlEntry> issuanceAiaUrls = new();
     private List<IssuanceSanEntry> issuanceSans = new();
     private string issuancePfxPassword = string.Empty;
     private string issuanceKeyStorage = "local"; // "local" or "vault-transit"
@@ -158,7 +158,12 @@ public partial class CertificateExplorer
 
         communityList = await db.Communities
             .OrderBy(c => c.Name)
-            .Select(c => new CommunityOption { Id = c.Id, Name = c.Name, BaseUrl = c.BaseUrl })
+            .Select(c => new CommunityOption
+            {
+                Id = c.Id,
+                Name = c.Name,
+                BaseUrls = c.BaseUrls.OrderBy(bu => bu.SortOrder).Select(bu => bu.Url).ToList()
+            })
             .ToListAsync();
 
         if (CommunityId > 0)
@@ -2206,8 +2211,17 @@ public partial class CertificateExplorer
             desiredNotAfter = issuingCaNotAfter.Value;
         issuanceNotAfterNullable = desiredNotAfter;
 
-        issuanceCdpUrl = ExpandUrlTemplate(template.CdpUrlTemplate);
-        issuanceAiaUrl = ExpandUrlTemplate(template.AiaUrlTemplate);
+        var cdpTemplate = template.CdpUrlTemplate;
+        if (template.IncludeCdp && string.IsNullOrWhiteSpace(cdpTemplate))
+            cdpTemplate = "{BaseUrl}/crls/{CAName}.crl";
+        issuanceCdpUrls = ExpandUrlTemplates(cdpTemplate)
+            .Select(u => new IssuanceUrlEntry { Value = u }).ToList();
+
+        var aiaTemplate = template.AiaUrlTemplate;
+        if (template.IncludeAia && string.IsNullOrWhiteSpace(aiaTemplate))
+            aiaTemplate = "{BaseUrl}/certs/{CAName}.cer";
+        issuanceAiaUrls = ExpandUrlTemplates(aiaTemplate)
+            .Select(u => new IssuanceUrlEntry { Value = u }).ToList();
 
         if (isRenewMode)
         {
@@ -2253,18 +2267,22 @@ public partial class CertificateExplorer
     {
         if (selectedTemplate == null || string.IsNullOrWhiteSpace(issuanceSubjectDn)) return;
 
-        var cdpUrl = selectedTemplate.IncludeCdp && !string.IsNullOrWhiteSpace(issuanceCdpUrl) ? issuanceCdpUrl : null;
-        var aiaUrl = selectedTemplate.IncludeAia && !string.IsNullOrWhiteSpace(issuanceAiaUrl) ? issuanceAiaUrl : null;
+        var cdpUrls = selectedTemplate.IncludeCdp
+            ? issuanceCdpUrls.Where(u => !string.IsNullOrWhiteSpace(u.Value)).Select(u => u.Value).ToList()
+            : new List<string>();
+        var aiaUrls = selectedTemplate.IncludeAia
+            ? issuanceAiaUrls.Where(u => !string.IsNullOrWhiteSpace(u.Value)).Select(u => u.Value).ToList()
+            : new List<string>();
 
         // Warn about missing CDP/AIA when the template expects them
         var warnings = new List<string>();
-        if (selectedTemplate.IncludeCdp && string.IsNullOrWhiteSpace(issuanceCdpUrl))
-            warnings.Add("CRL Distribution Point (CDP) URL is empty but the template has CDP enabled.");
-        if (selectedTemplate.IncludeAia && string.IsNullOrWhiteSpace(issuanceAiaUrl))
-            warnings.Add("Authority Information Access (AIA) URL is empty but the template has AIA enabled.");
+        if (selectedTemplate.IncludeCdp && cdpUrls.Count == 0)
+            warnings.Add("CRL Distribution Point (CDP) URLs are empty but the template has CDP enabled.");
+        if (selectedTemplate.IncludeAia && aiaUrls.Count == 0)
+            warnings.Add("Authority Information Access (AIA) URLs are empty but the template has AIA enabled.");
 
         // Validate that provided CDP and AIA URLs resolve
-        var unreachableUrls = await ValidateEndpointUrlsAsync(cdpUrl, aiaUrl);
+        var unreachableUrls = await ValidateEndpointUrlsAsync(cdpUrls, aiaUrls);
         foreach (var u in unreachableUrls)
             warnings.Add($"{u.Url}: {u.Error}");
 
@@ -2294,8 +2312,8 @@ public partial class CertificateExplorer
                     .Where(s => !string.IsNullOrWhiteSpace(s.Value))
                     .Select(s => new SanEntry(s.Type, s.Value))
                     .ToList(),
-                CdpUrl = cdpUrl,
-                AiaUrl = aiaUrl,
+                CdpUrls = cdpUrls,
+                AiaUrls = aiaUrls,
                 NotBefore = issuanceNotBeforeNullable.HasValue ? new DateTimeOffset(issuanceNotBeforeNullable.Value, TimeSpan.Zero) : null,
                 NotAfter = issuanceNotAfterNullable.HasValue ? new DateTimeOffset(issuanceNotAfterNullable.Value, TimeSpan.Zero) : null,
                 PfxPassword = issuancePfxPassword,
@@ -2326,15 +2344,15 @@ public partial class CertificateExplorer
         }
     }
 
-    private async Task<List<(string Url, string Error)>> ValidateEndpointUrlsAsync(string? cdpUrl, string? aiaUrl)
+    private async Task<List<(string Url, string Error)>> ValidateEndpointUrlsAsync(List<string> cdpUrls, List<string> aiaUrls)
     {
         var unreachable = new List<(string Url, string Error)>();
         var urlsToCheck = new List<(string Url, string Label)>();
 
-        if (!string.IsNullOrWhiteSpace(cdpUrl))
-            urlsToCheck.Add((cdpUrl, "CDP"));
-        if (!string.IsNullOrWhiteSpace(aiaUrl))
-            urlsToCheck.Add((aiaUrl, "AIA"));
+        foreach (var url in cdpUrls)
+            urlsToCheck.Add((url, "CDP"));
+        foreach (var url in aiaUrls)
+            urlsToCheck.Add((url, "AIA"));
 
         if (urlsToCheck.Count == 0) return unreachable;
 
@@ -2564,23 +2582,30 @@ public partial class CertificateExplorer
         return false;
     }
 
-    /// <summary>
-    /// Expands URL template tokens like {BaseUrl} and {CAName} using current issuance context.
-    /// </summary>
-    private string ExpandUrlTemplate(string? template)
+    private List<string> ExpandUrlTemplates(string? template)
     {
-        if (string.IsNullOrWhiteSpace(template)) return string.Empty;
+        if (string.IsNullOrWhiteSpace(template)) return new();
 
-        var result = template;
+        var baseUrls = selectedCommunity?.BaseUrls ?? new();
+        if (baseUrls.Count == 0)
+        {
+            var result = template;
+            if (issuingCaNameForIssuance != null)
+                result = result.Replace("{CAName}", issuingCaNameForIssuance, StringComparison.OrdinalIgnoreCase);
+            return string.IsNullOrWhiteSpace(result) ? new() : new() { result };
+        }
 
-        var baseUrl = selectedCommunity?.BaseUrl?.TrimEnd('/');
-        if (!string.IsNullOrEmpty(baseUrl))
-            result = result.Replace("{BaseUrl}", baseUrl, StringComparison.OrdinalIgnoreCase);
+        var expanded = new List<string>();
+        foreach (var baseUrl in baseUrls)
+        {
+            var result = template
+                .Replace("{BaseUrl}", baseUrl.TrimEnd('/'), StringComparison.OrdinalIgnoreCase);
+            if (issuingCaNameForIssuance != null)
+                result = result.Replace("{CAName}", issuingCaNameForIssuance, StringComparison.OrdinalIgnoreCase);
+            expanded.Add(result);
+        }
 
-        if (issuingCaNameForIssuance != null)
-            result = result.Replace("{CAName}", issuingCaNameForIssuance, StringComparison.OrdinalIgnoreCase);
-
-        return result;
+        return expanded;
     }
 
     private static string GetCertTypeLabel(CertificateType ct) => ct switch
@@ -2596,7 +2621,7 @@ public partial class CertificateExplorer
     {
         public int Id { get; set; }
         public string Name { get; set; } = string.Empty;
-        public string? BaseUrl { get; set; }
+        public List<string> BaseUrls { get; set; } = new();
     }
 
     public class CaSelectOption
@@ -2611,6 +2636,11 @@ public partial class CertificateExplorer
     public class IssuanceSanEntry
     {
         public SanType Type { get; set; } = SanType.Uri;
+        public string Value { get; set; } = string.Empty;
+    }
+
+    public class IssuanceUrlEntry
+    {
         public string Value { get; set; } = string.Empty;
     }
 

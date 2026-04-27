@@ -22,7 +22,7 @@
     <FluentDataGrid Items="@communities.AsQueryable()" Style="margin-top: 0.5rem;">
         <PropertyColumn Property="@(c => c.Name)" Title="Name" Sortable="true" IsDefaultSortColumn="true" />
         <PropertyColumn Property="@(c => c.Description)" Title="Description" />
-        <PropertyColumn Property="@(c => c.BaseUrl)" Title="Base URL" />
+        <PropertyColumn Property="@(c => c.BaseUrlsDisplay)" Title="Certificate Server Base URLs" />
         <TemplateColumn Title="Enabled">
             @if (context.Enabled)
             {
@@ -64,7 +64,22 @@
     <FluentDialogBody>
         <FluentTextField @bind-Value="newCommunityName" Label="Name" Style="width: 100%;" />
         <FluentTextField @bind-Value="newCommunityDescription" Label="Description" Style="width: 100%; margin-top: 0.5rem;" />
-        <FluentTextField @bind-Value="newCommunityBaseUrl" Label="Base URL" Placeholder="http://host.docker.internal:5033" Style="width: 100%; margin-top: 0.5rem;" />
+        <FluentLabel Typo="Typography.Subject" Style="margin-top: 0.5rem;">Certificate Server Base URLs</FluentLabel>
+        @foreach (var url in newCommunityBaseUrls)
+        {
+            <FluentStack Orientation="Orientation.Horizontal" Style="gap: 0.5rem; align-items: end;">
+                <FluentTextField @bind-Value="url.Value" Style="flex: 1;"
+                                 Placeholder="http://host.docker.internal:5033" />
+                <FluentButton Appearance="Appearance.Outline" Size="ButtonSize.Small"
+                              IconStart="@(new Icons.Regular.Size16.Delete())"
+                              OnClick="@(() => newCommunityBaseUrls.Remove(url))" />
+            </FluentStack>
+        }
+        <FluentButton Appearance="Appearance.Outline" Size="ButtonSize.Small"
+                      IconStart="@(new Icons.Regular.Size16.Add())"
+                      OnClick="@(() => newCommunityBaseUrls.Add(new BaseUrlEntry()))">
+            Add Base URL
+        </FluentButton>
     </FluentDialogBody>
     <FluentDialogFooter>
         <FluentButton Appearance="Appearance.Accent" OnClick="AddCommunityAsync"
@@ -83,7 +98,22 @@
     <FluentDialogBody>
         <FluentTextField @bind-Value="editCommunityName" Label="Name" Style="width: 100%;" />
         <FluentTextField @bind-Value="editCommunityDescription" Label="Description" Style="width: 100%; margin-top: 0.5rem;" />
-        <FluentTextField @bind-Value="editCommunityBaseUrl" Label="Base URL" Placeholder="http://host.docker.internal:5033" Style="width: 100%; margin-top: 0.5rem;" />
+        <FluentLabel Typo="Typography.Subject" Style="margin-top: 0.5rem;">Certificate Server Base URLs</FluentLabel>
+        @foreach (var url in editCommunityBaseUrls)
+        {
+            <FluentStack Orientation="Orientation.Horizontal" Style="gap: 0.5rem; align-items: end;">
+                <FluentTextField @bind-Value="url.Value" Style="flex: 1;"
+                                 Placeholder="http://host.docker.internal:5033" />
+                <FluentButton Appearance="Appearance.Outline" Size="ButtonSize.Small"
+                              IconStart="@(new Icons.Regular.Size16.Delete())"
+                              OnClick="@(() => editCommunityBaseUrls.Remove(url))" />
+            </FluentStack>
+        }
+        <FluentButton Appearance="Appearance.Outline" Size="ButtonSize.Small"
+                      IconStart="@(new Icons.Regular.Size16.Add())"
+                      OnClick="@(() => editCommunityBaseUrls.Add(new BaseUrlEntry()))">
+            Add Base URL
+        </FluentButton>
     </FluentDialogBody>
     <FluentDialogFooter>
         <FluentButton Appearance="Appearance.Accent" OnClick="SaveEditAsync"

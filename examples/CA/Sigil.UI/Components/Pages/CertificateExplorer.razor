@@ -305,18 +305,46 @@
                 <FluentDatePicker @bind-Value="issuanceNotAfterNullable" Label="Not After" Style="flex: 1;" />
             </div>
 
-            @* CDP / AIA URLs *@
+            @* CDP URLs *@
             @if (selectedTemplate?.IncludeCdp == true)
             {
-                <FluentTextField @bind-Value="issuanceCdpUrl" Label="CRL Distribution Point URL"
-                                 Placeholder="http://crl.example.com/my.crl"
-                                 Style="width: 100%;" />
+                <FluentLabel Typo="Typography.Subject" Style="margin-top: 0.25rem;">CRL Distribution Point URLs</FluentLabel>
+                @foreach (var cdp in issuanceCdpUrls)
+                {
+                    <FluentStack Orientation="Orientation.Horizontal" Style="gap: 0.5rem; align-items: end;">
+                        <FluentTextField @bind-Value="cdp.Value" Style="flex: 1;"
+                                         Placeholder="http://crl.example.com/my.crl" />
+                        <FluentButton Appearance="Appearance.Outline" Size="ButtonSize.Small"
+                                      IconStart="@(new Icons.Regular.Size16.Delete())"
+                                      OnClick="@(() => issuanceCdpUrls.Remove(cdp))" />
+                    </FluentStack>
+                }
+                <FluentButton Appearance="Appearance.Outline" Size="ButtonSize.Small"
+                              IconStart="@(new Icons.Regular.Size16.Add())"
+                              OnClick="@(() => issuanceCdpUrls.Add(new IssuanceUrlEntry()))">
+                    Add CDP URL
+                </FluentButton>
             }
+
+            @* AIA URLs *@
             @if (selectedTemplate?.IncludeAia == true)
             {
-                <FluentTextField @bind-Value="issuanceAiaUrl" Label="Authority Information Access URL"
-                                 Placeholder="http://crl.example.com/ca.cer"
-                                 Style="width: 100%;" />
+                <FluentLabel Typo="Typography.Subject" Style="margin-top: 0.25rem;">Authority Information Access URLs</FluentLabel>
+                @foreach (var aia in issuanceAiaUrls)
+                {
+                    <FluentStack Orientation="Orientation.Horizontal" Style="gap: 0.5rem; align-items: end;">
+                        <FluentTextField @bind-Value="aia.Value" Style="flex: 1;"
+                                         Placeholder="http://certs.example.com/ca.cer" />
+                        <FluentButton Appearance="Appearance.Outline" Size="ButtonSize.Small"
+                                      IconStart="@(new Icons.Regular.Size16.Delete())"
+                                      OnClick="@(() => issuanceAiaUrls.Remove(aia))" />
+                    </FluentStack>
+                }
+                <FluentButton Appearance="Appearance.Outline" Size="ButtonSize.Small"
+                              IconStart="@(new Icons.Regular.Size16.Add())"
+                              OnClick="@(() => issuanceAiaUrls.Add(new IssuanceUrlEntry()))">
+                    Add AIA URL
+                </FluentButton>
             }
 
             @* Subject Alternative Names *@

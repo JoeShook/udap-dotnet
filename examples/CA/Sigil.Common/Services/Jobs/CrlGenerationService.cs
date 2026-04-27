@@ -210,9 +210,12 @@ public class CrlGenerationService
             nextCrlNumber, ca.Name, revocationEntries.Count, nextUpdate);
 
         // Publish CRL to configured endpoints (non-fatal on failure)
-        if (_publishingCoordinator != null)
+        if (_publishingCoordinator != null && !string.IsNullOrEmpty(ca.CrlDistributionPoint))
         {
-            await _publishingCoordinator.PublishCrlAsync(ca.CrlDistributionPoint, crlBytes, ct);
+            foreach (var cdpUrl in ca.CrlDistributionPoint.Split(';', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries))
+            {
+                await _publishingCoordinator.PublishCrlAsync(cdpUrl, crlBytes, ct);
+            }
         }
 
         return CrlGenerationResult.Success(crlEntity.Id, nextCrlNumber, revocationEntries.Count, nextUpdate);

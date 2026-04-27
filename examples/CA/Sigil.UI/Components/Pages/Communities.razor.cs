@@ -12,6 +12,7 @@ using Microsoft.AspNetCore.Components;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.FluentUI.AspNetCore.Components;
 using Sigil.Common.Data;
+using Sigil.Common.Data.Entities;
 using Sigil.Common.ViewModels;
 
 namespace Sigil.UI.Components.Pages;
@@ -26,14 +27,14 @@ public partial class Communities
     private bool addDialogHidden = true;
     private string newCommunityName = string.Empty;
     private string newCommunityDescription = string.Empty;
-    private string newCommunityBaseUrl = string.Empty;
+    private List<BaseUrlEntry> newCommunityBaseUrls = new();
 
     // Edit dialog
     private bool editDialogHidden = true;
     private int editCommunityId;
     private string editCommunityName = string.Empty;
     private string editCommunityDescription = string.Empty;
-    private string editCommunityBaseUrl = string.Empty;
+    private List<BaseUrlEntry> editCommunityBaseUrls = new();
 
     protected override async Task OnInitializedAsync()
     {
@@ -50,7 +51,7 @@ public partial class Communities
                 Id = c.Id,
                 Name = c.Name,
                 Description = c.Description,
-                BaseUrl = c.BaseUrl,
+                BaseUrls = c.BaseUrls.OrderBy(bu => bu.SortOrder).Select(bu => bu.Url).ToList(),
                 Enabled = c.Enabled,
                 CreatedAt = c.CreatedAt,
                 RootCaCount = c.CaCertificates.Count(ca => ca.ParentId == null),
@@ -65,7 +66,7 @@ public partial class Communities
     {
         newCommunityName = string.Empty;
         newCommunityDescription = string.Empty;
-        newCommunityBaseUrl = string.Empty;
+        newCommunityBaseUrls = new List<BaseUrlEntry>();
         addDialogHidden = false;
     }
 
@@ -75,14 +76,27 @@ public partial class Communities
 
         await using var db = await DbFactory.CreateDbContextAsync();
 
-        db.Communities.Add(new Sigil.Common.Data.Entities.Community
+        var community = new Community
         {
             Name = newCommunityName.Trim(),
             Description = string.IsNullOrWhiteSpace(newCommunityDescription) ? null : newCommunityDescription.Trim(),
-            BaseUrl = string.IsNullOrWhiteSpace(newCommunityBaseUrl) ? null : newCommunityBaseUrl.Trim().TrimEnd('/'),
             Enabled = true
-        });
+        };
 
+        var sortOrder = 0;
+        foreach (var entry in newCommunityBaseUrls)
+        {
+            if (!string.IsNullOrWhiteSpace(entry.Value))
+            {
+                community.BaseUrls.Add(new CommunityBaseUrl
+                {
+                    Url = entry.Value.Trim().TrimEnd('/'),
+                    SortOrder = sortOrder++
+                });
+            }
+        }
+
+        db.Communities.Add(community);
         await db.SaveChangesAsync();
         addDialogHidden = true;
         await LoadCommunitiesAsync();
@@ -114,7 +128,9 @@ public partial class Communities
         editCommunityId = community.Id;
         editCommunityName = community.Name;
         editCommunityDescription = community.Description ?? string.Empty;
-        editCommunityBaseUrl = community.BaseUrl ?? string.Empty;
+        editCommunityBaseUrls = community.BaseUrls
+            .Select(u => new BaseUrlEntry { Value = u })
+            .ToList();
         editDialogHidden = false;
     }
 
@@ -123,12 +139,29 @@ public partial class Communities
         if (string.IsNullOrWhiteSpace(editCommunityName)) return;
 
         await using var db = await DbFactory.CreateDbContextAsync();
-        var entity = await db.Communities.FindAsync(editCommunityId);
+        var entity = await db.Communities
+            .Include(c => c.BaseUrls)
+            .FirstOrDefaultAsync(c => c.Id == editCommunityId);
+
         if (entity != null)
         {
             entity.Name = editCommunityName.Trim();
             entity.Description = string.IsNullOrWhiteSpace(editCommunityDescription) ? null : editCommunityDescription.Trim();
-            entity.BaseUrl = string.IsNullOrWhiteSpace(editCommunityBaseUrl) ? null : editCommunityBaseUrl.Trim().TrimEnd('/');
+
+            entity.BaseUrls.Clear();
+            var sortOrder = 0;
+            foreach (var entry in editCommunityBaseUrls)
+            {
+                if (!string.IsNullOrWhiteSpace(entry.Value))
+                {
+                    entity.BaseUrls.Add(new CommunityBaseUrl
+                    {
+                        Url = entry.Value.Trim().TrimEnd('/'),
+                        SortOrder = sortOrder++
+                    });
+                }
+            }
+
             await db.SaveChangesAsync();
         }
 
@@ -139,5 +172,10 @@ public partial class Communities
     private void NavigateToExplorer(int communityId)
     {
         Navigation.NavigateTo($"/explorer/{communityId}");
+    }
+
+    private class BaseUrlEntry
+    {
+        public string Value { get; set; } = string.Empty;
     }
 }

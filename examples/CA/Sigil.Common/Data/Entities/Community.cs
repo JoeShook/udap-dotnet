@@ -16,14 +16,9 @@ public class Community
     public string Name { get; set; } = string.Empty;
     public string? Description { get; set; }
 
-    /// <summary>
-    /// Base URL for the certificate/CRL distribution server (e.g., "http://host.docker.internal:5033").
-    /// Used to expand {BaseUrl} tokens in certificate template CDP and AIA URL patterns.
-    /// </summary>
-    public string? BaseUrl { get; set; }
-
     public bool Enabled { get; set; } = true;
     public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
 
+    public ICollection<CommunityBaseUrl> BaseUrls { get; set; } = new List<CommunityBaseUrl>();
     public ICollection<CaCertificate> CaCertificates { get; set; } = new List<CaCertificate>();
 }

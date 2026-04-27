@@ -47,14 +47,14 @@ public class CertificateIssuanceRequest
     public List<SanEntry> SubjectAltNames { get; set; } = [];
 
     /// <summary>
-    /// CRL Distribution Point URL. Only used when the template has IncludeCdp enabled.
+    /// CRL Distribution Point URLs. Only used when the template has IncludeCdp enabled.
     /// </summary>
-    public string? CdpUrl { get; set; }
+    public List<string> CdpUrls { get; set; } = [];
 
     /// <summary>
-    /// Authority Information Access URL. Only used when the template has IncludeAia enabled.
+    /// Authority Information Access URLs. Only used when the template has IncludeAia enabled.
     /// </summary>
-    public string? AiaUrl { get; set; }
+    public List<string> AiaUrls { get; set; } = [];
 
     /// <summary>
     /// Certificate validity start. Defaults to UtcNow if not specified.

@@ -67,73 +67,69 @@ public static class CertificateExtensionHelpers
     }
 
     /// <summary>
-    /// Builds a CRL Distribution Points extension (OID 2.5.29.31) for a single HTTP URL.
-    /// Supports URLs up to 119 characters.
+    /// Builds a CRL Distribution Points extension (OID 2.5.29.31) containing one or more distribution points.
     /// </summary>
-    public static X509Extension MakeCdp(string url)
+    public static X509Extension MakeCdp(IReadOnlyList<string> urls)
     {
-        byte[] encodedUrl = Encoding.ASCII.GetBytes(url);
-
-        if (encodedUrl.Length > 119)
-        {
-            throw new ArgumentException(
-                $"CDP URL must be 119 characters or fewer (got {encodedUrl.Length}). " +
-                "Use BouncyCastle for longer URLs.", nameof(url));
-        }
-
-        byte[] payload = new byte[encodedUrl.Length + 10];
-        int offset = 0;
-        payload[offset++] = 0x30;
-        payload[offset++] = (byte)(encodedUrl.Length + 8);
-        payload[offset++] = 0x30;
-        payload[offset++] = (byte)(encodedUrl.Length + 6);
-        payload[offset++] = 0xA0;
-        payload[offset++] = (byte)(encodedUrl.Length + 4);
-        payload[offset++] = 0xA0;
-        payload[offset++] = (byte)(encodedUrl.Length + 2);
-        payload[offset++] = 0x86;
-        payload[offset++] = (byte)encodedUrl.Length;
-        Buffer.BlockCopy(encodedUrl, 0, payload, offset, encodedUrl.Length);
-
-        return new X509Extension("2.5.29.31", payload, critical: false);
-    }
-
-    /// <summary>
-    /// Builds an Authority Information Access (AIA) extension (OID 1.3.6.1.5.5.7.1.1)
-    /// with a CA Issuers access method pointing to the given URI.
-    /// </summary>
-    public static X509Extension BuildAiaExtension(Uri caIssuerUri, bool critical = false)
-    {
-        var encodedParts = new List<byte[]>();
-
         var writer = new AsnWriter(AsnEncodingRules.DER);
-        writer.WriteObjectIdentifier("1.3.6.1.5.5.7.48.2"); // CA Issuers
-        encodedParts.Add(writer.Encode());
-
-        writer = new AsnWriter(AsnEncodingRules.DER);
-        writer.WriteCharacterString(
-            UniversalTagNumber.IA5String,
-            caIssuerUri.AbsoluteUri,
-            new Asn1Tag(TagClass.ContextSpecific, 6));
-        encodedParts.Add(writer.Encode());
-
-        writer = new AsnWriter(AsnEncodingRules.DER);
-        using (writer.PushSequence())
+        using (writer.PushSequence()) // CRLDistributionPoints ::= SEQUENCE OF DistributionPoint
         {
-            foreach (byte[] part in encodedParts)
+            foreach (var url in urls)
             {
-                writer.WriteEncodedValue(part);
+                using (writer.PushSequence()) // DistributionPoint ::= SEQUENCE
+                {
+                    // distributionPoint [0] EXPLICIT
+                    using (writer.PushSequence(new Asn1Tag(TagClass.ContextSpecific, 0, true)))
+                    {
+                        // fullName [0] IMPLICIT GeneralNames
+                        using (writer.PushSequence(new Asn1Tag(TagClass.ContextSpecific, 0, true)))
+                        {
+                            // uniformResourceIdentifier [6] IMPLICIT IA5String
+                            writer.WriteCharacterString(
+                                UniversalTagNumber.IA5String, url,
+                                new Asn1Tag(TagClass.ContextSpecific, 6));
+                        }
+                    }
+                }
             }
         }
 
-        var sequenceBytes = writer.Encode();
+        return new X509Extension("2.5.29.31", writer.Encode(), critical: false);
+    }
 
-        writer = new AsnWriter(AsnEncodingRules.DER);
-        using (writer.PushSequence())
+    /// <summary>
+    /// Builds a CRL Distribution Points extension for a single URL.
+    /// </summary>
+    public static X509Extension MakeCdp(string url) => MakeCdp(new[] { url });
+
+    /// <summary>
+    /// Builds an Authority Information Access (AIA) extension (OID 1.3.6.1.5.5.7.1.1)
+    /// with one or more CA Issuers access descriptions.
+    /// </summary>
+    public static X509Extension BuildAiaExtension(IReadOnlyList<Uri> caIssuerUris, bool critical = false)
+    {
+        var writer = new AsnWriter(AsnEncodingRules.DER);
+        using (writer.PushSequence()) // AuthorityInfoAccessSyntax ::= SEQUENCE OF AccessDescription
         {
-            writer.WriteEncodedValue(sequenceBytes);
+            foreach (var uri in caIssuerUris)
+            {
+                using (writer.PushSequence()) // AccessDescription ::= SEQUENCE
+                {
+                    writer.WriteObjectIdentifier("1.3.6.1.5.5.7.48.2"); // CA Issuers
+                    writer.WriteCharacterString(
+                        UniversalTagNumber.IA5String,
+                        uri.AbsoluteUri,
+                        new Asn1Tag(TagClass.ContextSpecific, 6));
+                }
+            }
         }
 
         return new X509Extension("1.3.6.1.5.5.7.1.1", writer.Encode(), critical);
     }
+
+    /// <summary>
+    /// Builds an AIA extension for a single CA Issuer URI.
+    /// </summary>
+    public static X509Extension BuildAiaExtension(Uri caIssuerUri, bool critical = false) =>
+        BuildAiaExtension(new[] { caIssuerUri }, critical);
 }

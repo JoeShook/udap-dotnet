@@ -15,6 +15,7 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
 using Sigil.Common.Data;
 using Sigil.Common.Data.Entities;
+using Sigil.Common.Services.Publishing;
 using Sigil.Common.Services.Signing;
 using Sigil.Common.ViewModels;
 
@@ -31,15 +32,18 @@ public class CertificateIssuanceService
     private readonly IDbContextFactory<SigilDbContext> _dbFactory;
     private readonly ILogger<CertificateIssuanceService> _logger;
     private readonly ISigningProvider _signingProvider;
+    private readonly PublishingCoordinator? _publishingCoordinator;
 
     public CertificateIssuanceService(
         IDbContextFactory<SigilDbContext> dbFactory,
         ILogger<CertificateIssuanceService> logger,
-        ISigningProvider? signingProvider = null)
+        ISigningProvider? signingProvider = null,
+        PublishingCoordinator? publishingCoordinator = null)
     {
         _dbFactory = dbFactory;
         _logger = logger;
         _signingProvider = signingProvider ?? new LocalSigningProvider();
+        _publishingCoordinator = publishingCoordinator;
     }
 
     /// <summary>
@@ -235,12 +239,14 @@ public class CertificateIssuanceService
                         KeySize = keySize,
                         NotBefore = cert.NotBefore.ToUniversalTime(),
                         NotAfter = cert.NotAfter.ToUniversalTime(),
-                        CrlDistributionPoint = request.CdpUrl,
-                        AuthorityInfoAccessUri = request.AiaUrl,
+                        CrlDistributionPoint = request.CdpUrls.Count > 0 ? string.Join(";", request.CdpUrls) : null,
+                        AuthorityInfoAccessUri = request.AiaUrls.Count > 0 ? string.Join(";", request.AiaUrls) : null,
                     };
 
                     db.CaCertificates.Add(caEntity);
                     await db.SaveChangesAsync();
+
+                    await PublishCertificateToAiaEndpointsAsync(request.AiaUrls, cert.RawData);
 
                     return new CertificateIssuanceResult
                     {
@@ -577,14 +583,16 @@ public class CertificateIssuanceService
                         KeySize = keySize,
                         NotBefore = cert.NotBefore.ToUniversalTime(),
                         NotAfter = cert.NotAfter.ToUniversalTime(),
-                        CrlDistributionPoint = request.CdpUrl,
-                        AuthorityInfoAccessUri = request.AiaUrl,
+                        CrlDistributionPoint = request.CdpUrls.Count > 0 ? string.Join(";", request.CdpUrls) : null,
+                        AuthorityInfoAccessUri = request.AiaUrls.Count > 0 ? string.Join(";", request.AiaUrls) : null,
                         CertSecurityLevel = CertSecurityLevel.CloudKms,
                         StoreProviderHint = $"{_signingProvider.ProviderName}:{newKeyRef.KeyIdentifier}",
                     };
 
                     db.CaCertificates.Add(caEntity);
                     await db.SaveChangesAsync();
+
+                    await PublishCertificateToAiaEndpointsAsync(request.AiaUrls, cert.RawData);
 
                     return new CertificateIssuanceResult
                     {
@@ -728,13 +736,15 @@ public class CertificateIssuanceService
                         KeySize = keySize,
                         NotBefore = certWithKey.NotBefore.ToUniversalTime(),
                         NotAfter = certWithKey.NotAfter.ToUniversalTime(),
-                        CrlDistributionPoint = request.CdpUrl,
-                        AuthorityInfoAccessUri = request.AiaUrl,
+                        CrlDistributionPoint = request.CdpUrls.Count > 0 ? string.Join(";", request.CdpUrls) : null,
+                        AuthorityInfoAccessUri = request.AiaUrls.Count > 0 ? string.Join(";", request.AiaUrls) : null,
                         // Local key — standard software level, no provider hint
                     };
 
                     db.CaCertificates.Add(caEntity);
                     await db.SaveChangesAsync();
+
+                    await PublishCertificateToAiaEndpointsAsync(request.AiaUrls, certWithKey.RawData);
 
                     return new CertificateIssuanceResult
                     {
@@ -842,12 +852,13 @@ public class CertificateIssuanceService
         }
 
         // CDP
-        if (template.IncludeCdp && !string.IsNullOrWhiteSpace(request.CdpUrl))
-            extensions.Add(CertificateExtensionHelpers.MakeCdp(request.CdpUrl));
+        if (template.IncludeCdp && request.CdpUrls.Count > 0)
+            extensions.Add(CertificateExtensionHelpers.MakeCdp(request.CdpUrls));
 
         // AIA
-        if (template.IncludeAia && !string.IsNullOrWhiteSpace(request.AiaUrl))
-            extensions.Add(CertificateExtensionHelpers.BuildAiaExtension(new Uri(request.AiaUrl)));
+        if (template.IncludeAia && request.AiaUrls.Count > 0)
+            extensions.Add(CertificateExtensionHelpers.BuildAiaExtension(
+                request.AiaUrls.Select(u => new Uri(u)).ToList()));
 
         // SANs
         if (request.SubjectAltNames.Count > 0)
@@ -994,17 +1005,18 @@ public class CertificateIssuanceService
         }
 
         // CRL Distribution Points
-        if (template.IncludeCdp && !string.IsNullOrWhiteSpace(request.CdpUrl))
+        if (template.IncludeCdp && request.CdpUrls.Count > 0)
         {
             certRequest.CertificateExtensions.Add(
-                CertificateExtensionHelpers.MakeCdp(request.CdpUrl));
+                CertificateExtensionHelpers.MakeCdp(request.CdpUrls));
         }
 
         // Authority Information Access
-        if (template.IncludeAia && !string.IsNullOrWhiteSpace(request.AiaUrl))
+        if (template.IncludeAia && request.AiaUrls.Count > 0)
         {
             certRequest.CertificateExtensions.Add(
-                CertificateExtensionHelpers.BuildAiaExtension(new Uri(request.AiaUrl)));
+                CertificateExtensionHelpers.BuildAiaExtension(
+                    request.AiaUrls.Select(u => new Uri(u)).ToList()));
         }
 
         // Subject Alternative Names
@@ -1040,6 +1052,16 @@ public class CertificateIssuanceService
             return signedCert.CopyWithPrivateKey(keyHolder.Ecdsa);
 
         return signedCert.CopyWithPrivateKey(keyHolder.Rsa!);
+    }
+
+    private async Task PublishCertificateToAiaEndpointsAsync(List<string> aiaUrls, byte[] certDerBytes)
+    {
+        if (_publishingCoordinator == null || aiaUrls.Count == 0) return;
+
+        foreach (var aiaUrl in aiaUrls)
+        {
+            await _publishingCoordinator.PublishCertificateAsync(aiaUrl, certDerBytes);
+        }
     }
 
     private static int GetKeySize(X509Certificate2 cert)

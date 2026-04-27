@@ -20,6 +20,7 @@ public class SigilDbContext : DbContext
     }
 
     public DbSet<Community> Communities => Set<Community>();
+    public DbSet<CommunityBaseUrl> CommunityBaseUrls => Set<CommunityBaseUrl>();
     public DbSet<CaCertificate> CaCertificates => Set<CaCertificate>();
     public DbSet<IssuedCertificate> IssuedCertificates => Set<IssuedCertificate>();
     public DbSet<Crl> Crls => Set<Crl>();
@@ -38,6 +39,19 @@ public class SigilDbContext : DbContext
             entity.HasKey(e => e.Id);
             entity.Property(e => e.Name).HasMaxLength(200).IsRequired();
             entity.HasIndex(e => e.Name).IsUnique();
+        });
+
+        // CommunityBaseUrl
+        modelBuilder.Entity<CommunityBaseUrl>(entity =>
+        {
+            entity.HasKey(e => e.Id);
+            entity.Property(e => e.Url).HasMaxLength(500).IsRequired();
+            entity.HasIndex(e => new { e.CommunityId, e.SortOrder });
+
+            entity.HasOne(e => e.Community)
+                .WithMany(c => c.BaseUrls)
+                .HasForeignKey(e => e.CommunityId)
+                .OnDelete(DeleteBehavior.Cascade);
         });
 
         // CaCertificate (self-referential for root + intermediate hierarchy)

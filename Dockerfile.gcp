@@ -2,7 +2,7 @@
 #   docker build -t udap-gcp -f Dockerfile.gcp .
 #
 # Run interactively (first time — creates named volume for gcloud creds):
-#   docker run -it --name udap-gcp -v udap-gcloud-config:/root/.config/gcloud udap-gcp
+#   docker run -it --name udap-gcp -v udap-gcloud-config:/root/.config/gcloud -v C:\temp\_GCP:/output udap-gcp
 #
 # Re-enter after stopping:
 #   docker start -ai udap-gcp
