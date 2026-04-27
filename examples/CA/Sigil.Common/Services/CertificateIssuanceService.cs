@@ -15,7 +15,6 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
 using Sigil.Common.Data;
 using Sigil.Common.Data.Entities;
-using Sigil.Common.Services.Publishing;
 using Sigil.Common.Services.Signing;
 using Sigil.Common.ViewModels;
 
@@ -32,18 +31,15 @@ public class CertificateIssuanceService
     private readonly IDbContextFactory<SigilDbContext> _dbFactory;
     private readonly ILogger<CertificateIssuanceService> _logger;
     private readonly ISigningProvider _signingProvider;
-    private readonly PublishingCoordinator? _publishingCoordinator;
 
     public CertificateIssuanceService(
         IDbContextFactory<SigilDbContext> dbFactory,
         ILogger<CertificateIssuanceService> logger,
-        ISigningProvider? signingProvider = null,
-        PublishingCoordinator? publishingCoordinator = null)
+        ISigningProvider? signingProvider = null)
     {
         _dbFactory = dbFactory;
         _logger = logger;
         _signingProvider = signingProvider ?? new LocalSigningProvider();
-        _publishingCoordinator = publishingCoordinator;
     }
 
     /// <summary>
@@ -246,7 +242,7 @@ public class CertificateIssuanceService
                     db.CaCertificates.Add(caEntity);
                     await db.SaveChangesAsync();
 
-                    await PublishCertificateToAiaEndpointsAsync(request.AiaUrls, cert.RawData);
+                    await PublishCaCertAndCrlAsync(request.CommunityId, certName, cert.RawData);
 
                     return new CertificateIssuanceResult
                     {
@@ -592,7 +588,7 @@ public class CertificateIssuanceService
                     db.CaCertificates.Add(caEntity);
                     await db.SaveChangesAsync();
 
-                    await PublishCertificateToAiaEndpointsAsync(request.AiaUrls, cert.RawData);
+                    await PublishCaCertAndCrlAsync(request.CommunityId, certName, cert.RawData);
 
                     return new CertificateIssuanceResult
                     {
@@ -744,7 +740,7 @@ public class CertificateIssuanceService
                     db.CaCertificates.Add(caEntity);
                     await db.SaveChangesAsync();
 
-                    await PublishCertificateToAiaEndpointsAsync(request.AiaUrls, certWithKey.RawData);
+                    await PublishCaCertAndCrlAsync(request.CommunityId, certName, certWithKey.RawData);
 
                     return new CertificateIssuanceResult
                     {
@@ -1054,13 +1050,36 @@ public class CertificateIssuanceService
         return signedCert.CopyWithPrivateKey(keyHolder.Rsa!);
     }
 
-    private async Task PublishCertificateToAiaEndpointsAsync(List<string> aiaUrls, byte[] certDerBytes)
+    private async Task PublishCaCertAndCrlAsync(
+        int communityId, string certName, byte[] certDerBytes)
     {
-        if (_publishingCoordinator == null || aiaUrls.Count == 0) return;
+        await using var db = await _dbFactory.CreateDbContextAsync();
+        var baseUrls = await db.CommunityBaseUrls
+            .Where(bu => bu.CommunityId == communityId && bu.PublishingBasePath != null)
+            .ToListAsync();
 
-        foreach (var aiaUrl in aiaUrls)
+        if (baseUrls.Count == 0) return;
+
+        foreach (var baseUrl in baseUrls)
         {
-            await _publishingCoordinator.PublishCertificateAsync(aiaUrl, certDerBytes);
+            if (string.IsNullOrEmpty(baseUrl.PublishingBasePath)) continue;
+
+            try
+            {
+                var certPath = Path.GetFullPath(Path.Combine(baseUrl.PublishingBasePath, "certs", $"{certName}.cer"));
+                var certDir = Path.GetDirectoryName(certPath);
+                if (!string.IsNullOrEmpty(certDir))
+                    Directory.CreateDirectory(certDir);
+
+                var tempPath = certPath + ".tmp";
+                await File.WriteAllBytesAsync(tempPath, certDerBytes);
+                File.Move(tempPath, certPath, overwrite: true);
+                _logger.LogInformation("Published certificate to {Path} ({Bytes} bytes)", certPath, certDerBytes.Length);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Failed to publish certificate for CA '{CertName}'", certName);
+            }
         }
     }
 

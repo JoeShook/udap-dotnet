@@ -17,4 +17,10 @@ public class CommunityBaseUrl
     public Community Community { get; set; } = null!;
     public string Url { get; set; } = string.Empty;
     public int SortOrder { get; set; }
+
+    /// <summary>
+    /// Local filesystem path where CRLs and certificates are published for this base URL.
+    /// The URL path is appended to this directory (e.g., "/crls/MyCA.crl" writes to "{PublishingBasePath}/crls/MyCA.crl").
+    /// </summary>
+    public string? PublishingBasePath { get; set; }
 }

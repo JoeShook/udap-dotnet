@@ -59,7 +59,7 @@
 </FluentCard>
 
 <FluentDialog @bind-Hidden="@addDialogHidden" Modal="true" TrapFocus="true"
-              Style="min-width: 400px;">
+              Style="min-width: 600px;">
     <FluentDialogHeader>Add Community</FluentDialogHeader>
     <FluentDialogBody>
         <FluentTextField @bind-Value="newCommunityName" Label="Name" Style="width: 100%;" />
@@ -67,17 +67,29 @@
         <FluentLabel Typo="Typography.Subject" Style="margin-top: 0.5rem;">Certificate Server Base URLs</FluentLabel>
         @foreach (var url in newCommunityBaseUrls)
         {
-            <FluentStack Orientation="Orientation.Horizontal" Style="gap: 0.5rem; align-items: end;">
-                <FluentTextField @bind-Value="url.Value" Style="flex: 1;"
-                                 Placeholder="http://host.docker.internal:5033" />
-                <FluentButton Appearance="Appearance.Outline" Size="ButtonSize.Small"
-                              IconStart="@(new Icons.Regular.Size16.Delete())"
-                              OnClick="@(() => newCommunityBaseUrls.Remove(url))" />
+            <FluentStack Orientation="Orientation.Vertical" Style="gap: 0.25rem; margin-top: 0.25rem; padding: 0.5rem; border: 1px solid var(--neutral-stroke-rest); border-radius: 4px;">
+                <FluentStack Orientation="Orientation.Horizontal" Style="gap: 0.5rem; align-items: end;">
+                    <FluentTextField @bind-Value="url.Value" Label="Base URL" Style="flex: 1;"
+                                     Placeholder="http://host.docker.internal:5033" />
+                    <FluentButton Appearance="Appearance.Outline" Size="ButtonSize.Small"
+                                  IconStart="@(new Icons.Regular.Size16.Delete())"
+                                  OnClick="@(() => newCommunityBaseUrls.Remove(url))" />
+                </FluentStack>
+                <FluentStack Orientation="Orientation.Horizontal" Style="gap: 0.5rem; align-items: end;">
+                    <FluentTextField @bind-Value="url.PublishingBasePath" Label="Publishing Path"
+                                     Placeholder="../Sigil.Certificate.Server/wwwroot"
+                                     Style="flex: 1;" />
+                    <FluentButton Appearance="Appearance.Outline" Size="ButtonSize.Small"
+                                  IconStart="@(new Icons.Regular.Size16.FolderOpen())"
+                                  OnClick="@(() => ShowFolderBrowser(url))"
+                                  title="Browse for folder" />
+                </FluentStack>
             </FluentStack>
         }
         <FluentButton Appearance="Appearance.Outline" Size="ButtonSize.Small"
                       IconStart="@(new Icons.Regular.Size16.Add())"
-                      OnClick="@(() => newCommunityBaseUrls.Add(new BaseUrlEntry()))">
+                      OnClick="@(() => newCommunityBaseUrls.Add(new BaseUrlEntry()))"
+                      Style="margin-top: 0.25rem;">
             Add Base URL
         </FluentButton>
     </FluentDialogBody>
@@ -93,7 +105,7 @@
 </FluentDialog>
 
 <FluentDialog @bind-Hidden="@editDialogHidden" Modal="true" TrapFocus="true"
-              Style="min-width: 400px;">
+              Style="min-width: 600px;">
     <FluentDialogHeader>Edit Community</FluentDialogHeader>
     <FluentDialogBody>
         <FluentTextField @bind-Value="editCommunityName" Label="Name" Style="width: 100%;" />
@@ -101,17 +113,29 @@
         <FluentLabel Typo="Typography.Subject" Style="margin-top: 0.5rem;">Certificate Server Base URLs</FluentLabel>
         @foreach (var url in editCommunityBaseUrls)
         {
-            <FluentStack Orientation="Orientation.Horizontal" Style="gap: 0.5rem; align-items: end;">
-                <FluentTextField @bind-Value="url.Value" Style="flex: 1;"
-                                 Placeholder="http://host.docker.internal:5033" />
-                <FluentButton Appearance="Appearance.Outline" Size="ButtonSize.Small"
-                              IconStart="@(new Icons.Regular.Size16.Delete())"
-                              OnClick="@(() => editCommunityBaseUrls.Remove(url))" />
+            <FluentStack Orientation="Orientation.Vertical" Style="gap: 0.25rem; margin-top: 0.25rem; padding: 0.5rem; border: 1px solid var(--neutral-stroke-rest); border-radius: 4px;">
+                <FluentStack Orientation="Orientation.Horizontal" Style="gap: 0.5rem; align-items: end;">
+                    <FluentTextField @bind-Value="url.Value" Label="Base URL" Style="flex: 1;"
+                                     Placeholder="http://host.docker.internal:5033" />
+                    <FluentButton Appearance="Appearance.Outline" Size="ButtonSize.Small"
+                                  IconStart="@(new Icons.Regular.Size16.Delete())"
+                                  OnClick="@(() => editCommunityBaseUrls.Remove(url))" />
+                </FluentStack>
+                <FluentStack Orientation="Orientation.Horizontal" Style="gap: 0.5rem; align-items: end;">
+                    <FluentTextField @bind-Value="url.PublishingBasePath" Label="Publishing Path"
+                                     Placeholder="../Sigil.Certificate.Server/wwwroot"
+                                     Style="flex: 1;" />
+                    <FluentButton Appearance="Appearance.Outline" Size="ButtonSize.Small"
+                                  IconStart="@(new Icons.Regular.Size16.FolderOpen())"
+                                  OnClick="@(() => ShowFolderBrowser(url))"
+                                  title="Browse for folder" />
+                </FluentStack>
             </FluentStack>
         }
         <FluentButton Appearance="Appearance.Outline" Size="ButtonSize.Small"
                       IconStart="@(new Icons.Regular.Size16.Add())"
-                      OnClick="@(() => editCommunityBaseUrls.Add(new BaseUrlEntry()))">
+                      OnClick="@(() => editCommunityBaseUrls.Add(new BaseUrlEntry()))"
+                      Style="margin-top: 0.25rem;">
             Add Base URL
         </FluentButton>
     </FluentDialogBody>
@@ -121,6 +145,58 @@
             Save
         </FluentButton>
         <FluentButton Appearance="Appearance.Outline" OnClick="@(() => editDialogHidden = true)">
+            Cancel
+        </FluentButton>
+    </FluentDialogFooter>
+</FluentDialog>
+
+<FluentDialog @bind-Hidden="@folderBrowserHidden" Modal="true" TrapFocus="true"
+              Style="min-width: 600px; max-height: 80vh;">
+    <FluentDialogHeader>Select Folder</FluentDialogHeader>
+    <FluentDialogBody>
+        <FluentStack Orientation="Orientation.Horizontal" Style="gap: 0.5rem; align-items: center; margin-bottom: 0.5rem;">
+            <FluentCheckbox @bind-Value="folderBrowserUseRelative" Label="Relative path" />
+            <FluentSpacer />
+            <FluentLabel Typo="Typography.Body" Style="color: var(--neutral-foreground-hint); font-size: 0.85rem;">
+                App root: @appBasePath
+            </FluentLabel>
+        </FluentStack>
+        <FluentTextField Value="@folderBrowserDisplayPath" ReadOnly="true" Label="Selected path"
+                         Style="width: 100%; margin-bottom: 0.5rem;" />
+        <div style="border: 1px solid var(--neutral-stroke-rest); border-radius: 4px; max-height: 400px; overflow-y: auto;">
+            @if (!string.IsNullOrEmpty(folderBrowserCurrentPath) && Directory.GetParent(folderBrowserCurrentPath) != null)
+            {
+                <div style="padding: 0.4rem 0.75rem; cursor: pointer; display: flex; align-items: center; gap: 0.5rem;"
+                     @onclick="FolderBrowserNavigateUp"
+                     class="hover-highlight">
+                    <FluentIcon Value="@(new Icons.Regular.Size16.ArrowUp())" />
+                    <span>..</span>
+                </div>
+            }
+            @foreach (var dir in folderBrowserSubdirectories)
+            {
+                <div style="padding: 0.4rem 0.75rem; cursor: pointer; display: flex; align-items: center; gap: 0.5rem;
+                            @(dir == folderBrowserSelectedSubdir ? "background: var(--accent-fill-rest); color: var(--foreground-on-accent-rest);" : "")"
+                     @onclick="@(() => FolderBrowserSelectDir(dir))"
+                     @ondblclick="@(() => FolderBrowserNavigateInto(dir))"
+                     class="hover-highlight">
+                    <FluentIcon Value="@(new Icons.Regular.Size16.Folder())" />
+                    <span>@Path.GetFileName(dir)</span>
+                </div>
+            }
+            @if (folderBrowserSubdirectories.Count == 0)
+            {
+                <div style="padding: 0.75rem; color: var(--neutral-foreground-hint); font-style: italic;">
+                    No subdirectories
+                </div>
+            }
+        </div>
+    </FluentDialogBody>
+    <FluentDialogFooter>
+        <FluentButton Appearance="Appearance.Accent" OnClick="FolderBrowserConfirm">
+            Select
+        </FluentButton>
+        <FluentButton Appearance="Appearance.Outline" OnClick="@(() => folderBrowserHidden = true)">
             Cancel
         </FluentButton>
     </FluentDialogFooter>

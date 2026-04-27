@@ -46,6 +46,7 @@ public class SigilDbContext : DbContext
         {
             entity.HasKey(e => e.Id);
             entity.Property(e => e.Url).HasMaxLength(500).IsRequired();
+            entity.Property(e => e.PublishingBasePath).HasMaxLength(500);
             entity.HasIndex(e => new { e.CommunityId, e.SortOrder });
 
             entity.HasOne(e => e.Community)

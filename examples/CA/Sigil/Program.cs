@@ -24,11 +24,9 @@ using Hangfire.PostgreSql;
 using Hangfire.Storage;
 using Sigil.Common.Services;
 using Sigil.Common.Services.Jobs;
-using Sigil.Common.Services.Publishing;
 using Sigil.Common.Services.Signing;
-using Sigil.Services;
-using Sigil.FileSystem;
 using Sigil.Gcp;
+using Sigil.Services;
 using Sigil.Vault;
 
 Log.Logger = new LoggerConfiguration()
@@ -88,39 +86,6 @@ try
     builder.Services.AddScoped<CertificateIssuanceService>();
     builder.Services.AddScoped<CrlGenerationService>();
     builder.Services.AddScoped<CrlAutoRenewalJob>();
-
-    // Publishing providers (domain-based routing from configuration)
-    builder.Services.Configure<PublishingOptions>(
-        builder.Configuration.GetSection("Publishing"));
-    builder.Services.AddSingleton<PublishingCoordinator>(sp =>
-    {
-        var pubOptions = sp.GetRequiredService<IOptions<PublishingOptions>>().Value;
-        var loggerFactory = sp.GetRequiredService<ILoggerFactory>();
-        var providers = new Dictionary<string, IPublishingProvider>(StringComparer.OrdinalIgnoreCase);
-
-        foreach (var config in pubOptions.Providers)
-        {
-            IPublishingProvider provider = config.Type.ToLowerInvariant() switch
-            {
-                "filesystem" => new FileSystemPublishingProvider(
-                    config.BaseDirectory ?? throw new InvalidOperationException(
-                        $"BaseDirectory required for filesystem publishing provider '{config.Domain}'"),
-                    loggerFactory.CreateLogger<FileSystemPublishingProvider>()),
-                "gcp" => new GcpPublishingProvider(
-                    new GcpPublisherOptions
-                    {
-                        BucketName = config.BucketName ?? throw new InvalidOperationException(
-                            $"BucketName required for GCP publishing provider '{config.Domain}'")
-                    },
-                    loggerFactory.CreateLogger<GcpPublishingProvider>()),
-                _ => throw new InvalidOperationException(
-                    $"Unknown publishing provider type: '{config.Type}' for domain '{config.Domain}'")
-            };
-            providers[config.Domain] = provider;
-        }
-
-        return new PublishingCoordinator(providers, loggerFactory.CreateLogger<PublishingCoordinator>());
-    });
 
     // Hangfire
     builder.Services.AddHangfire(config => config

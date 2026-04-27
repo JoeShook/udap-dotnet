@@ -21,6 +21,8 @@ public class CrlViewModel
     public string SignatureAlgorithm { get; set; } = string.Empty;
     public bool SignatureValid { get; set; }
     public string? FileName { get; set; }
+    public string Thumbprint { get; set; } = string.Empty;
+    public string? AuthorityKeyIdentifier { get; set; }
     public int RevokedCount { get; set; }
     public DateTime ImportedAt { get; set; }
 

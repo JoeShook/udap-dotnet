@@ -300,6 +300,10 @@ namespace Sigil.Common.Migrations
                     b.Property<int>("CommunityId")
                         .HasColumnType("integer");
 
+                    b.Property<string>("PublishingBasePath")
+                        .HasMaxLength(500)
+                        .HasColumnType("character varying(500)");
+
                     b.Property<int>("SortOrder")
                         .HasColumnType("integer");
 

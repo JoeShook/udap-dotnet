@@ -20,7 +20,8 @@ namespace Sigil.Common.Migrations
                         .Annotation("Npgsql:ValueGenerationStrategy", NpgsqlValueGenerationStrategy.IdentityByDefaultColumn),
                     CommunityId = table.Column<int>(type: "integer", nullable: false),
                     Url = table.Column<string>(type: "character varying(500)", maxLength: 500, nullable: false),
-                    SortOrder = table.Column<int>(type: "integer", nullable: false)
+                    SortOrder = table.Column<int>(type: "integer", nullable: false),
+                    PublishingBasePath = table.Column<string>(type: "character varying(500)", maxLength: 500, nullable: true)
                 },
                 constraints: table =>
                 {

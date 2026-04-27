@@ -301,6 +301,7 @@ public class ChainValidationService
                     issuerBc = aiaResult.Value.bcCert;
                     issuerName = aiaResult.Value.bcCert.SubjectDN.ToString();
                     link.AiaResolved = true;
+                    link.AiaResolvedUrl = aiaResult.Value.url;
 
                     // Add to resolved set so deeper links can find it
                     resolvedCas.Add((new CaCertificate { Name = issuerName }, aiaResult.Value.bcCert));
@@ -839,7 +840,7 @@ public class ChainValidationService
     /// <summary>
     /// Attempts to download the issuing CA certificate via the AIA extension (caIssuers method).
     /// </summary>
-    private async Task<(CaCertificate entity, BcX509Certificate bcCert)?> ResolveIssuerViaAiaAsync(
+    private async Task<(CaCertificate entity, BcX509Certificate bcCert, string url)?> ResolveIssuerViaAiaAsync(
         BcX509Certificate cert, CancellationToken ct)
     {
         try
@@ -885,7 +886,7 @@ public class ChainValidationService
                         _logger.LogInformation("Resolved issuer via AIA from {Url}: {Subject}",
                             url, issuerBc.SubjectDN);
                         var placeholder = new CaCertificate { Name = issuerBc.SubjectDN.ToString() };
-                        return (placeholder, issuerBc);
+                        return (placeholder, issuerBc, url);
                     }
                 }
                 catch (Exception ex)
@@ -1071,6 +1072,7 @@ public class ChainLink
     public CrlSource CrlSource { get; set; } = CrlSource.None;
     public string? CrlSourceUrl { get; set; }
     public bool AiaResolved { get; set; }
+    public string? AiaResolvedUrl { get; set; }
     public List<string> Problems { get; set; } = new();
 
     public bool HasProblems => Problems.Count > 0;

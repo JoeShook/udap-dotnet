@@ -22,7 +22,6 @@ using Org.BouncyCastle.X509;
 using Org.BouncyCastle.X509.Extension;
 using Sigil.Common.Data;
 using Sigil.Common.Data.Entities;
-using Sigil.Common.Services.Publishing;
 using Sigil.Common.Services.Signing;
 using X509Extensions = Org.BouncyCastle.Asn1.X509.X509Extensions;
 
@@ -49,18 +48,15 @@ public class CrlGenerationService
     private readonly IDbContextFactory<SigilDbContext> _dbFactory;
     private readonly ILogger<CrlGenerationService> _logger;
     private readonly ISigningProvider _signingProvider;
-    private readonly PublishingCoordinator? _publishingCoordinator;
 
     public CrlGenerationService(
         IDbContextFactory<SigilDbContext> dbFactory,
         ILogger<CrlGenerationService> logger,
-        ISigningProvider signingProvider,
-        PublishingCoordinator? publishingCoordinator = null)
+        ISigningProvider signingProvider)
     {
         _dbFactory = dbFactory;
         _logger = logger;
         _signingProvider = signingProvider;
-        _publishingCoordinator = publishingCoordinator;
     }
 
     /// <summary>
@@ -209,12 +205,30 @@ public class CrlGenerationService
             "Generated CRL #{CrlNumber} for CA '{CaName}' with {RevokedCount} revocations, next update {NextUpdate}",
             nextCrlNumber, ca.Name, revocationEntries.Count, nextUpdate);
 
-        // Publish CRL to configured endpoints (non-fatal on failure)
-        if (_publishingCoordinator != null && !string.IsNullOrEmpty(ca.CrlDistributionPoint))
+        // Publish CRL to configured endpoints using the CA's own name (non-fatal on failure)
+        var baseUrls = await db.CommunityBaseUrls
+            .Where(bu => bu.CommunityId == ca.CommunityId && bu.PublishingBasePath != null)
+            .ToListAsync(ct);
+
+        foreach (var baseUrl in baseUrls)
         {
-            foreach (var cdpUrl in ca.CrlDistributionPoint.Split(';', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries))
+            if (string.IsNullOrEmpty(baseUrl.PublishingBasePath)) continue;
+
+            try
             {
-                await _publishingCoordinator.PublishCrlAsync(cdpUrl, crlBytes, ct);
+                var crlPath = Path.GetFullPath(Path.Combine(baseUrl.PublishingBasePath, "crls", $"{ca.Name}.crl"));
+                var crlDir = Path.GetDirectoryName(crlPath);
+                if (!string.IsNullOrEmpty(crlDir))
+                    Directory.CreateDirectory(crlDir);
+
+                var tempPath = crlPath + ".tmp";
+                await File.WriteAllBytesAsync(tempPath, crlBytes, ct);
+                File.Move(tempPath, crlPath, overwrite: true);
+                _logger.LogInformation("Published CRL to {Path} ({Bytes} bytes)", crlPath, crlBytes.Length);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Failed to publish CRL for CA '{CaName}'", ca.Name);
             }
         }
 

@@ -60,6 +60,8 @@ public partial class CertificateExplorer
     private bool selectedNodeHasPrivateKey;
     private bool selectedNodeHasRemoteKey;
     private bool selectedNodeCanSign => selectedNodeHasPrivateKey || selectedNodeHasRemoteKey;
+    private bool isGeneratingCrl;
+    private bool isPublishingAia;
     private List<string> subjectAltNames = new();
     private FluentTreeItem? selectedTreeItem;
     private int treeVersion;
@@ -162,7 +164,9 @@ public partial class CertificateExplorer
             {
                 Id = c.Id,
                 Name = c.Name,
-                BaseUrls = c.BaseUrls.OrderBy(bu => bu.SortOrder).Select(bu => bu.Url).ToList()
+                BaseUrls = c.BaseUrls.OrderBy(bu => bu.SortOrder)
+                    .Select(bu => new BaseUrlViewModel { Url = bu.Url, PublishingBasePath = bu.PublishingBasePath })
+                    .ToList()
             })
             .ToListAsync();
 
@@ -397,6 +401,8 @@ public partial class CertificateExplorer
                     SignatureAlgorithm = crl.SignatureAlgorithm,
                     SignatureValid = crl.SignatureValid,
                     FileName = crl.FileName,
+                    Thumbprint = Convert.ToHexString(System.Security.Cryptography.SHA1.HashData(crl.RawBytes)),
+                    AuthorityKeyIdentifier = ExtractCrlAki(crl.RawBytes),
                     RevokedCount = crl.Revocations.Count,
                     ImportedAt = crl.ImportedAt,
                     RevokedCertificates = crl.Revocations
@@ -514,6 +520,96 @@ public partial class CertificateExplorer
         finally
         {
             isRevalidating = false;
+            StateHasChanged();
+        }
+    }
+
+    private async Task GenerateCrlForSelectedAsync()
+    {
+        if (isGeneratingCrl || selectedNode == null) return;
+        if (selectedNode.CertificateRole is not ("RootCA" or "IntermediateCA")) return;
+
+        isGeneratingCrl = true;
+        StateHasChanged();
+
+        try
+        {
+            var result = await CrlGenService.GenerateCrlAsync(selectedNode.Id);
+            if (result.IsSuccess)
+            {
+                ToastService.ShowSuccess($"CRL #{result.CrlNumber} generated ({result.RevokedCount} revoked certs)");
+                await LoadCommunityTreeAsync(CommunityId);
+            }
+            else
+            {
+                ToastService.ShowCopyableError($"CRL generation failed: {result.Error}");
+            }
+        }
+        catch (Exception ex)
+        {
+            ToastService.ShowCopyableError($"CRL generation failed: {ex.Message}");
+        }
+        finally
+        {
+            isGeneratingCrl = false;
+            StateHasChanged();
+        }
+    }
+
+    private async Task PublishAiaForSelectedAsync()
+    {
+        if (isPublishingAia || selectedNode == null) return;
+        if (selectedNode.CertificateRole is not ("RootCA" or "IntermediateCA")) return;
+
+        isPublishingAia = true;
+        StateHasChanged();
+
+        try
+        {
+            await using var db = await DbFactory.CreateDbContextAsync();
+            var ca = await db.CaCertificates.FindAsync(selectedNode.Id);
+            if (ca == null)
+            {
+                ToastService.ShowCopyableError("CA certificate not found.");
+                return;
+            }
+
+            var cert = X509Certificate2.CreateFromPem(ca.X509CertificatePem);
+            var baseUrls = await db.CommunityBaseUrls
+                .Where(bu => bu.CommunityId == ca.CommunityId && bu.PublishingBasePath != null)
+                .ToListAsync();
+
+            if (baseUrls.Count == 0)
+            {
+                ToastService.ShowWarning("No publishing paths configured on this community's base URLs.");
+                return;
+            }
+
+            var published = 0;
+            foreach (var baseUrl in baseUrls)
+            {
+                if (string.IsNullOrEmpty(baseUrl.PublishingBasePath)) continue;
+
+                var certPath = Path.GetFullPath(Path.Combine(baseUrl.PublishingBasePath, "certs", $"{ca.Name}.cer"));
+                var certDir = Path.GetDirectoryName(certPath);
+                if (!string.IsNullOrEmpty(certDir))
+                    Directory.CreateDirectory(certDir);
+
+                var tempPath = certPath + ".tmp";
+                await File.WriteAllBytesAsync(tempPath, cert.RawData);
+                File.Move(tempPath, certPath, overwrite: true);
+                published++;
+            }
+
+            ToastService.ShowSuccess($"Published {ca.Name}.cer to {published} endpoint(s)");
+        }
+        catch (Exception ex)
+        {
+            ToastService.ShowCopyableError($"AIA publish failed: {ex.Message}");
+        }
+        finally
+        {
+            isPublishingAia = false;
             StateHasChanged();
         }
     }
@@ -2265,7 +2361,11 @@ public partial class CertificateExplorer
 
     private async Task IssueCertificateAsync()
     {
+        if (isIssuing) return;
         if (selectedTemplate == null || string.IsNullOrWhiteSpace(issuanceSubjectDn)) return;
+
+        isIssuing = true;
+        StateHasChanged();
 
         var cdpUrls = selectedTemplate.IncludeCdp
             ? issuanceCdpUrls.Where(u => !string.IsNullOrWhiteSpace(u.Value)).Select(u => u.Value).ToList()
@@ -2293,11 +2393,12 @@ public partial class CertificateExplorer
                 $"The following issue(s) were detected:\n\n{warningList}\n\nCertificates issued without valid CDP/AIA endpoints may cause chain validation failures. Continue anyway?",
                 "Issue Anyway", "Cancel", "Endpoint Warnings");
             var dialogResult = await dialog.Result;
-            if (dialogResult.Cancelled) return;
+            if (dialogResult.Cancelled)
+            {
+                isIssuing = false;
+                return;
+            }
         }
-
-        isIssuing = true;
-        StateHasChanged();
 
         try
         {
@@ -2324,6 +2425,14 @@ public partial class CertificateExplorer
 
             if (result.Success)
             {
+                // Generate initial CRL for newly issued CA certificates
+                if (result.EntityType == "CaCertificate" && result.EntityId.HasValue)
+                {
+                    var crlResult = await CrlGenService.GenerateCrlAsync(result.EntityId.Value);
+                    if (!crlResult.IsSuccess)
+                        ToastService.ShowWarning($"Initial CRL generation failed: {crlResult.Error}");
+                }
+
                 issuanceDialogHidden = true;
                 ToastService.ShowCopyableSuccess($"Certificate issued: {result.Thumbprint}");
                 await LoadCommunityTreeAsync(CommunityId);
@@ -2599,13 +2708,33 @@ public partial class CertificateExplorer
         foreach (var baseUrl in baseUrls)
         {
             var result = template
-                .Replace("{BaseUrl}", baseUrl.TrimEnd('/'), StringComparison.OrdinalIgnoreCase);
+                .Replace("{BaseUrl}", baseUrl.Url.TrimEnd('/'), StringComparison.OrdinalIgnoreCase);
             if (issuingCaNameForIssuance != null)
                 result = result.Replace("{CAName}", issuingCaNameForIssuance, StringComparison.OrdinalIgnoreCase);
             expanded.Add(result);
         }
 
         return expanded;
+    }
+
+    private static string? ExtractCrlAki(byte[] crlBytes)
+    {
+        try
+        {
+            var crlParser = new Org.BouncyCastle.X509.X509CrlParser();
+            var crl = crlParser.ReadCrl(crlBytes);
+            var akiOctets = crl.GetExtensionValue(Org.BouncyCastle.Asn1.X509.X509Extensions.AuthorityKeyIdentifier);
+            if (akiOctets == null) return null;
+
+            var aki = Org.BouncyCastle.Asn1.X509.AuthorityKeyIdentifier.GetInstance(
+                Org.BouncyCastle.Asn1.Asn1Object.FromByteArray(akiOctets.GetOctets()));
+            var keyId = aki.GetKeyIdentifier();
+            return keyId != null ? Convert.ToHexString(keyId) : null;
+        }
+        catch
+        {
+            return null;
+        }
     }
 
     private static string GetCertTypeLabel(CertificateType ct) => ct switch
@@ -2621,7 +2750,7 @@ public partial class CertificateExplorer
     {
         public int Id { get; set; }
         public string Name { get; set; } = string.Empty;
-        public List<string> BaseUrls { get; set; } = new();
+        public List<BaseUrlViewModel> BaseUrls { get; set; } = new();
     }
 
     public class CaSelectOption

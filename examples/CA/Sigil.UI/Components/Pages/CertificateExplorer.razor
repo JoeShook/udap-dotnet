@@ -713,6 +713,10 @@ else if (treeNodes.Count > 0)
                                 <span>@selectedCrl.ThisUpdate.ToString("yyyy-MM-dd HH:mm:ss UTC")</span>
                                 <strong>Next Update</strong>
                                 <span>@selectedCrl.NextUpdate.ToString("yyyy-MM-dd HH:mm:ss UTC")</span>
+                                <strong>Thumbprint (SHA-1)</strong>
+                                <span style="font-family: monospace; word-break: break-all;">@selectedCrl.Thumbprint</span>
+                                <strong>Authority Key ID</strong>
+                                <span style="font-family: monospace; word-break: break-all;">@(selectedCrl.AuthorityKeyIdentifier ?? "(none)")</span>
                                 <strong>Algorithm</strong>
                                 <span>@selectedCrl.SignatureAlgorithm</span>
                                 <strong>Signature</strong>
@@ -860,6 +864,20 @@ else if (treeNodes.Count > 0)
                                           title="Re-sign: same key, new serial and validity. Downstream certs remain valid.">
                                 Re-sign
                             </FluentButton>
+                            <FluentButton Appearance="Appearance.Outline"
+                                          IconStart="@(new Icons.Regular.Size16.ShieldKeyhole())"
+                                          OnClick="GenerateCrlForSelectedAsync"
+                                          Disabled="@isGeneratingCrl"
+                                          title="Regenerate and publish a new CRL for this CA">
+                                @(isGeneratingCrl ? "Generating..." : "Regen CRL")
+                            </FluentButton>
+                            <FluentButton Appearance="Appearance.Outline"
+                                          IconStart="@(new Icons.Regular.Size16.Certificate())"
+                                          OnClick="PublishAiaForSelectedAsync"
+                                          Disabled="@isPublishingAia"
+                                          title="Publish this CA's public certificate to AIA endpoints">
+                                @(isPublishingAia ? "Publishing..." : "Publish AIA")
+                            </FluentButton>
                         }
                     </FluentStack>
 
@@ -995,14 +1013,16 @@ else if (treeNodes.Count > 0)
                                         <div style="opacity: 0.7; font-size: 0.8rem;">@link.Subject</div>
                                         @if (link.CrlSource == CrlSource.Downloaded && link.CrlSourceUrl != null)
                                         {
-                                            <div style="font-size: 0.75rem; color: #1976d2; margin-top: 0.15rem;">
-                                                CRL resolved from: @link.CrlSourceUrl
+                                            <div style="font-size: 0.75rem; margin-top: 0.15rem;">
+                                                <span style="font-weight: 600; color: #1976d2;">CRL resolved from:</span>
+                                                <span style="color: #555; margin-left: 0.35rem; word-break: break-all;">@link.CrlSourceUrl</span>
                                             </div>
                                         }
                                         @if (link.AiaResolved)
                                         {
-                                            <div style="font-size: 0.75rem; color: #1976d2; margin-top: 0.15rem;">
-                                                Issuer resolved via AIA
+                                            <div style="font-size: 0.75rem; margin-top: 0.15rem;">
+                                                <span style="font-weight: 600; color: #1976d2;">Issuer resolved via AIA:</span>
+                                                <span style="color: #555; margin-left: 0.35rem; word-break: break-all;">@(link.AiaResolvedUrl ?? "unknown")</span>
                                             </div>
                                         }
                                         @if (link.HasProblems)

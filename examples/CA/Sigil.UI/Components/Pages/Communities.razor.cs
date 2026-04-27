@@ -36,6 +36,27 @@ public partial class Communities
     private string editCommunityDescription = string.Empty;
     private List<BaseUrlEntry> editCommunityBaseUrls = new();
 
+    // Folder browser
+    private bool folderBrowserHidden = true;
+    private string appBasePath = Directory.GetCurrentDirectory();
+    private string folderBrowserCurrentPath = string.Empty;
+    private string? folderBrowserSelectedSubdir;
+    private List<string> folderBrowserSubdirectories = new();
+    private bool folderBrowserUseRelative = true;
+    private BaseUrlEntry? folderBrowserTarget;
+
+    private string folderBrowserDisplayPath
+    {
+        get
+        {
+            var selected = folderBrowserSelectedSubdir ?? folderBrowserCurrentPath;
+            if (string.IsNullOrEmpty(selected)) return string.Empty;
+            if (folderBrowserUseRelative)
+                return Path.GetRelativePath(appBasePath, selected);
+            return selected;
+        }
+    }
+
     protected override async Task OnInitializedAsync()
     {
         await LoadCommunitiesAsync();
@@ -51,7 +72,9 @@ public partial class Communities
                 Id = c.Id,
                 Name = c.Name,
                 Description = c.Description,
-                BaseUrls = c.BaseUrls.OrderBy(bu => bu.SortOrder).Select(bu => bu.Url).ToList(),
+                BaseUrls = c.BaseUrls.OrderBy(bu => bu.SortOrder)
+                    .Select(bu => new BaseUrlViewModel { Url = bu.Url, PublishingBasePath = bu.PublishingBasePath })
+                    .ToList(),
                 Enabled = c.Enabled,
                 CreatedAt = c.CreatedAt,
                 RootCaCount = c.CaCertificates.Count(ca => ca.ParentId == null),
@@ -91,7 +114,8 @@ public partial class Communities
                 community.BaseUrls.Add(new CommunityBaseUrl
                 {
                     Url = entry.Value.Trim().TrimEnd('/'),
-                    SortOrder = sortOrder++
+                    SortOrder = sortOrder++,
+                    PublishingBasePath = string.IsNullOrWhiteSpace(entry.PublishingBasePath) ? null : entry.PublishingBasePath.Trim()
                 });
             }
         }
@@ -129,7 +153,7 @@ public partial class Communities
         editCommunityName = community.Name;
         editCommunityDescription = community.Description ?? string.Empty;
         editCommunityBaseUrls = community.BaseUrls
-            .Select(u => new BaseUrlEntry { Value = u })
+            .Select(u => new BaseUrlEntry { Value = u.Url, PublishingBasePath = u.PublishingBasePath ?? string.Empty })
             .ToList();
         editDialogHidden = false;
     }
@@ -157,7 +181,8 @@ public partial class Communities
                     entity.BaseUrls.Add(new CommunityBaseUrl
                     {
                         Url = entry.Value.Trim().TrimEnd('/'),
-                        SortOrder = sortOrder++
+                        SortOrder = sortOrder++,
+                        PublishingBasePath = string.IsNullOrWhiteSpace(entry.PublishingBasePath) ? null : entry.PublishingBasePath.Trim()
                     });
                 }
             }
@@ -174,8 +199,82 @@ public partial class Communities
         Navigation.NavigateTo($"/explorer/{communityId}");
     }
 
+    // --- Folder Browser ---
+
+    private void ShowFolderBrowser(BaseUrlEntry target)
+    {
+        folderBrowserTarget = target;
+        folderBrowserUseRelative = true;
+
+        if (!string.IsNullOrWhiteSpace(target.PublishingBasePath))
+        {
+            var resolved = Path.IsPathRooted(target.PublishingBasePath)
+                ? target.PublishingBasePath
+                : Path.GetFullPath(Path.Combine(appBasePath, target.PublishingBasePath));
+            folderBrowserCurrentPath = Directory.Exists(resolved) ? resolved : appBasePath;
+        }
+        else
+        {
+            folderBrowserCurrentPath = appBasePath;
+        }
+
+        folderBrowserSelectedSubdir = null;
+        LoadSubdirectories();
+        folderBrowserHidden = false;
+    }
+
+    private void LoadSubdirectories()
+    {
+        try
+        {
+            folderBrowserSubdirectories = Directory.GetDirectories(folderBrowserCurrentPath)
+                .OrderBy(d => Path.GetFileName(d), StringComparer.OrdinalIgnoreCase)
+                .ToList();
+        }
+        catch
+        {
+            folderBrowserSubdirectories = new();
+        }
+    }
+
+    private void FolderBrowserNavigateUp()
+    {
+        var parent = Directory.GetParent(folderBrowserCurrentPath);
+        if (parent != null)
+        {
+            folderBrowserCurrentPath = parent.FullName;
+            folderBrowserSelectedSubdir = null;
+            LoadSubdirectories();
+        }
+    }
+
+    private void FolderBrowserSelectDir(string dir)
+    {
+        folderBrowserSelectedSubdir = dir;
+    }
+
+    private void FolderBrowserNavigateInto(string dir)
+    {
+        folderBrowserCurrentPath = dir;
+        folderBrowserSelectedSubdir = null;
+        LoadSubdirectories();
+    }
+
+    private void FolderBrowserConfirm()
+    {
+        if (folderBrowserTarget == null) return;
+
+        var selected = folderBrowserSelectedSubdir ?? folderBrowserCurrentPath;
+        folderBrowserTarget.PublishingBasePath = folderBrowserUseRelative
+            ? Path.GetRelativePath(appBasePath, selected)
+            : selected;
+
+        folderBrowserHidden = true;
+    }
+
     private class BaseUrlEntry
     {
         public string Value { get; set; } = string.Empty;
+        public string PublishingBasePath { get; set; } = string.Empty;
     }
 }
