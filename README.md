@@ -17,6 +17,10 @@
 
 ---
 
+> **Note:** Active development happens on the [`develop`](https://github.com/JoeShook/udap-dotnet/tree/develop) branch. The `main` branch contains the latest stable release.
+
+---
+
 UDAP is a PKI extension profile to OAuth 2.0. One or more PKIs can be hosted by a **Community**. Joining a community results in a public/private key issued to a client. The client explicitly trusts one of the issuing certificates in that chain. Full certificate chain validation including certificate revocation to a trusted root is performed.
 
 > - FHIR® is the registered trademark of HL7 and is used with the permission of HL7. Use of the FHIR trademark does not constitute endorsement of the contents of this repository by HL7.
