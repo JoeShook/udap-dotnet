@@ -105,7 +105,7 @@ public partial class BuildTestCerts : CertificateBase
     /// default community uri = udap://fhirlabs.net
     ///
     /// </summary>
-    [Fact(Skip = "Enabled on desktop when needed.")]
+    [Fact]//(Skip = "Enabled on desktop when needed.")]
     public void MakeCaWithIntermediateUdapAndSSLForDefaultCommunity() // ordered by method name.  Notice ITestCaseOrderer
     {
         Console.WriteLine("*************************************");
@@ -219,7 +219,7 @@ public partial class BuildTestCerts : CertificateBase
     /// Regenerate all end-entity certificates (UDAP client, ECDSA, SSL, CRLs) for the default community
     /// using the existing CA and intermediate from disk. Does NOT rebuild the PKI.
     /// </summary>
-    [Fact]//(Skip = "Enabled on desktop when needed.")]
+    [Fact(Skip = "Enabled on desktop when needed.")]
     public void MakeEndCertsForDefaultCommunity()
     {
         using var caCert = new X509Certificate2($"{SureFhirLabsCertStore}/SureFhirLabs_CA.pfx", "udap-test", X509KeyStorageFlags.Exportable);
