@@ -743,7 +743,7 @@ else if (treeNodes.Count > 0)
                             <FluentAccordionItem Heading="@($"Revoked Certificates ({selectedCrl.RevokedCertificates.Count})")" Expanded="true">
                                 <FluentDataGrid Items="@selectedCrl.RevokedCertificates.AsQueryable()" Style="font-size: 0.85rem;">
                                     <PropertyColumn Property="@(r => r.SerialNumber)" Title="Serial Number" />
-                                    <PropertyColumn Property="@(r => r.RevocationDate.ToString("yyyy-MM-dd HH:mm"))" Title="Revocation Date" />
+                                    <PropertyColumn Property="@(r => r.RevocationDate.ToLocalTime().ToString("yyyy-MM-dd HH:mm"))" Title="Revocation Date (Local)" />
                                     <PropertyColumn Property="@(r => r.ReasonName)" Title="Reason" />
                                 </FluentDataGrid>
                             </FluentAccordionItem>
@@ -926,6 +926,12 @@ else if (treeNodes.Count > 0)
                                 <span>@GetPublicKeyInfo()</span>
                                 <strong>Private Key</strong>
                                 <span>@(selectedNodeHasPrivateKey ? "Yes (stored locally)" : selectedNodeHasRemoteKey ? "Yes (Vault Transit)" : "No (public cert only)")</span>
+                                <strong>Auto Renew</strong>
+                                <span>
+                                    <FluentCheckbox Value="@selectedNodeAutoRenew"
+                                                    ValueChanged="@(v => ToggleAutoRenewAsync(v))"
+                                                    Label="@(selectedNodeAutoRenew ? "Enabled" : "Disabled")" />
+                                </span>
                             </div>
                         </FluentAccordionItem>
 

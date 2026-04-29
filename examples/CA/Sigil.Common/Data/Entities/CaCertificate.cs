@@ -49,6 +49,7 @@ public class CaCertificate
     public DateTime? RevokedAt { get; set; }
     public int RevocationReason { get; set; }
     public bool Enabled { get; set; } = true;
+    public bool AutoRenew { get; set; } = true;
     public bool IsArchived { get; set; }
     public DateTime? ArchivedAt { get; set; }
     public DateTime CreatedAt { get; set; } = DateTime.UtcNow;

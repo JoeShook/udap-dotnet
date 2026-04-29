@@ -184,7 +184,8 @@ public class CertificateIssuanceService
             {
                 var serialBytes = RandomNumberGenerator.GetBytes(16);
                 using var signedCert = certRequest.Create(
-                    issuingCert!,
+                    issuingCert!.SubjectName,
+                    CreateSignatureGenerator(issuingCert!),
                     notBefore,
                     notAfter,
                     serialBytes);
@@ -421,7 +422,8 @@ public class CertificateIssuanceService
             {
                 var serialBytes = RandomNumberGenerator.GetBytes(16);
                 using var signedCert = certRequest.Create(
-                    parentCert!,
+                    parentCert!.SubjectName,
+                    CreateSignatureGenerator(parentCert!),
                     notBefore,
                     notAfter,
                     serialBytes);
@@ -1040,6 +1042,17 @@ public class CertificateIssuanceService
 
             certRequest.CertificateExtensions.Add(sanBuilder.Build());
         }
+    }
+
+    private static X509SignatureGenerator CreateSignatureGenerator(X509Certificate2 issuerCert)
+    {
+        if (issuerCert.GetECDsaPrivateKey() is ECDsa ecdsa)
+            return X509SignatureGenerator.CreateForECDsa(ecdsa);
+
+        if (issuerCert.GetRSAPrivateKey() is RSA rsa)
+            return X509SignatureGenerator.CreateForRSA(rsa, RSASignaturePadding.Pkcs1);
+
+        throw new InvalidOperationException($"Unsupported issuer key algorithm: {issuerCert.PublicKey.Oid.FriendlyName}");
     }
 
     private static X509Certificate2 AttachPrivateKey(X509Certificate2 signedCert, KeyHolder keyHolder)

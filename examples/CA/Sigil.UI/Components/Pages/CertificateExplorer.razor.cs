@@ -60,6 +60,7 @@ public partial class CertificateExplorer
     private bool selectedNodeHasPrivateKey;
     private bool selectedNodeHasRemoteKey;
     private bool selectedNodeCanSign => selectedNodeHasPrivateKey || selectedNodeHasRemoteKey;
+    private bool selectedNodeAutoRenew = true;
     private bool isGeneratingCrl;
     private bool isPublishingAia;
     private List<string> subjectAltNames = new();
@@ -373,6 +374,7 @@ public partial class CertificateExplorer
         selectedCrl = null;
         selectedNodeHasPrivateKey = false;
         selectedNodeHasRemoteKey = false;
+        selectedNodeAutoRenew = true;
         chainValidation = null;
         asn1Root = null;
         subjectAltNames.Clear();
@@ -433,6 +435,7 @@ public partial class CertificateExplorer
             pem = ca?.X509CertificatePem;
             selectedNodeHasPrivateKey = ca?.EncryptedPfxBytes != null;
             selectedNodeHasRemoteKey = !string.IsNullOrEmpty(ca?.StoreProviderHint);
+            selectedNodeAutoRenew = ca?.AutoRenew ?? true;
         }
         else
         {
@@ -440,6 +443,7 @@ public partial class CertificateExplorer
             pem = issued?.X509CertificatePem;
             sans = issued?.SubjectAltNames;
             selectedNodeHasPrivateKey = issued?.EncryptedPfxBytes != null;
+            selectedNodeAutoRenew = issued?.AutoRenew ?? true;
         }
 
         if (!string.IsNullOrEmpty(pem))
@@ -611,6 +615,51 @@ public partial class CertificateExplorer
         {
             isPublishingAia = false;
             StateHasChanged();
+        }
+    }
+
+    private async Task EnsureIssuerPublishedAsync(int issuingCaId)
+    {
+        try
+        {
+            await using var db = await DbFactory.CreateDbContextAsync();
+            var ca = await db.CaCertificates.FindAsync(issuingCaId);
+            if (ca == null) return;
+
+            var baseUrls = await db.CommunityBaseUrls
+                .Where(bu => bu.CommunityId == ca.CommunityId && bu.PublishingBasePath != null)
+                .ToListAsync();
+
+            if (baseUrls.Count == 0) return;
+
+            var cert = X509Certificate2.CreateFromPem(ca.X509CertificatePem);
+
+            foreach (var baseUrl in baseUrls)
+            {
+                if (string.IsNullOrEmpty(baseUrl.PublishingBasePath)) continue;
+
+                var certPath = Path.GetFullPath(Path.Combine(baseUrl.PublishingBasePath, "certs", $"{ca.Name}.cer"));
+                if (!File.Exists(certPath))
+                {
+                    var certDir = Path.GetDirectoryName(certPath);
+                    if (!string.IsNullOrEmpty(certDir))
+                        Directory.CreateDirectory(certDir);
+
+                    var tempPath = certPath + ".tmp";
+                    await File.WriteAllBytesAsync(tempPath, cert.RawData);
+                    File.Move(tempPath, certPath, overwrite: true);
+                }
+
+                var crlPath = Path.GetFullPath(Path.Combine(baseUrl.PublishingBasePath, "crls", $"{ca.Name}.crl"));
+                if (!File.Exists(crlPath))
+                {
+                    await CrlGenService.GenerateCrlAsync(issuingCaId);
+                }
+            }
+        }
+        catch (Exception ex)
+        {
+            // Best-effort; URL validation will catch any remaining issues
         }
     }
 
@@ -1170,6 +1219,36 @@ public partial class CertificateExplorer
     private async Task TriggerFolderUpload()
     {
         await JS.InvokeVoidAsync("sigilFolderUpload", "folder-input");
+    }
+
+    // --- Auto Renew ---
+
+    private async Task ToggleAutoRenewAsync(bool enabled)
+    {
+        if (selectedNode == null) return;
+
+        await using var db = await DbFactory.CreateDbContextAsync();
+
+        if (selectedNode.EntityType == "CaCertificate")
+        {
+            var ca = await db.CaCertificates.FindAsync(selectedNode.Id);
+            if (ca != null)
+            {
+                ca.AutoRenew = enabled;
+                await db.SaveChangesAsync();
+            }
+        }
+        else if (selectedNode.EntityType == "IssuedCertificate")
+        {
+            var issued = await db.IssuedCertificates.FindAsync(selectedNode.Id);
+            if (issued != null)
+            {
+                issued.AutoRenew = enabled;
+                await db.SaveChangesAsync();
+            }
+        }
+
+        selectedNodeAutoRenew = enabled;
     }
 
     // --- Delete & Move ---
@@ -2321,29 +2400,32 @@ public partial class CertificateExplorer
 
         if (isRenewMode)
         {
-            // Preserve the original cert's subject DN and SANs across template changes
             issuanceSubjectDn = renewalSubjectDn;
             issuanceSans = renewalSans.Select(s => new IssuanceSanEntry { Type = s.Type, Value = s.Value }).ToList();
         }
         else
         {
-            issuanceSubjectDn = template.SubjectTemplate ?? string.Empty;
+            if (string.IsNullOrWhiteSpace(issuanceSubjectDn))
+                issuanceSubjectDn = template.SubjectTemplate ?? string.Empty;
 
-            // Pre-populate SAN entries from template's SubjectAltNameTypes
-            issuanceSans.Clear();
-            if (!string.IsNullOrWhiteSpace(template.SubjectAltNameTypes))
+            var hasUserSans = issuanceSans.Any(s => !string.IsNullOrWhiteSpace(s.Value));
+            if (!hasUserSans)
             {
-                foreach (var sanType in template.SubjectAltNameTypes.Split(';', StringSplitOptions.RemoveEmptyEntries))
+                issuanceSans.Clear();
+                if (!string.IsNullOrWhiteSpace(template.SubjectAltNameTypes))
                 {
-                    var type = sanType.Trim().ToUpperInvariant() switch
+                    foreach (var sanType in template.SubjectAltNameTypes.Split(';', StringSplitOptions.RemoveEmptyEntries))
                     {
-                        "URI" => SanType.Uri,
-                        "DNS" => SanType.Dns,
-                        "EMAIL" => SanType.Email,
-                        "IP" => SanType.IpAddress,
-                        _ => SanType.Uri
-                    };
-                    issuanceSans.Add(new IssuanceSanEntry { Type = type, Value = string.Empty });
+                        var type = sanType.Trim().ToUpperInvariant() switch
+                        {
+                            "URI" => SanType.Uri,
+                            "DNS" => SanType.Dns,
+                            "EMAIL" => SanType.Email,
+                            "IP" => SanType.IpAddress,
+                            _ => SanType.Uri
+                        };
+                        issuanceSans.Add(new IssuanceSanEntry { Type = type, Value = string.Empty });
+                    }
                 }
             }
         }
@@ -2373,6 +2455,12 @@ public partial class CertificateExplorer
         var aiaUrls = selectedTemplate.IncludeAia
             ? issuanceAiaUrls.Where(u => !string.IsNullOrWhiteSpace(u.Value)).Select(u => u.Value).ToList()
             : new List<string>();
+
+        // Ensure the issuing CA's cert and CRL are published before validating URLs
+        if (issuingCaIdForIssuance.HasValue)
+        {
+            await EnsureIssuerPublishedAsync(issuingCaIdForIssuance.Value);
+        }
 
         // Warn about missing CDP/AIA when the template expects them
         var warnings = new List<string>();
