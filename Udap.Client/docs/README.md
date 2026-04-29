@@ -172,12 +172,9 @@ services.AddScoped<TrustChainValidator>(sp => new TrustChainValidator(new X509Ch
 services.AddHttpClient<IUdapClient, UdapClient>();
 ```
 
-TODO: Cover X509ChainPolicy
-
-
 ## Udap.Client Dynamic Client Registration with a ICertificateStore implementation
 
 ### Example projects
 
-- [Udap.Config simple dependency injection](./examples/clients/1_UdapClientMetadata/README.md)
-- [Udap.Client configuration with a ITrustAnchorStore implementation](./examples/clients/2_UdapClientMetadata/README.md)
+- [Udap.Config simple dependency injection](../../examples/clients/1_UdapClientMetadata/README.md)
+- [Udap.Client configuration with a ITrustAnchorStore implementation](../../examples/clients/2_UdapClientMetadata/README.md)

@@ -108,6 +108,9 @@
     <None Update="CertStore\issued\fhirlabs.net.six.client.pfx">
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
     </None>
+    <None Update="CertStore\issued\fhirlabs.net.tefca.server.pfx">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </None>
     <None Update="CertStore\issued\fhirlabs.net.ten.client.pfx">
       <CopyToOutputDirectory>Always</CopyToOutputDirectory>
     </None>
@@ -154,6 +157,4 @@
       <CopyToOutputDirectory>Always</CopyToOutputDirectory>
     </None>
   </ItemGroup>
-
-
 </Project>

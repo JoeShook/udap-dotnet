@@ -12,6 +12,7 @@ using System.Net;
 using System.Net.Http.Json;
 using System.Security.Claims;
 using System.Security.Cryptography.X509Certificates;
+using System.Text.Json;
 using System.Text.RegularExpressions;
 using Duende.IdentityModel;
 using Microsoft.AspNetCore.Hosting;
@@ -275,6 +276,50 @@ public class UdapControllerTests : IClassFixture<ApiTestFixture>
         Assert.False(string.IsNullOrEmpty(certificationsRequired));
         var uriCertificationsRequired = new Uri(certificationsRequired!);
         Assert.Equal(new Uri("http://MyUdapCertification"), uriCertificationsRequired);
+    }
+
+    /// <summary>
+    /// SOP: Facilitated FHIR Implementation v2.0 — Section 6.11 Discovery #2-3
+    /// When queried with ?community=urn:oid:2.16.840.1.113883.3.7204.1.5,
+    /// the TEFCA community metadata MUST include the basic-app-certification URI
+    /// in both udap_certifications_supported and udap_certifications_required.
+    /// </summary>
+    [Fact]
+    public async Task TefcaCommunity_Certifications_OverrideRootDefaults()
+    {
+        var httpClient = _fixture.CreateClient();
+
+        var response = await httpClient.GetAsync(
+            "fhir/r4/.well-known/udap?community=urn:oid:2.16.840.1.113883.3.7204.1.5");
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+
+        var json = await response.Content.ReadFromJsonAsync<JsonDocument>();
+        Assert.NotNull(json);
+
+        const string basicAppCert = "https://rce.sequoiaproject.org/udap/profiles/basic-app-certification";
+
+        // TEFCA community must include basic-app-certification in certifications_supported
+        var certSupported = json.RootElement
+            .GetProperty("udap_certifications_supported")
+            .EnumerateArray()
+            .Select(e => e.GetString())
+            .ToList();
+
+        Assert.Contains(basicAppCert, certSupported);
+
+        // TEFCA community must include basic-app-certification in certifications_required
+        var certRequired = json.RootElement
+            .GetProperty("udap_certifications_required")
+            .EnumerateArray()
+            .Select(e => e.GetString())
+            .ToList();
+
+        Assert.Contains(basicAppCert, certRequired);
+
+        // TEFCA community should NOT include the root-level test certifications
+        Assert.DoesNotContain("http://MyUdapCertification", certSupported);
+        Assert.DoesNotContain("http://MyUdapCertification2", certSupported);
     }
 
     [Fact]

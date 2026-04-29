@@ -11,6 +11,7 @@ using System.Security.Cryptography;
 using System.Security.Cryptography.X509Certificates;
 using System.Text.Json;
 using Duende.IdentityModel;
+using Microsoft.IdentityModel.Tokens;
 using Udap.Model.Registration;
 using Xunit.Abstractions;
 
@@ -528,11 +529,94 @@ namespace Udap.Common.Tests.Model.Registration
             // Allow tiny drift
             Assert.True((expected - expDt).Duration() < TimeSpan.FromSeconds(2));
         }
+
+        [Fact]
+        public void AdditionalClaims_SurviveSerializationRoundTrip()
+        {
+            var document = new UdapCertificationAndEndorsementDocument("TEFCA Basic App Certification")
+            {
+                Issuer = "urn:oid:2.999#T-TRTMNT",
+                Subject = "urn:oid:2.999#T-TRTMNT",
+                Scope = "user/*.read",
+                AdditionalClaims = new Dictionary<string, JsonElement>
+                {
+                    ["exchange_purposes"] = JsonSerializer.SerializeToElement(
+                        new[] { "urn:oid:2.16.840.1.113883.3.7204.1.5.2.1#T-IAS" }),
+                    ["home_community_id"] = JsonSerializer.SerializeToElement("urn:oid:2.999")
+                }
+            };
+
+            var json = document.SerializeToJson();
+            _testOutputHelper.WriteLine(json);
+
+            // Verify additional claims are in the serialized JSON
+            var parsed = JsonDocument.Parse(json);
+            Assert.True(parsed.RootElement.TryGetProperty("exchange_purposes", out var ep));
+            Assert.Equal(JsonValueKind.Array, ep.ValueKind);
+            Assert.Equal("urn:oid:2.16.840.1.113883.3.7204.1.5.2.1#T-IAS", ep[0].GetString());
+
+            Assert.True(parsed.RootElement.TryGetProperty("home_community_id", out var hc));
+            Assert.Equal("urn:oid:2.999", hc.GetString());
+
+            // Deserialize back and verify additional claims survive
+            var deserialized = JsonSerializer.Deserialize<UdapCertificationAndEndorsementDocument>(json);
+            Assert.NotNull(deserialized);
+            Assert.Equal("TEFCA Basic App Certification", deserialized!.CertificationName);
+            Assert.Equal("user/*.read", deserialized.Scope);
+            Assert.NotNull(deserialized.AdditionalClaims);
+            Assert.True(deserialized.AdditionalClaims!.ContainsKey("exchange_purposes"));
+            Assert.True(deserialized.AdditionalClaims.ContainsKey("home_community_id"));
+
+            // Re-serialize and verify claims are still present
+            var reJson = deserialized.SerializeToJson();
+            var reParsed = JsonDocument.Parse(reJson);
+            Assert.True(reParsed.RootElement.TryGetProperty("exchange_purposes", out _));
+            Assert.True(reParsed.RootElement.TryGetProperty("home_community_id", out _));
+        }
+
+        [Fact]
+        public void AdditionalClaims_IncludedInSignedSoftwareStatement()
+        {
+            var certificationCert =
+                new X509Certificate2(Path.Combine("CertStore/issued", "FhirLabsAdminCertification.pfx"), "udap-test");
+
+            var signedJwt = UdapCertificationsAndEndorsementBuilder
+                .Create("TEFCA Basic App Certification", certificationCert)
+                .WithClampedExpiration(TimeSpan.FromMinutes(5))
+                .WithCertificationDescription("TEFCA Basic App Certification")
+                .WithCertificationUris(new List<string>
+                    { "https://rce.sequoiaproject.org/udap/profiles/basic-app-certification" })
+                .WithScope("user/*.read")
+                .WithTokenEndpointAuthMethod("private_key_jwt")
+                .WithAdditionalClaims(new Dictionary<string, JsonElement>
+                {
+                    ["exchange_purposes"] = JsonSerializer.SerializeToElement(
+                        new[] { "urn:oid:2.16.840.1.113883.3.7204.1.5.2.1#T-IAS" }),
+                    ["home_community_id"] = JsonSerializer.SerializeToElement(
+                        "2.16.840.1.113883.3.2054.2.4")
+                })
+                .BuildSoftwareStatement();
+
+            Assert.NotNull(signedJwt);
+
+            // Decode payload and verify additional claims are present
+            var parts = signedJwt.Split('.');
+            Assert.Equal(3, parts.Length);
+
+            var payloadJson = Base64UrlEncoder.Decode(parts[1]);
+            _testOutputHelper.WriteLine(payloadJson);
+
+            var payload = JsonDocument.Parse(payloadJson);
+            Assert.True(payload.RootElement.TryGetProperty("exchange_purposes", out var ep));
+            Assert.Equal("urn:oid:2.16.840.1.113883.3.7204.1.5.2.1#T-IAS", ep[0].GetString());
+            Assert.True(payload.RootElement.TryGetProperty("home_community_id", out var hc));
+            Assert.Equal("2.16.840.1.113883.3.2054.2.4", hc.GetString());
+        }
     }
 
     //
     // Register with only client_credentials C&E and then fail when a toke is requested for authorization_code.
-    // Even if the standard registration contained authorization_code.  This 
+    // Even if the standard registration contained authorization_code.  This
     //
 
     //

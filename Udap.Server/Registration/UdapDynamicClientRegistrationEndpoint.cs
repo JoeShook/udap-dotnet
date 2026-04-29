@@ -27,17 +27,20 @@ public class UdapDynamicClientRegistrationEndpoint
     private readonly IUdapDynamicClientRegistrationValidator _validator;
     private readonly IUdapDynamicClientRegistrationProcessor _processor;
     private readonly IUdapClientRegistrationStore _store;
+    private readonly IEnumerable<ICommunityRegistrationValidator> _communityRegistrationValidators;
     private readonly ILogger<UdapDynamicClientRegistrationEndpoint> _logger;
 
     public UdapDynamicClientRegistrationEndpoint(
         IUdapDynamicClientRegistrationValidator validator,
         IUdapDynamicClientRegistrationProcessor processor,
         IUdapClientRegistrationStore store,
+        IEnumerable<ICommunityRegistrationValidator> communityRegistrationValidators,
         ILogger<UdapDynamicClientRegistrationEndpoint> logger)
     {
         _validator = validator;
         _processor = processor;
         _store = store;
+        _communityRegistrationValidators = communityRegistrationValidators;
         _logger = logger;
     }
 
@@ -102,7 +105,6 @@ public class UdapDynamicClientRegistrationEndpoint
 
         try
         {
-            // Not in pattern with other validators in IdentityServer.  Typically, all errors handled in ValidateAsync...  TODO
             if (communityTrustAnchors == null)
             {
                 throw new NullReferenceException("Missing Community Trust Anchors");
@@ -140,6 +142,32 @@ public class UdapDynamicClientRegistrationEndpoint
             await httpContext.Response.WriteAsJsonAsync(error, cancellationToken: token);
 
             return;
+        }
+
+        // Community-specific registration validation
+        if (!string.IsNullOrEmpty(context.CommunityName))
+        {
+            foreach (var communityValidator in _communityRegistrationValidators)
+            {
+                if (communityValidator.AppliesToCommunity(context.CommunityName))
+                {
+                    var communityResult = await communityValidator.ValidateAsync(context);
+                    if (communityResult is { IsError: true })
+                    {
+                        httpContext.Response.StatusCode = StatusCodes.Status400BadRequest;
+
+                        var communityError = new UdapDynamicClientRegistrationErrorResponse(
+                            communityResult.Error ?? string.Empty,
+                            communityResult.ErrorDescription ?? string.Empty);
+
+                        _logger.LogWarning("Error: {@Error}", communityError);
+
+                        await httpContext.Response.WriteAsJsonAsync(communityError, cancellationToken: token);
+
+                        return;
+                    }
+                }
+            }
         }
 
         // Process (create client + persist)

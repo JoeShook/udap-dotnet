@@ -39,12 +39,18 @@
   </ItemGroup>
 
   <ItemGroup Condition="'$(GCPDeploy)' == 'true'">
-    <PackageReference Include="Udap.Server" Version="0.6.*" />
-    <PackageReference Include="Udap.UI" Version="0.6.*" />
+    <PackageReference Include="Udap.Server" Version="0.7.*" />
+    <PackageReference Include="Udap.Tefca.Model" Version="0.7.*" />
+    <PackageReference Include="Udap.Ssraa.Server" Version="0.7.*" />
+    <PackageReference Include="Udap.Tefca.Server" Version="0.7.*" />
+    <PackageReference Include="Udap.UI" Version="0.7.*" />
   </ItemGroup>
 
   <ItemGroup Condition="'$(GCPDeploy)' == '' OR '$(GCPDeploy)' != 'true' ">
     <ProjectReference Include="../../Udap.Server/Udap.Server.csproj" />
+    <ProjectReference Include="../../Udap.Tefca.Model/Udap.Tefca.Model.csproj" />
+    <ProjectReference Include="../../Udap.Ssraa.Server/Udap.Ssraa.Server.csproj" />
+    <ProjectReference Include="../../Udap.Tefca.Server/Udap.Tefca.Server.csproj" />
     <ProjectReference Include="../../Udap.UI/Udap.UI.csproj" />
   </ItemGroup>
 

@@ -1,8 +1,8 @@
-﻿#region (c) 2023 Joseph Shook. All rights reserved.
+#region (c) 2023 Joseph Shook. All rights reserved.
 // /*
 //  Authors:
 //     Joseph Shook   Joseph.Shook@Surescripts.com
-// 
+//
 //  See LICENSE in the project root for license information.
 // */
 #endregion
@@ -19,7 +19,7 @@ using Udap.Model.Statement;
 namespace Udap.Model.Access;
 
 /// <summary>
-/// 
+///
 /// </summary>
 public class AccessTokenRequestForAuthorizationCodeBuilder
 {
@@ -30,18 +30,18 @@ public class AccessTokenRequestForAuthorizationCodeBuilder
     private readonly string? _code;
     private readonly string? _redirectUri;
     private readonly DateTime _now;
-    private readonly X509Certificate2 _certificate;
+    private readonly List<X509Certificate2> _certificates;
 
-    private AccessTokenRequestForAuthorizationCodeBuilder(string? clientId, string? tokenEndpoint, X509Certificate2 certificate, string? redirectUri, string? code)
+    private AccessTokenRequestForAuthorizationCodeBuilder(string? clientId, string? tokenEndpoint, List<X509Certificate2> certificates, string? redirectUri, string? code)
     {
         _now = DateTime.UtcNow.ToUniversalTime();
         _tokenEndpoint = tokenEndpoint;
         _clientId = clientId;
-        _certificate = certificate;
+        _certificates = certificates;
         _code = code;
         _redirectUri = redirectUri;
 
-        
+
             _claims =
             [
                 new Claim(JwtClaimTypes.IssuedAt, EpochTime.GetIntDate(_now).ToString(), ClaimValueTypes.Integer),
@@ -57,7 +57,21 @@ public class AccessTokenRequestForAuthorizationCodeBuilder
 
     public static AccessTokenRequestForAuthorizationCodeBuilder Create(string? clientId, string? tokenEndpoint, X509Certificate2 certificate, string? redirectUri, string? code)
     {
-        return new AccessTokenRequestForAuthorizationCodeBuilder(clientId, tokenEndpoint, certificate, redirectUri, code);
+        return new AccessTokenRequestForAuthorizationCodeBuilder(clientId, tokenEndpoint, new List<X509Certificate2> { certificate }, redirectUri, code);
+    }
+
+    /// <summary>
+    /// Create a builder with an ordered certificate chain where the first certificate is the end entity certificate.
+    /// </summary>
+    /// <param name="clientId"></param>
+    /// <param name="tokenEndpoint"></param>
+    /// <param name="certificates">Certificate chain where the first certificate is the end entity certificate</param>
+    /// <param name="redirectUri"></param>
+    /// <param name="code"></param>
+    /// <returns></returns>
+    public static AccessTokenRequestForAuthorizationCodeBuilder Create(string? clientId, string? tokenEndpoint, List<X509Certificate2> certificates, string? redirectUri, string? code)
+    {
+        return new AccessTokenRequestForAuthorizationCodeBuilder(clientId, tokenEndpoint, certificates, redirectUri, code);
     }
 
     /// <summary>
@@ -107,7 +121,7 @@ public class AccessTokenRequestForAuthorizationCodeBuilder
         );
 
         return SignedSoftwareStatementBuilder<JwtPayLoadExtension>
-            .Create(_certificate, jwtPayload)
+            .Create(_certificates, jwtPayload)
             .Build(algorithm);
     }
 }

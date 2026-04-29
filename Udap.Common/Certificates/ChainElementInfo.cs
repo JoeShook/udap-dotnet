@@ -120,11 +120,12 @@ public class ChainValidationResult
     /// <param name="isValid">Whether the chain is valid and trusted.</param>
     /// <param name="chainElements">The chain elements with their validation problems.</param>
     /// <param name="communityId">The community identifier from the matching trust anchor, if resolved.</param>
-    public ChainValidationResult(bool isValid, IReadOnlyList<ChainElementInfo> chainElements, long? communityId = null)
+    public ChainValidationResult(bool isValid, IReadOnlyList<ChainElementInfo> chainElements, long? communityId = null, string? communityName = null)
     {
         IsValid = isValid;
         ChainElements = chainElements;
         CommunityId = communityId;
+        CommunityName = communityName;
     }
 
     /// <summary>Gets whether the certificate chain is valid and trusted.</summary>
@@ -135,4 +136,7 @@ public class ChainValidationResult
 
     /// <summary>Gets the community identifier from the matching trust anchor, or <c>null</c> if not resolved.</summary>
     public long? CommunityId { get; }
+
+    /// <summary>Gets the community name (URI) from the matching trust anchor, or <c>null</c> if not resolved.</summary>
+    public string? CommunityName { get; }
 }

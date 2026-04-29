@@ -289,6 +289,23 @@ public class InMemoryUdapClientRegistrationStore : IUdapClientRegistrationStore
         return Task.FromResult(id);
     }
 
+    public Task<string?> GetCommunityName(string communityId, CancellationToken token = default)
+    {
+        if (!int.TryParse(communityId, out var id))
+        {
+            return Task.FromResult<string?>(null);
+        }
+
+        // Use FirstOrDefault because in-memory communities may share default IDs (0)
+        // when tests don't assign explicit IDs. The EF store uses SingleOrDefaultAsync
+        // since the database enforces unique primary keys.
+        var name = _communities.Where(c => c.Id == id)
+            .Select(c => c.Name)
+            .FirstOrDefault();
+
+        return Task.FromResult(name);
+    }
+
     public Task<ICollection<Secret>?> RolloverClientSecrets(ParsedSecret secret, CancellationToken token = default)
     {
         var rolled = false;
