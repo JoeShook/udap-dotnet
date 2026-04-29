@@ -87,21 +87,26 @@
 
             @* Key Parameters *@
             <FluentLabel Typo="Typography.Subject" Style="margin-top: 0.5rem;">Key Parameters</FluentLabel>
-            <FluentSelect TOption="string" @bind-SelectedOption="editKeyAlgorithm" Label="Key Algorithm"
+            <FluentSelect TOption="string" SelectedOption="@editKeyAlgorithm"
+                          SelectedOptionChanged="OnKeyAlgorithmChanged" Label="Key Algorithm"
                           Items="@keyAlgorithms" Style="width: 100%;" />
             @if (editKeyAlgorithm == "RSA")
             {
                 <FluentSelect TOption="int" @bind-SelectedOption="editKeySize" Label="Key Size (bits)"
                               Items="@rsaKeySizes" OptionText="@(s => s.ToString())"
                               Style="width: 100%;" />
+                <FluentSelect TOption="string" @bind-SelectedOption="editHashAlgorithm" Label="Hash Algorithm"
+                              Items="@hashAlgorithms" Style="width: 100%;" />
             }
             else
             {
-                <FluentSelect TOption="string" @bind-SelectedOption="editEcdsaCurve" Label="ECDSA Curve"
+                <FluentSelect TOption="string" SelectedOption="@editEcdsaCurve"
+                              SelectedOptionChanged="OnEcdsaCurveChanged" Label="ECDSA Curve"
                               Items="@ecdsaCurves" Style="width: 100%;" />
+                <div style="font-size: 0.8rem; opacity: 0.6; margin-top: -0.25rem;">
+                    Signing algorithm: @GetEcdsaSigningAlgorithmLabel()
+                </div>
             }
-            <FluentSelect TOption="string" @bind-SelectedOption="editHashAlgorithm" Label="Hash Algorithm"
-                          Items="@hashAlgorithms" Style="width: 100%;" />
 
             @* Extensions *@
             <FluentLabel Typo="Typography.Subject" Style="margin-top: 0.5rem;">Extensions</FluentLabel>

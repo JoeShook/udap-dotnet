@@ -2499,6 +2499,141 @@ public partial class CertificateExplorer
         return unreachable;
     }
 
+    private async Task ShowSimilarDialog()
+    {
+        if (selectedNode == null || selectedCert == null) return;
+
+        renewalSubjectDn = selectedCert.Subject;
+        renewalSans.Clear();
+        foreach (var san in subjectAltNames)
+        {
+            var trimmed = san.Trim();
+            if (TryParseSan(trimmed, "URL=", SanType.Uri, out var entry) ||
+                TryParseSan(trimmed, "URI:", SanType.Uri, out entry) ||
+                TryParseSan(trimmed, "Uri:", SanType.Uri, out entry) ||
+                TryParseSan(trimmed, "DNS Name=", SanType.Dns, out entry) ||
+                TryParseSan(trimmed, "DNS:", SanType.Dns, out entry) ||
+                TryParseSan(trimmed, "Dns:", SanType.Dns, out entry) ||
+                TryParseSan(trimmed, "RFC822 Name=", SanType.Email, out entry) ||
+                TryParseSan(trimmed, "email:", SanType.Email, out entry) ||
+                TryParseSan(trimmed, "Email:", SanType.Email, out entry) ||
+                TryParseSan(trimmed, "IP Address=", SanType.IpAddress, out entry) ||
+                TryParseSan(trimmed, "IP:", SanType.IpAddress, out entry) ||
+                TryParseSan(trimmed, "IpAddress:", SanType.IpAddress, out entry))
+            {
+                renewalSans.Add(entry);
+            }
+        }
+
+        int? issuingCaId = null;
+        string? issuingCaName = null;
+
+        await using var db = await DbFactory.CreateDbContextAsync();
+
+        if (selectedNode.CertificateRole == "EndEntity")
+        {
+            var issued = await db.IssuedCertificates
+                .Include(i => i.IssuingCaCertificate)
+                .FirstOrDefaultAsync(i => i.Thumbprint == selectedNode.Thumbprint);
+            if (issued != null)
+            {
+                issuingCaId = issued.IssuingCaCertificateId;
+                issuingCaName = issued.IssuingCaCertificate.Name;
+            }
+        }
+        else if (selectedNode.CertificateRole == "IntermediateCA")
+        {
+            var ca = await db.CaCertificates
+                .Include(c => c.Parent)
+                .FirstOrDefaultAsync(c => c.Thumbprint == selectedNode.Thumbprint);
+            if (ca?.Parent != null)
+            {
+                issuingCaId = ca.ParentId;
+                issuingCaName = ca.Parent.Name;
+            }
+        }
+        else if (selectedNode.CertificateRole == "RootCA")
+        {
+            issuingCaId = null;
+            issuingCaName = null;
+        }
+
+        isRenewMode = true;
+        await ShowIssuanceDialog(issuingCaId, issuingCaName);
+        isRenewMode = true;
+
+        var targetType = selectedNode.CertificateRole switch
+        {
+            "RootCA" => CertificateType.RootCa,
+            "IntermediateCA" => CertificateType.IntermediateCa,
+            "EndEntity" => CertificateType.EndEntityClient,
+            _ => CertificateType.EndEntityClient
+        };
+
+        if (selectedNode.CertificateRole == "EndEntity")
+        {
+            var issued = await db.IssuedCertificates.FindAsync(selectedNode.Id);
+            if (issued?.TemplateId != null)
+            {
+                var match = availableTemplates.FirstOrDefault(t => t.Id == issued.TemplateId);
+                if (match != null)
+                {
+                    selectedTemplate = match;
+                    OnTemplateSelected(match);
+                }
+            }
+        }
+
+        if (selectedTemplate == null || selectedTemplate.CertificateType != targetType)
+        {
+            var match = availableTemplates.FirstOrDefault(t => t.CertificateType == targetType)
+                        ?? availableTemplates.FirstOrDefault();
+            if (match != null)
+            {
+                selectedTemplate = match;
+            }
+        }
+
+        OnTemplateSelected(selectedTemplate);
+
+        issuanceCertName = selectedNode.Name;
+
+        var cdpUrls = ExtractExtensionUrls(selectedCert, "2.5.29.31");
+        if (cdpUrls.Count > 0)
+            issuanceCdpUrls = cdpUrls.Select(u => new IssuanceUrlEntry { Value = u }).ToList();
+
+        var aiaUrls = ExtractExtensionUrls(selectedCert, "1.3.6.1.5.5.7.1.1");
+        if (aiaUrls.Count > 0)
+            issuanceAiaUrls = aiaUrls.Select(u => new IssuanceUrlEntry { Value = u }).ToList();
+
+        isRenewMode = false;
+    }
+
+    private static List<string> ExtractExtensionUrls(X509Certificate2? cert, string oid)
+    {
+        var urls = new List<string>();
+        if (cert == null) return urls;
+
+        var ext = cert.Extensions[oid];
+        if (ext == null) return urls;
+
+        var data = ext.RawData;
+        for (int i = 0; i < data.Length - 2; i++)
+        {
+            if (data[i] == 0x86)
+            {
+                var len = data[i + 1];
+                if (i + 2 + len <= data.Length)
+                {
+                    urls.Add(System.Text.Encoding.ASCII.GetString(data, i + 2, len));
+                    i += 1 + len;
+                }
+            }
+        }
+
+        return urls;
+    }
+
     private async Task ShowRenewDialog()
     {
         if (selectedNode == null || selectedCert == null) return;

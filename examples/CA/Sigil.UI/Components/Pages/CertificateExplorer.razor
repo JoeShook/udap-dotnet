@@ -46,7 +46,14 @@
 @if (showDropZone && CommunityId > 0)
 {
     <FluentCard Style="margin-top: 1rem;">
-        <FluentLabel Typo="Typography.Subject">Import Certificates</FluentLabel>
+        <FluentStack Orientation="Orientation.Horizontal" Style="align-items: center;">
+            <FluentLabel Typo="Typography.Subject">Import Certificates</FluentLabel>
+            <FluentSpacer />
+            <FluentButton Appearance="Appearance.Stealth" Size="ButtonSize.Small"
+                          IconStart="@(new Icons.Regular.Size16.Dismiss())"
+                          OnClick="@(() => showDropZone = false)"
+                          title="Close import area" />
+        </FluentStack>
         <p style="font-size: 0.85rem; opacity: 0.7; margin: 0.25rem 0 0.5rem;">
             Drop <code>.pfx</code>, <code>.cer</code>, <code>.pem</code>, or <code>.crl</code> files below.
             Multiple files accepted. Certificate role (CA / end-entity) is auto-detected.
@@ -281,6 +288,7 @@
             <FluentSelect TOption="CertificateTemplate"
                           Items="@availableTemplates"
                           OptionText="@(t => $"{t.Name} ({GetCertTypeLabel(t.CertificateType)})")"
+                          SelectedOption="@selectedTemplate"
                           SelectedOptionChanged="OnTemplateSelected"
                           Label="Template"
                           Style="width: 100%;" />
@@ -850,6 +858,12 @@ else if (treeNodes.Count > 0)
                                 Issue Certificate
                             </FluentButton>
                         }
+                        <FluentButton Appearance="Appearance.Outline"
+                                      IconStart="@(new Icons.Regular.Size16.Copy())"
+                                      OnClick="ShowSimilarDialog"
+                                      title="Issue a new certificate pre-populated with this certificate's metadata">
+                            Similar
+                        </FluentButton>
                         <FluentButton Appearance="Appearance.Outline"
                                       IconStart="@(new Icons.Regular.Size16.ArrowRepeatAll())"
                                       OnClick="ShowRenewDialog"

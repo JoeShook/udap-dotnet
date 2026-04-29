@@ -258,10 +258,8 @@ public partial class Templates
         await LoadTemplatesAsync();
     }
 
-    private async Task CloneTemplateAsync(CertificateTemplate source)
+    private void CloneTemplateAsync(CertificateTemplate source)
     {
-        await using var db = await DbFactory.CreateDbContextAsync();
-
         var clone = new CertificateTemplate
         {
             Name = $"Copy of {source.Name}",
@@ -288,11 +286,10 @@ public partial class Templates
             IsPreset = false,
         };
 
-        db.CertificateTemplates.Add(clone);
-        await db.SaveChangesAsync();
-
-        ToastService.ShowCopyableSuccess($"Template cloned as '{clone.Name}'.");
-        await LoadTemplatesAsync();
+        isEditing = false;
+        editingId = null;
+        PopulateForm(clone);
+        dialogHidden = false;
     }
 
     private async Task DeleteTemplateAsync(CertificateTemplate template)
@@ -354,6 +351,33 @@ public partial class Templates
 
         editEkuOids = all.Count > 0 ? string.Join(";", all) : string.Empty;
     }
+
+    private void OnKeyAlgorithmChanged(string algorithm)
+    {
+        editKeyAlgorithm = algorithm;
+        if (algorithm == "ECDSA")
+            OnEcdsaCurveChanged(editEcdsaCurve);
+    }
+
+    private void OnEcdsaCurveChanged(string curve)
+    {
+        editEcdsaCurve = curve;
+        editHashAlgorithm = curve switch
+        {
+            "nistP256" => "SHA256",
+            "nistP384" => "SHA384",
+            "nistP521" => "SHA512",
+            _ => "SHA384"
+        };
+    }
+
+    private string GetEcdsaSigningAlgorithmLabel() => editEcdsaCurve switch
+    {
+        "nistP256" => "ES256 (ECDSA P-256 + SHA-256)",
+        "nistP384" => "ES384 (ECDSA P-384 + SHA-384)",
+        "nistP521" => "ES512 (ECDSA P-521 + SHA-512)",
+        _ => $"ECDSA {editEcdsaCurve} + {editHashAlgorithm}"
+    };
 
     private static string GetCertTypeLabel(CertificateType ct) => ct switch
     {

@@ -104,11 +104,18 @@
 - [ ] Subordinate CA provisioning (issue sub-CA certs for external CAs)
 - [ ] Multi-algorithm support (RSA, ECDSA, Ed25519, Ed448)
 
+## Upcoming: Rename "Community" to "Trust Domain"
+- [ ] Rename entity `Community` → `TrustDomain` and `CommunityBaseUrl` → `TrustDomainBaseUrl`
+- [ ] Rename `CommunityId` foreign keys across all entities (CaCertificate, IssuedCertificate, etc.)
+- [ ] EF Core migration to rename tables and columns in PostgreSQL
+- [ ] Update all services, ViewModels, and UI references
+- [ ] **Rationale**: "Community" conflicts with the UDAP specification's use of the same term. "Trust Domain" is standard PKI terminology for a group of entities sharing a common trust anchor and policy.
+
 ## Architecture Notes
 - **Stack**: .NET 10+, Blazor Server (InteractiveServer), FluentUI v4, PostgreSQL, BouncyCastle, Serilog
 - **Location**: `examples/CA/` in udap-dotnet repo
 - **UI patterns**: Follow TouchStoneNginxProxy and MimeScope (FluentUI v4, code-behind, dark theme)
-- **Communities**: Generic PKI hierarchy separator, not tied to UDAP semantics
+- **Trust Domains**: Generic PKI hierarchy separator (formerly "Communities"), not tied to UDAP semantics
 - **Key principle**: Import-first + generate. Support both bringing in existing PKI and creating new hierarchies.
 
 ## EJBCA Comparison Reference
