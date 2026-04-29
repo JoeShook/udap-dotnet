@@ -26,7 +26,7 @@ using Sigil.Vault;
 
 namespace Sigil.UI.Components.Pages;
 
-public partial class CertificateExplorer
+public partial class CertificateExplorer : IDisposable
 {
     [Parameter] public int CommunityId { get; set; }
     [SupplyParameterFromQuery(Name = "thumbprint")] public string? SelectedThumbprint { get; set; }
@@ -46,6 +46,7 @@ public partial class CertificateExplorer
     [Inject] private IJSRuntime JS { get; set; } = null!;
     [Inject] private NavigationManager Navigation { get; set; } = null!;
     [Inject] private CrlGenerationService CrlGenService { get; set; } = null!;
+    [Inject] private TimeDisplayService TimeDisplay { get; set; } = null!;
 
     // Tree state
     private List<CommunityOption> communityList = new();
@@ -157,6 +158,7 @@ public partial class CertificateExplorer
 
     protected override async Task OnInitializedAsync()
     {
+        TimeDisplay.OnChanged += StateHasChanged;
         await using var db = await DbFactory.CreateDbContextAsync();
 
         communityList = await db.Communities
@@ -1907,7 +1909,7 @@ public partial class CertificateExplorer
 
         showDropZone = false;
         var sigStatus = result.SignatureValid ? "signature valid" : "signature INVALID";
-        var nextUpdateStr = result.NextUpdate?.ToString("yyyy-MM-dd") ?? "unknown";
+        var nextUpdateStr = result.NextUpdate.HasValue ? TimeDisplay.FormatShort(result.NextUpdate.Value) : "unknown";
         ToastService.ShowCopyableSuccess(
             $"CRL #{result.CrlNumber} imported ({sigStatus}): {result.RevokedCount} revocation(s), next update {nextUpdateStr}");
     }
@@ -3081,4 +3083,9 @@ public partial class CertificateExplorer
     }
 
     public record RevokeReasonOption(int Code, string Label);
+
+    public void Dispose()
+    {
+        TimeDisplay.OnChanged -= StateHasChanged;
+    }
 }

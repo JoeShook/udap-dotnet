@@ -15,11 +15,12 @@ using Sigil.Common.Services.Jobs;
 
 namespace Sigil.UI.Components.Pages;
 
-public partial class Jobs
+public partial class Jobs : IDisposable
 {
     [Inject] private IDbContextFactory<SigilDbContext> DbFactory { get; set; } = null!;
     [Inject] private IRecurringJobScheduler JobScheduler { get; set; } = null!;
     [Inject] private CrlGenerationService CrlGenerationService { get; set; } = null!;
+    [Inject] private Services.TimeDisplayService TimeDisplay { get; set; } = null!;
 
     private bool isLoading = true;
     private List<CrlStatusRow> crlStatuses = new();
@@ -28,6 +29,7 @@ public partial class Jobs
 
     protected override async Task OnInitializedAsync()
     {
+        TimeDisplay.OnChanged += StateHasChanged;
         LoadRecurringJobs();
         await LoadCrlStatusesAsync();
         isLoading = false;
@@ -138,5 +140,10 @@ public partial class Jobs
         public bool NeedsRenewal { get; init; }
         public int RevokedCount { get; init; }
         public bool IsGenerating { get; set; }
+    }
+
+    public void Dispose()
+    {
+        TimeDisplay.OnChanged -= StateHasChanged;
     }
 }

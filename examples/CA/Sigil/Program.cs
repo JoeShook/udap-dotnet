@@ -86,6 +86,7 @@ try
     builder.Services.AddScoped<CertificateIssuanceService>();
     builder.Services.AddScoped<CrlGenerationService>();
     builder.Services.AddScoped<CrlAutoRenewalJob>();
+    builder.Services.AddScoped<Sigil.UI.Services.TimeDisplayService>();
 
     // Hangfire
     builder.Services.AddHangfire(config => config

@@ -76,7 +76,7 @@ else
                     <TemplateColumn Title="Next Update">
                         @if (context.HasCrl)
                         {
-                            @context.NextUpdate.ToString("yyyy-MM-dd HH:mm UTC")
+                            @TimeDisplay.FormatMedium(context.NextUpdate)
                         }
                         else
                         {

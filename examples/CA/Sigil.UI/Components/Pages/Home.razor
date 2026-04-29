@@ -129,7 +129,7 @@ else
                 <PropertyColumn Property="@(c => c.CommunityName)" Title="Community" Align="Align.Start" />
                 <TemplateColumn Title="Expires" Align="Align.Start">
                     <span style="color: @(context.DaysRemaining <= 7 ? "#e94560" : context.DaysRemaining <= 30 ? "#ff9800" : "inherit");">
-                        @context.NotAfter.ToString("yyyy-MM-dd")
+                        @TimeDisplay.FormatShort(context.NotAfter)
                     </span>
                 </TemplateColumn>
                 <TemplateColumn Title="Days Left" Align="Align.Start">
@@ -160,7 +160,7 @@ else
                 </TemplateColumn>
                 <PropertyColumn Property="@(c => c.CommunityName)" Title="Community" Align="Align.Start" />
                 <TemplateColumn Title="Expired On" Align="Align.Start">
-                    <span style="color: #e94560;">@context.NotAfter.ToString("yyyy-MM-dd")</span>
+                    <span style="color: #e94560;">@TimeDisplay.FormatShort(context.NotAfter)</span>
                 </TemplateColumn>
                 <TemplateColumn Title="Days Ago" Align="Align.Start">
                     <FluentBadge BackgroundColor="#e94560" Color="white" Style="font-size: 0.75rem;">
@@ -190,7 +190,7 @@ else
                 <PropertyColumn Property="@(c => c.CaName)" Title="Issuing CA" Align="Align.Start" />
                 <PropertyColumn Property="@(c => c.CommunityName)" Title="Community" Align="Align.Start" />
                 <TemplateColumn Title="Next Update" Align="Align.Start">
-                    <span style="color: #e94560;">@context.NextUpdate.ToString("yyyy-MM-dd")</span>
+                    <span style="color: #e94560;">@TimeDisplay.FormatShort(context.NextUpdate)</span>
                 </TemplateColumn>
                 <TemplateColumn Title="Overdue" Align="Align.Start">
                     <FluentBadge BackgroundColor="#e94560" Color="white" Style="font-size: 0.75rem;">

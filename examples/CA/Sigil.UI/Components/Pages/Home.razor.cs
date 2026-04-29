@@ -14,10 +14,11 @@ using Sigil.Common.Data;
 
 namespace Sigil.UI.Components.Pages;
 
-public partial class Home
+public partial class Home : IDisposable
 {
     [Inject] private IDbContextFactory<SigilDbContext> DbFactory { get; set; } = null!;
     [Inject] private NavigationManager Navigation { get; set; } = null!;
+    [Inject] private Services.TimeDisplayService TimeDisplay { get; set; } = null!;
 
     private bool isLoading = true;
 
@@ -42,7 +43,13 @@ public partial class Home
 
     protected override async Task OnInitializedAsync()
     {
+        TimeDisplay.OnChanged += StateHasChanged;
         await LoadDashboardAsync();
+    }
+
+    public void Dispose()
+    {
+        TimeDisplay.OnChanged -= StateHasChanged;
     }
 
     private async Task LoadDashboardAsync()

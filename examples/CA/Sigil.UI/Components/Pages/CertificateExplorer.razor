@@ -179,7 +179,7 @@
                 <strong>Algorithm</strong>
                 <span>@parsedCert.Algorithm @(parsedCert.KeySize)-bit</span>
                 <strong>Valid</strong>
-                <span>@parsedCert.Certificate.NotBefore.ToString("yyyy-MM-dd") to @parsedCert.Certificate.NotAfter.ToString("yyyy-MM-dd")</span>
+                <span>@TimeDisplay.FormatShort(parsedCert.Certificate.NotBefore) to @TimeDisplay.FormatShort(parsedCert.Certificate.NotAfter)</span>
                 <strong>Private Key</strong>
                 <span>@(parsedCert.HasPrivateKey ? "Yes" : "No (public cert only)")</span>
                 @if (chainMatchDescription != null)
@@ -718,9 +718,9 @@ else if (treeNodes.Count > 0)
                                 <strong>Issuing CA</strong>
                                 <span>@selectedCrl.CaName</span>
                                 <strong>This Update</strong>
-                                <span>@selectedCrl.ThisUpdate.ToString("yyyy-MM-dd HH:mm:ss UTC")</span>
+                                <span>@TimeDisplay.Format(selectedCrl.ThisUpdate)</span>
                                 <strong>Next Update</strong>
-                                <span>@selectedCrl.NextUpdate.ToString("yyyy-MM-dd HH:mm:ss UTC")</span>
+                                <span>@TimeDisplay.Format(selectedCrl.NextUpdate)</span>
                                 <strong>Thumbprint (SHA-1)</strong>
                                 <span style="font-family: monospace; word-break: break-all;">@selectedCrl.Thumbprint</span>
                                 <strong>Authority Key ID</strong>
@@ -734,7 +734,7 @@ else if (treeNodes.Count > 0)
                                 <strong>File</strong>
                                 <span>@(selectedCrl.FileName ?? "(none)")</span>
                                 <strong>Imported</strong>
-                                <span>@selectedCrl.ImportedAt.ToString("yyyy-MM-dd HH:mm:ss UTC")</span>
+                                <span>@TimeDisplay.Format(selectedCrl.ImportedAt)</span>
                             </div>
                         </FluentAccordionItem>
 
@@ -743,7 +743,7 @@ else if (treeNodes.Count > 0)
                             <FluentAccordionItem Heading="@($"Revoked Certificates ({selectedCrl.RevokedCertificates.Count})")" Expanded="true">
                                 <FluentDataGrid Items="@selectedCrl.RevokedCertificates.AsQueryable()" Style="font-size: 0.85rem;">
                                     <PropertyColumn Property="@(r => r.SerialNumber)" Title="Serial Number" />
-                                    <PropertyColumn Property="@(r => r.RevocationDate.ToLocalTime().ToString("yyyy-MM-dd HH:mm"))" Title="Revocation Date (Local)" />
+                                    <PropertyColumn Property="@(r => TimeDisplay.FormatMedium(r.RevocationDate))" Title="@($"Revocation Date ({TimeDisplay.Label})")" />
                                     <PropertyColumn Property="@(r => r.ReasonName)" Title="Reason" />
                                 </FluentDataGrid>
                             </FluentAccordionItem>
@@ -917,9 +917,9 @@ else if (treeNodes.Count > 0)
                                 <strong>Thumbprint</strong>
                                 <code>@selectedCert.Thumbprint</code>
                                 <strong>Not Before</strong>
-                                <span>@selectedCert.NotBefore.ToString("yyyy-MM-dd HH:mm:ss UTC")</span>
+                                <span>@TimeDisplay.Format(selectedCert.NotBefore)</span>
                                 <strong>Not After</strong>
-                                <span>@selectedCert.NotAfter.ToString("yyyy-MM-dd HH:mm:ss UTC")</span>
+                                <span>@TimeDisplay.Format(selectedCert.NotAfter)</span>
                                 <strong>Algorithm</strong>
                                 <span>@selectedCert.SignatureAlgorithm.FriendlyName</span>
                                 <strong>Public Key</strong>
@@ -1108,9 +1108,9 @@ else if (treeNodes.Count > 0)
                                     <strong>Thumbprint</strong>
                                     <code>@issuerCert.Thumbprint</code>
                                     <strong>Not Before</strong>
-                                    <span>@issuerCert.NotBefore.ToString("yyyy-MM-dd HH:mm:ss UTC")</span>
+                                    <span>@TimeDisplay.Format(issuerCert.NotBefore)</span>
                                     <strong>Not After</strong>
-                                    <span>@issuerCert.NotAfter.ToString("yyyy-MM-dd HH:mm:ss UTC")</span>
+                                    <span>@TimeDisplay.Format(issuerCert.NotAfter)</span>
                                     <strong>Algorithm</strong>
                                     <span>@issuerCert.SignatureAlgorithm.FriendlyName</span>
                                     <strong>Public Key</strong>
