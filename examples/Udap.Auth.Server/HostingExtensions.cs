@@ -25,6 +25,8 @@ using ZiggyCreatures.Caching.Fusion;
 using Udap.Server.Configuration;
 using Udap.Server.Security.Authentication.TieredOAuth;
 using Udap.Server.Storage.DbContexts;
+using Udap.Tefca.Model;
+using Udap.Tefca.Server;
 
 namespace Udap.Auth.Server;
 
@@ -107,7 +109,16 @@ internal static class HostingExtensions
             .AddUdapResponseGenerators()
             .AddSmartV2Expander();
 
+        builder.Services.AddUdapSsraaValidation(options =>
+        {
+            options.Communities.Add("udap://fhirlabs.net");
+        });
 
+        builder.Services.AddUdapTefcaExtensions();
+        builder.Services.AddUdapTefcaValidation(options =>
+        {
+            options.Communities.Add("tefca://test-community");
+        });
 
         builder.Services.Configure<UdapFileCertStoreManifest>(builder.Configuration.GetSection(Constants.UdapFileCertStoreManifestSectionName));
 

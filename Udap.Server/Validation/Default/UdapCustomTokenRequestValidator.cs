@@ -9,6 +9,7 @@
 
 using System.Text.Json;
 using Duende.IdentityServer.Validation;
+using Microsoft.AspNetCore.Http;
 using Microsoft.Extensions.Logging;
 using Microsoft.IdentityModel.JsonWebTokens;
 using Udap.Model;
@@ -29,15 +30,18 @@ public class UdapCustomTokenRequestValidator : ICustomTokenRequestValidator
 {
     private readonly IUdapAuthorizationExtensionValidator _extensionValidator;
     private readonly IEnumerable<IAuthorizationExtensionDeserializer> _customDeserializers;
+    private readonly IHttpContextAccessor _httpContextAccessor;
     private readonly ILogger<UdapCustomTokenRequestValidator> _logger;
 
     public UdapCustomTokenRequestValidator(
         IUdapAuthorizationExtensionValidator extensionValidator,
         IEnumerable<IAuthorizationExtensionDeserializer> customDeserializers,
+        IHttpContextAccessor httpContextAccessor,
         ILogger<UdapCustomTokenRequestValidator> logger)
     {
         _extensionValidator = extensionValidator;
         _customDeserializers = customDeserializers;
+        _httpContextAccessor = httpContextAccessor;
         _logger = logger;
     }
 
@@ -81,13 +85,18 @@ public class UdapCustomTokenRequestValidator : ICustomTokenRequestValidator
             .FirstOrDefault(s => s.Type == UdapServerConstants.SecretTypes.UDAP_COMMUNITY)
             ?.Value;
 
+        var sanUri = request.Client.ClientSecrets
+            .FirstOrDefault(s => s.Type == UdapServerConstants.SecretTypes.UDAP_SAN_URI_ISS_NAME)
+            ?.Value;
+
         var extensionContext = new UdapAuthorizationExtensionValidationContext
         {
             ClientAssertionToken = jwtToken,
             ClientId = request.ClientId ?? string.Empty,
             Extensions = extensions,
             CommunityId = communityId,
-            GrantType = request.GrantType
+            GrantType = request.GrantType,
+            SanUri = sanUri
         };
 
         var result = await _extensionValidator.ValidateAsync(extensionContext);
@@ -97,6 +106,12 @@ public class UdapCustomTokenRequestValidator : ICustomTokenRequestValidator
             _logger.LogError(
                 "Authorization extension validation failed for client_id {ClientId}: {Error}",
                 request.ClientId, result.ErrorDescription);
+
+            if (result.ErrorExtensions != null && _httpContextAccessor.HttpContext != null)
+            {
+                _httpContextAccessor.HttpContext.Items[UdapServerConstants.HttpContextItems.UdapErrorExtensions] =
+                    result.ErrorExtensions;
+            }
 
             context.Result = new TokenRequestValidationResult(
                 request,

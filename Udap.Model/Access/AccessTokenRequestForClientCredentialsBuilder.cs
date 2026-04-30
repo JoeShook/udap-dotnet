@@ -1,8 +1,8 @@
-﻿#region (c) 2023 Joseph Shook. All rights reserved.
+#region (c) 2023 Joseph Shook. All rights reserved.
 // /*
 //  Authors:
 //     Joseph Shook   Joseph.Shook@Surescripts.com
-// 
+//
 //  See LICENSE in the project root for license information.
 // */
 #endregion
@@ -20,25 +20,25 @@ using Udap.Model.Statement;
 namespace Udap.Model.Access;
 
 /// <summary>
-/// 
+///
 /// </summary>
 public  class AccessTokenRequestForClientCredentialsBuilder
 {
-    
+
     private readonly List<Claim> _claims;
     private readonly string? _tokenEndoint;
     private readonly string? _clientId;
     private readonly DateTime _now;
-    private readonly X509Certificate2 _certificate;
+    private readonly List<X509Certificate2> _certificates;
     private string? _scope;
     private readonly Dictionary<string, object> _extensions = [];
 
-    private AccessTokenRequestForClientCredentialsBuilder(string? clientId, string? tokenEndpoint, X509Certificate2 certificate)
+    private AccessTokenRequestForClientCredentialsBuilder(string? clientId, string? tokenEndpoint, List<X509Certificate2> certificates)
     {
         _now = DateTime.UtcNow.ToUniversalTime();
         _tokenEndoint = tokenEndpoint;
         _clientId = clientId;
-        _certificate = certificate;
+        _certificates = certificates;
 
         _claims =
         [
@@ -46,7 +46,7 @@ public  class AccessTokenRequestForClientCredentialsBuilder
             new Claim(JwtClaimTypes.JwtId, CryptoRandom.CreateUniqueId())
             // new Claim(UdapConstants.JwtClaimTypes.Extensions, BuildHl7B2BExtensions() ) //see http://hl7.org/fhir/us/udap-security/b2b.html#constructing-authentication-token
         ];
-        
+
         if (_clientId != null)
         {
             _claims.Add(new Claim(JwtClaimTypes.Subject, _clientId));
@@ -55,9 +55,21 @@ public  class AccessTokenRequestForClientCredentialsBuilder
 
     public static AccessTokenRequestForClientCredentialsBuilder Create(string? clientId, string? tokenEndpoint, X509Certificate2 certificate)
     {
-        return new AccessTokenRequestForClientCredentialsBuilder(clientId, tokenEndpoint, certificate);
+        return new AccessTokenRequestForClientCredentialsBuilder(clientId, tokenEndpoint, new List<X509Certificate2> { certificate });
     }
-    
+
+    /// <summary>
+    /// Create a builder with an ordered certificate chain where the first certificate is the end entity certificate.
+    /// </summary>
+    /// <param name="clientId"></param>
+    /// <param name="tokenEndpoint"></param>
+    /// <param name="certificates">Certificate chain where the first certificate is the end entity certificate</param>
+    /// <returns></returns>
+    public static AccessTokenRequestForClientCredentialsBuilder Create(string? clientId, string? tokenEndpoint, List<X509Certificate2> certificates)
+    {
+        return new AccessTokenRequestForClientCredentialsBuilder(clientId, tokenEndpoint, certificates);
+    }
+
     /// <summary>
     /// Add more claims
     /// </summary>
@@ -74,7 +86,7 @@ public  class AccessTokenRequestForClientCredentialsBuilder
         _scope = scope;
         return this;
     }
-    
+
     public AccessTokenRequestForClientCredentialsBuilder WithExtension<T>(string key, T value) where T : class
     {
         var jsonElement = JsonSerializer.Deserialize<JsonElement>(JsonSerializer.Serialize(value));
@@ -104,7 +116,7 @@ public  class AccessTokenRequestForClientCredentialsBuilder
             Scope = _scope,
         };
     }
-    
+
 
     private string BuildClientAssertion(string? algorithm)
     {
@@ -123,9 +135,9 @@ public  class AccessTokenRequestForClientCredentialsBuilder
             var payload = jwtPayload as Dictionary<string, object>;
             payload.Add(UdapConstants.JwtClaimTypes.Extensions, _extensions);
         }
-        
+
         return SignedSoftwareStatementBuilder<JwtPayLoadExtension>
-                .Create(_certificate, jwtPayload)
+                .Create(_certificates, jwtPayload)
                 .Build(algorithm);
     }
 }

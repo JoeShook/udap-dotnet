@@ -27,5 +27,6 @@ public static class UdapServerConstants
     public static class HttpContextItems
     {
         public const string UdapErrorDescription = "udap:error_description";
+        public const string UdapErrorExtensions = "udap:error_extensions";
     }
 }

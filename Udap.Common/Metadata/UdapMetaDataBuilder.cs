@@ -169,6 +169,16 @@ public class UdapMetaDataBuilder<TUdapMetadataOptions, TUdapMetadata>
             udapMetaData.TokenEndpointAuthSigningAlgValuesSupported = udapMetadataConfig.SignedMetadataConfig.TokenSigningAlgorithms;
         }
 
+        if (udapMetadataConfig.UdapCertificationsSupported != null && udapMetadataConfig.UdapCertificationsSupported.Count != 0)
+        {
+            udapMetaData.UdapCertificationsSupported = udapMetadataConfig.UdapCertificationsSupported;
+        }
+
+        if (udapMetadataConfig.UdapCertificationsRequired != null && udapMetadataConfig.UdapCertificationsRequired.Count != 0)
+        {
+            udapMetaData.UdapCertificationsRequired = udapMetadataConfig.UdapCertificationsRequired;
+        }
+
         var certificate = await Load(udapMetadataConfig, baseUrl, token);
 
         if (certificate == null)

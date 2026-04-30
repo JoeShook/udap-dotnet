@@ -60,39 +60,67 @@ public class UdapTokenResponseMiddleware
         }
 
         if (context.Response.StatusCode is 400 or 401
-            && context.Items.TryGetValue(UdapServerConstants.HttpContextItems.UdapErrorDescription, out var errorDescObj)
-            && errorDescObj is string errorDescription
             && !string.IsNullOrEmpty(responseBody))
         {
-            try
-            {
-                using var doc = JsonDocument.Parse(responseBody);
-                var root = doc.RootElement;
+            var hasErrorDescription =
+                context.Items.TryGetValue(UdapServerConstants.HttpContextItems.UdapErrorDescription, out var errorDescObj)
+                && errorDescObj is string;
 
-                if (root.ValueKind == JsonValueKind.Object && !root.TryGetProperty("error_description", out _))
+            var hasErrorExtensions =
+                context.Items.TryGetValue(UdapServerConstants.HttpContextItems.UdapErrorExtensions, out var errorExtObj)
+                && errorExtObj is Dictionary<string, object>;
+
+            if (hasErrorDescription || hasErrorExtensions)
+            {
+                try
                 {
-                    using var ms = new MemoryStream();
-                    using (var writer = new Utf8JsonWriter(ms))
+                    using var doc = JsonDocument.Parse(responseBody);
+                    var root = doc.RootElement;
+
+                    if (root.ValueKind == JsonValueKind.Object)
                     {
-                        writer.WriteStartObject();
+                        var needsErrorDescription = hasErrorDescription
+                            && !root.TryGetProperty("error_description", out _);
+                        var needsExtensions = hasErrorExtensions
+                            && !root.TryGetProperty("extensions", out _);
 
-                        foreach (var property in root.EnumerateObject())
+                        if (needsErrorDescription || needsExtensions)
                         {
-                            property.WriteTo(writer);
+                            using var ms = new MemoryStream();
+                            using (var writer = new Utf8JsonWriter(ms))
+                            {
+                                writer.WriteStartObject();
+
+                                foreach (var property in root.EnumerateObject())
+                                {
+                                    property.WriteTo(writer);
+                                }
+
+                                if (needsErrorDescription)
+                                {
+                                    writer.WriteString("error_description", (string)errorDescObj!);
+                                    _logger.LogDebug("Injected error_description into token error response");
+                                }
+
+                                if (needsExtensions)
+                                {
+                                    var extensions = (Dictionary<string, object>)errorExtObj!;
+                                    writer.WritePropertyName("extensions");
+                                    JsonSerializer.Serialize(writer, extensions);
+                                    _logger.LogDebug("Injected extensions into token error response");
+                                }
+
+                                writer.WriteEndObject();
+                            }
+
+                            responseBody = System.Text.Encoding.UTF8.GetString(ms.ToArray());
                         }
-
-                        writer.WriteString("error_description", errorDescription);
-                        writer.WriteEndObject();
                     }
-
-                    responseBody = System.Text.Encoding.UTF8.GetString(ms.ToArray());
-
-                    _logger.LogDebug("Injected error_description into token error response");
                 }
-            }
-            catch (JsonException ex)
-            {
-                _logger.LogDebug(ex, "Could not parse token response body for error_description injection");
+                catch (JsonException ex)
+                {
+                    _logger.LogDebug(ex, "Could not parse token response body for error injection");
+                }
             }
         }
 

@@ -1,0 +1,27 @@
+/* Minimal overrides - Fluent UI handles theming */
+code {
+    font-size: 0.8rem;
+    opacity: 0.7;
+}
+
+/* Data grid row spacing and height */
+.fluent-data-grid-row td {
+    height: auto !important;
+    min-height: 48px !important;
+    padding: 8px 0 !important;
+}
+
+.fluent-data-grid-row th {
+    min-height: 44px !important;
+}
+
+/* Soften the column resize handle */
+.fluent-data-grid .col-width-draghandle {
+    width: 2px;
+    opacity: 0.15;
+    background: currentColor;
+}
+
+.fluent-data-grid .col-width-draghandle:hover {
+    opacity: 0.5;
+}

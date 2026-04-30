@@ -150,4 +150,114 @@ public class AccessTokenTests
         b2BHl7 = JsonSerializer.Deserialize<HL7B2BAuthorizationExtension>(b2BHl7.SerializeToJson());
         Assert.Equal(0, b2BHl7!.PurposeOfUse!.Count);
     }
+
+    [Fact]
+    public void ClientCredentials_WithCertificateChain_IncludesMultipleX5cEntries()
+    {
+        var certPath = Path.Combine(AppContext.BaseDirectory, "CertStore/issued", "fhirlabs.net.client.pfx");
+        var clientCert = new X509Certificate2(certPath, "udap-test");
+
+        var intermediatePath = Path.Combine(AppContext.BaseDirectory, "CertStore/intermediates", "SureFhirLabs_Intermediate.cer");
+        var intermediateCert = new X509Certificate2(intermediatePath);
+
+        var certificates = new List<X509Certificate2> { clientCert, intermediateCert };
+
+        var clientRequest = AccessTokenRequestForClientCredentialsBuilder.Create(
+                "test-client-id",
+                "https://server/connect/token",
+                certificates)
+            .WithScope("system/Patient.rs")
+            .Build("RS384");
+
+        Assert.NotNull(clientRequest.ClientAssertion.Value);
+
+        var handler = new JwtSecurityTokenHandler();
+        var jwtToken = handler.ReadJwtToken(clientRequest.ClientAssertion.Value);
+
+        // Verify x5c header contains two certificates
+        Assert.True(jwtToken.Header.ContainsKey("x5c"));
+        var x5cArray = jwtToken.Header["x5c"] as List<object>;
+        Assert.NotNull(x5cArray);
+        Assert.Equal(2, x5cArray.Count);
+    }
+
+    [Fact]
+    public void AuthorizationCode_WithCertificateChain_IncludesMultipleX5cEntries()
+    {
+        var certPath = Path.Combine(AppContext.BaseDirectory, "CertStore/issued", "fhirlabs.net.client.pfx");
+        var clientCert = new X509Certificate2(certPath, "udap-test");
+
+        var intermediatePath = Path.Combine(AppContext.BaseDirectory, "CertStore/intermediates", "SureFhirLabs_Intermediate.cer");
+        var intermediateCert = new X509Certificate2(intermediatePath);
+
+        var certificates = new List<X509Certificate2> { clientCert, intermediateCert };
+
+        var tokenRequest = AccessTokenRequestForAuthorizationCodeBuilder.Create(
+                "test-client-id",
+                "https://server/connect/token",
+                certificates,
+                "https://client/callback",
+                "test-auth-code")
+            .Build("RS384");
+
+        Assert.NotNull(tokenRequest.ClientAssertion.Value);
+
+        var handler = new JwtSecurityTokenHandler();
+        var jwtToken = handler.ReadJwtToken(tokenRequest.ClientAssertion.Value);
+
+        // Verify x5c header contains two certificates
+        Assert.True(jwtToken.Header.ContainsKey("x5c"));
+        var x5cArray = jwtToken.Header["x5c"] as List<object>;
+        Assert.NotNull(x5cArray);
+        Assert.Equal(2, x5cArray.Count);
+    }
+
+    [Fact]
+    public void ClientCredentials_SingleCert_StillWorks()
+    {
+        var certPath = Path.Combine(AppContext.BaseDirectory, "CertStore/issued", "fhirlabs.net.client.pfx");
+        var clientCert = new X509Certificate2(certPath, "udap-test");
+
+        var clientRequest = AccessTokenRequestForClientCredentialsBuilder.Create(
+                "test-client-id",
+                "https://server/connect/token",
+                clientCert)
+            .WithScope("system/Patient.rs")
+            .Build("RS384");
+
+        Assert.NotNull(clientRequest.ClientAssertion.Value);
+
+        var handler = new JwtSecurityTokenHandler();
+        var jwtToken = handler.ReadJwtToken(clientRequest.ClientAssertion.Value);
+
+        Assert.True(jwtToken.Header.ContainsKey("x5c"));
+        var x5cArray = jwtToken.Header["x5c"] as List<object>;
+        Assert.NotNull(x5cArray);
+        Assert.Single(x5cArray);
+    }
+
+    [Fact]
+    public void AuthorizationCode_SingleCert_StillWorks()
+    {
+        var certPath = Path.Combine(AppContext.BaseDirectory, "CertStore/issued", "fhirlabs.net.client.pfx");
+        var clientCert = new X509Certificate2(certPath, "udap-test");
+
+        var tokenRequest = AccessTokenRequestForAuthorizationCodeBuilder.Create(
+                "test-client-id",
+                "https://server/connect/token",
+                clientCert,
+                "https://client/callback",
+                "test-auth-code")
+            .Build("RS384");
+
+        Assert.NotNull(tokenRequest.ClientAssertion.Value);
+
+        var handler = new JwtSecurityTokenHandler();
+        var jwtToken = handler.ReadJwtToken(tokenRequest.ClientAssertion.Value);
+
+        Assert.True(jwtToken.Header.ContainsKey("x5c"));
+        var x5cArray = jwtToken.Header["x5c"] as List<object>;
+        Assert.NotNull(x5cArray);
+        Assert.Single(x5cArray);
+    }
 }

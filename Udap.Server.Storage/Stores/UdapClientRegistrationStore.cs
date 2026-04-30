@@ -287,6 +287,21 @@ namespace Udap.Server.Storage.Stores
                 .SingleOrDefaultAsync(token);
         }
 
+        public async Task<string?> GetCommunityName(string communityId, CancellationToken token = default)
+        {
+            using var activity = Tracing.StoreActivitySource.StartActivity();
+
+            if (!int.TryParse(communityId, out var id))
+            {
+                return null;
+            }
+
+            return await _dbContext.Communities
+                .Where(c => c.Id == id)
+                .Select(c => c.Name)
+                .SingleOrDefaultAsync(token);
+        }
+
         public async Task<ICollection<Secret>?> RolloverClientSecrets(ParsedSecret secret, CancellationToken token = default)
         {
             var rolled = false;

@@ -44,13 +44,24 @@ public class AuthorizationExtensionEnforcementTests
     [Fact]
     public async Task TokenRequest_WithRequiredB2B_WithValidExtension_Succeeds()
     {
-        var pipeline = BuildPipeline(new ServerSettings
-        {
-            DefaultSystemScopes = "udap",
-            DefaultUserScopes = "udap",
-            SsraaVersion = SsraaVersion.V1_1,
-            AuthorizationExtensionsRequired = [UdapConstants.UdapAuthorizationExtensions.Hl7B2B]
-        });
+        var communityValidator = new TestCommunityTokenValidator(
+            "udap://fhirlabs.net",
+            new CommunityValidationRules
+            {
+                RequiredExtensions = new HashSet<string> { UdapConstants.UdapAuthorizationExtensions.Hl7B2B }
+            });
+
+        var pipeline = BuildPipeline(
+            new ServerSettings
+            {
+                DefaultSystemScopes = "udap",
+                DefaultUserScopes = "udap",
+                SsraaVersion = SsraaVersion.V1_1
+            },
+            configureServices: services =>
+            {
+                services.AddSingleton<ICommunityTokenValidator>(communityValidator);
+            });
 
         var clientCert = new X509Certificate2("CertStore/issued/fhirlabs.net.client.pfx", "udap-test");
         var regResult = await RegisterClient(pipeline, clientCert);
@@ -80,13 +91,24 @@ public class AuthorizationExtensionEnforcementTests
     [Fact]
     public async Task TokenRequest_WithRequiredB2B_WithoutExtension_Fails()
     {
-        var pipeline = BuildPipeline(new ServerSettings
-        {
-            DefaultSystemScopes = "udap",
-            DefaultUserScopes = "udap",
-            SsraaVersion = SsraaVersion.V1_1,
-            AuthorizationExtensionsRequired = [UdapConstants.UdapAuthorizationExtensions.Hl7B2B]
-        });
+        var communityValidator = new TestCommunityTokenValidator(
+            "udap://fhirlabs.net",
+            new CommunityValidationRules
+            {
+                RequiredExtensions = new HashSet<string> { UdapConstants.UdapAuthorizationExtensions.Hl7B2B }
+            });
+
+        var pipeline = BuildPipeline(
+            new ServerSettings
+            {
+                DefaultSystemScopes = "udap",
+                DefaultUserScopes = "udap",
+                SsraaVersion = SsraaVersion.V1_1
+            },
+            configureServices: services =>
+            {
+                services.AddSingleton<ICommunityTokenValidator>(communityValidator);
+            });
 
         var clientCert = new X509Certificate2("CertStore/issued/fhirlabs.net.client.pfx", "udap-test");
         var regResult = await RegisterClient(pipeline, clientCert);
@@ -111,13 +133,24 @@ public class AuthorizationExtensionEnforcementTests
     [Fact]
     public async Task TokenRequest_WithRequiredB2B_WithInvalidExtension_MissingOrganizationId_Fails()
     {
-        var pipeline = BuildPipeline(new ServerSettings
-        {
-            DefaultSystemScopes = "udap",
-            DefaultUserScopes = "udap",
-            SsraaVersion = SsraaVersion.V1_1,
-            AuthorizationExtensionsRequired = [UdapConstants.UdapAuthorizationExtensions.Hl7B2B]
-        });
+        var communityValidator = new TestCommunityTokenValidator(
+            "udap://fhirlabs.net",
+            new CommunityValidationRules
+            {
+                RequiredExtensions = new HashSet<string> { UdapConstants.UdapAuthorizationExtensions.Hl7B2B }
+            });
+
+        var pipeline = BuildPipeline(
+            new ServerSettings
+            {
+                DefaultSystemScopes = "udap",
+                DefaultUserScopes = "udap",
+                SsraaVersion = SsraaVersion.V1_1
+            },
+            configureServices: services =>
+            {
+                services.AddSingleton<ICommunityTokenValidator>(communityValidator);
+            });
 
         var clientCert = new X509Certificate2("CertStore/issued/fhirlabs.net.client.pfx", "udap-test");
         var regResult = await RegisterClient(pipeline, clientCert);
@@ -147,14 +180,14 @@ public class AuthorizationExtensionEnforcementTests
     }
 
     [Fact]
-    public async Task TokenRequest_NoRequiredExtensions_WithoutExtension_Succeeds()
+    public async Task TokenRequest_NoCommunityValidator_WithoutExtension_Succeeds()
     {
+        // No community validator registered — no enforcement
         var pipeline = BuildPipeline(new ServerSettings
         {
             DefaultSystemScopes = "udap",
             DefaultUserScopes = "udap",
-            SsraaVersion = SsraaVersion.V1_1,
-            AuthorizationExtensionsRequired = null
+            SsraaVersion = SsraaVersion.V1_1
         });
 
         var clientCert = new X509Certificate2("CertStore/issued/fhirlabs.net.client.pfx", "udap-test");
@@ -175,28 +208,31 @@ public class AuthorizationExtensionEnforcementTests
     }
 
     [Fact]
-    public async Task TokenRequest_CommunityOverride_RequiresB2B_WithoutExtension_Fails()
+    public async Task TokenRequest_CommunityValidator_RequiresB2B_WithoutExtension_Fails()
     {
-        var pipeline = BuildPipeline(new ServerSettings
-        {
-            DefaultSystemScopes = "udap",
-            DefaultUserScopes = "udap",
-            SsraaVersion = SsraaVersion.V1_1,
-            AuthorizationExtensionsRequired = null,
-            CommunitySettings =
-            [
-                new CommunityServerSettings
-                {
-                    Community = "udap://fhirlabs.net",
-                    AuthorizationExtensionsRequired = [UdapConstants.UdapAuthorizationExtensions.Hl7B2B]
-                }
-            ]
-        });
+        var communityValidator = new TestCommunityTokenValidator(
+            "udap://fhirlabs.net",
+            new CommunityValidationRules
+            {
+                RequiredExtensions = new HashSet<string> { UdapConstants.UdapAuthorizationExtensions.Hl7B2B }
+            });
+
+        var pipeline = BuildPipeline(
+            new ServerSettings
+            {
+                DefaultSystemScopes = "udap",
+                DefaultUserScopes = "udap",
+                SsraaVersion = SsraaVersion.V1_1
+            },
+            configureServices: services =>
+            {
+                services.AddSingleton<ICommunityTokenValidator>(communityValidator);
+            });
 
         var clientCert = new X509Certificate2("CertStore/issued/fhirlabs.net.client.pfx", "udap-test");
         var regResult = await RegisterClient(pipeline, clientCert);
 
-        // Token request without extension — community requires it
+        // Token request without extension — community validator requires it
         var clientRequest = AccessTokenRequestForClientCredentialsBuilder.Create(
                 regResult.ClientId,
                 IdentityServerPipeline.TokenEndpoint,
@@ -214,24 +250,27 @@ public class AuthorizationExtensionEnforcementTests
     }
 
     [Fact]
-    public async Task TokenRequest_CommunityOverride_RequiresB2B_WithValidExtension_Succeeds()
+    public async Task TokenRequest_CommunityValidator_RequiresB2B_WithValidExtension_Succeeds()
     {
-        var pipeline = BuildPipeline(new ServerSettings
-        {
-            DefaultSystemScopes = "udap",
-            DefaultUserScopes = "udap",
-            SsraaVersion = SsraaVersion.V1_1,
-            AuthorizationExtensionsRequired = null,
-            CommunitySettings =
-            [
-                new CommunityServerSettings
-                {
-                    Community = "udap://fhirlabs.net",
-                    AuthorizationExtensionsRequired = [UdapConstants.UdapAuthorizationExtensions.Hl7B2B],
-                    AllowedPurposeOfUse = ["urn:oid:2.16.840.1.113883.5.8#TREAT"]
-                }
-            ]
-        });
+        var communityValidator = new TestCommunityTokenValidator(
+            "udap://fhirlabs.net",
+            new CommunityValidationRules
+            {
+                RequiredExtensions = new HashSet<string> { UdapConstants.UdapAuthorizationExtensions.Hl7B2B },
+                AllowedPurposeOfUse = new HashSet<string> { "urn:oid:2.16.840.1.113883.5.8#TREAT" }
+            });
+
+        var pipeline = BuildPipeline(
+            new ServerSettings
+            {
+                DefaultSystemScopes = "udap",
+                DefaultUserScopes = "udap",
+                SsraaVersion = SsraaVersion.V1_1
+            },
+            configureServices: services =>
+            {
+                services.AddSingleton<ICommunityTokenValidator>(communityValidator);
+            });
 
         var clientCert = new X509Certificate2("CertStore/issued/fhirlabs.net.client.pfx", "udap-test");
         var regResult = await RegisterClient(pipeline, clientCert);
@@ -431,4 +470,29 @@ public class AuthorizationExtensionEnforcementTests
     }
 
     #endregion
+
+    /// <summary>
+    /// Simple community token validator for integration tests that provides rules
+    /// via <see cref="ICommunityTokenValidator.GetValidationRules"/> and always
+    /// returns success from <see cref="ICommunityTokenValidator.ValidateAsync"/>.
+    /// </summary>
+    private class TestCommunityTokenValidator : ICommunityTokenValidator
+    {
+        private readonly string _community;
+        private readonly CommunityValidationRules _rules;
+
+        public TestCommunityTokenValidator(string community, CommunityValidationRules rules)
+        {
+            _community = community;
+            _rules = rules;
+        }
+
+        public bool AppliesToCommunity(string communityName) => communityName == _community;
+
+        public CommunityValidationRules? GetValidationRules(string? grantType) => _rules;
+
+        public Task<AuthorizationExtensionValidationResult> ValidateAsync(
+            UdapAuthorizationExtensionValidationContext context)
+            => Task.FromResult(AuthorizationExtensionValidationResult.Success());
+    }
 }

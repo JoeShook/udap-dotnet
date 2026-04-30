@@ -27,9 +27,8 @@ An alternative ```tye.yaml``` file called ```tye.docker.yaml``` has been created
 - Udap.Identity.Provider
 - Udap.Identity.Provider.2
 
-The following two are running locally.  
+The following is running locally.
 
-- UdapEd.Server
 - Udap.Certificate.Server
 
 Run Tye using the Docker technique with the following command.
@@ -75,4 +74,4 @@ Also run the MakeCaWithIntermediateUdapForLocalhostCommunity unit test to genera
 
 ## Tiered OAuth
 
-There is a Tiered OAuth path that will work locally with this current setup.  In the UdapEd tool type ```https://host.docker.internal:5057``` in the ```OpenID Connect IdP``` field.  Then use username/password of ```bob/bob``` or ```alice/alice```.
+There is a Tiered OAuth path that will work locally with this current setup.  In the [UdapEd](https://github.com/JoeShook/UdapEd) tool type ```https://host.docker.internal:5057``` in the ```OpenID Connect IdP``` field.  Then use username/password of ```bob/bob``` or ```alice/alice```.

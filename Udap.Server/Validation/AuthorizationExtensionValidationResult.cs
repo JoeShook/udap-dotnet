@@ -7,6 +7,8 @@
 // */
 #endregion
 
+using System.Collections.Generic;
+
 namespace Udap.Server.Validation;
 
 /// <summary>
@@ -18,9 +20,21 @@ public class AuthorizationExtensionValidationResult
     public string? Error { get; set; }
     public string? ErrorDescription { get; set; }
 
+    /// <summary>
+    /// Optional error extension data to include in the error response "extensions" object.
+    /// Keys are extension names (e.g., "hl7-b2b"), values are serializable objects.
+    /// Used by trust community profiles (e.g., TEFCA) to return additional error metadata
+    /// such as required consent policies.
+    /// </summary>
+    public Dictionary<string, object>? ErrorExtensions { get; set; }
+
     public static AuthorizationExtensionValidationResult Success()
         => new() { IsValid = true };
 
     public static AuthorizationExtensionValidationResult Failure(string error, string description)
         => new() { IsValid = false, Error = error, ErrorDescription = description };
+
+    public static AuthorizationExtensionValidationResult Failure(
+        string error, string description, Dictionary<string, object> errorExtensions)
+        => new() { IsValid = false, Error = error, ErrorDescription = description, ErrorExtensions = errorExtensions };
 }

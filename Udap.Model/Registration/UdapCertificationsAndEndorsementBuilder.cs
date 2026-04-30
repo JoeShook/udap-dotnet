@@ -9,6 +9,7 @@
 
 using System.Security.Cryptography.X509Certificates;
 using System;
+using System.Text.Json;
 using Microsoft.IdentityModel.Tokens;
 using Duende.IdentityModel;
 using System.Collections.Generic;
@@ -637,6 +638,17 @@ public UdapCertificationsAndEndorsementBuilder WithDeveloperAddress(string? addr
         _document.Issuer = certificate.GetNameInfo(X509NameType.UrlName, false);
         _document.Subject = certificate.GetNameInfo(X509NameType.UrlName, false);
 
+        return this;
+    }
+
+    /// <summary>
+    /// Set additional claims that are not modeled as explicit properties on
+    /// <see cref="UdapCertificationAndEndorsementDocument"/>.
+    /// These claims will be included as top-level properties in the signed JWT payload.
+    /// </summary>
+    public UdapCertificationsAndEndorsementBuilder WithAdditionalClaims(Dictionary<string, JsonElement>? additionalClaims)
+    {
+        _document.AdditionalClaims = additionalClaims;
         return this;
     }
     
