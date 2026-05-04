@@ -205,7 +205,37 @@ public class CrlGenerationService
             "Generated CRL #{CrlNumber} for CA '{CaName}' with {RevokedCount} revocations, next update {NextUpdate}",
             nextCrlNumber, ca.Name, revocationEntries.Count, nextUpdate);
 
-        // Publish CRL to configured endpoints using the CA's own name (non-fatal on failure)
+        await PublishCrlToFileSystemAsync(db, ca, crlBytes, ct);
+
+        return CrlGenerationResult.Success(crlEntity.Id, nextCrlNumber, revocationEntries.Count, nextUpdate);
+    }
+
+    /// <summary>
+    /// Publishes the latest CRL for the specified CA to all configured filesystem endpoints.
+    /// Safe to call even if the CRL was not just regenerated — ensures the filesystem stays in sync with the DB.
+    /// </summary>
+    public async Task PublishCrlAsync(int caCertificateId, CancellationToken ct = default)
+    {
+        await using var db = await _dbFactory.CreateDbContextAsync(ct);
+
+        var ca = await db.CaCertificates
+            .Include(c => c.Crls.Where(crl => !crl.IsArchived))
+            .FirstOrDefaultAsync(c => c.Id == caCertificateId, ct);
+
+        if (ca == null) return;
+
+        var latestCrl = ca.Crls
+            .OrderByDescending(c => c.CrlNumber)
+            .FirstOrDefault();
+
+        if (latestCrl == null) return;
+
+        await PublishCrlToFileSystemAsync(db, ca, latestCrl.RawBytes, ct);
+    }
+
+    private async Task PublishCrlToFileSystemAsync(
+        SigilDbContext db, CaCertificate ca, byte[] crlBytes, CancellationToken ct)
+    {
         var baseUrls = await db.CommunityBaseUrls
             .Where(bu => bu.CommunityId == ca.CommunityId && bu.PublishingBasePath != null)
             .ToListAsync(ct);
@@ -231,8 +261,6 @@ public class CrlGenerationService
                 _logger.LogError(ex, "Failed to publish CRL for CA '{CaName}'", ca.Name);
             }
         }
-
-        return CrlGenerationResult.Success(crlEntity.Id, nextCrlNumber, revocationEntries.Count, nextUpdate);
     }
 
     private (byte[] CrlBytes, string SignatureAlgorithm) GenerateCrlLocal(

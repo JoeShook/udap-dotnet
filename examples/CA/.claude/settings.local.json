@@ -1,0 +1,8 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(grep -r \"TriggerJob\\\\|RecurringJob\\\\|IRecurringJobScheduler\" /c/Source/GitHub/JoeShook/udap-tools/udap-dotnet/examples/CA --include=\"*.cs\" --include=\"*.razor\" ! -path \"*/obj/*\")",
+      "Bash(dotnet build *)"
+    ]
+  }
+}
