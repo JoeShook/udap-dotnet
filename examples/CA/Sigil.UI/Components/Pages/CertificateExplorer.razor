@@ -271,7 +271,8 @@
 
 @* Issue Certificate dialog *@
 <FluentDialog @bind-Hidden="@issuanceDialogHidden" Modal="true" TrapFocus="true"
-              Style="min-width: 600px; max-height: 80vh; overflow-y: auto;">
+              Style="min-width: 900px; max-height: 80vh; overflow: auto; position: relative;">
+    <div class="sigil-resize-handle"></div>
     <FluentDialogHeader>
         @if (issuingCaIdForIssuance == null)
         {

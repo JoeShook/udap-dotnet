@@ -71,7 +71,8 @@
 
 @* Add/Edit Dialog *@
 <FluentDialog @bind-Hidden="@dialogHidden" Modal="true" TrapFocus="true"
-              Style="min-width: 600px; max-height: 80vh; overflow-y: auto;">
+              Style="min-width: 900px; max-height: 80vh; overflow: auto; position: relative;">
+    <div class="sigil-resize-handle"></div>
     <FluentDialogHeader>@(isEditing ? "Edit Template" : "Add Template")</FluentDialogHeader>
     <FluentDialogBody>
         <div style="display: flex; flex-direction: column; gap: 0.75rem;">
