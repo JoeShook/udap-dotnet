@@ -39,6 +39,7 @@ public partial class CertificateExplorer : IDisposable
     [Inject] private CrlImportService CrlImporter { get; set; } = null!;
     [Inject] private ChainValidationService ChainValidator { get; set; } = null!;
     [Inject] private CertificateIssuanceService IssuanceService { get; set; } = null!;
+    [Inject] private CertificateExportService ExportService { get; set; } = null!;
     [Inject] private ISigningProvider SigningProvider { get; set; } = null!;
     [Inject] private VaultTransitSigningProvider VaultTransitProvider { get; set; } = null!;
     [Inject] private GcpKmsSigningProvider GcpKmsProvider { get; set; } = null!;
@@ -769,6 +770,40 @@ public partial class CertificateExplorer : IDisposable
         return selectedNode.EntityType == "CaCertificate"
             ? $"/api/ca/{selectedNode.Id}/download/p12"
             : $"/api/issued/{selectedNode.Id}/download/p12";
+    }
+
+    private async Task CopyPrivateKeyAsync()
+    {
+        if (selectedNode == null) return;
+
+        var result = await ExportService.ExportPrivateKeyPemAsync(
+            selectedNode.Id, selectedNode.EntityType);
+
+        if (!result.Success)
+        {
+            ToastService.ShowError(result.Error ?? "Failed to export private key.");
+            return;
+        }
+
+        await JS.InvokeVoidAsync("sigilCopyText", result.Pem);
+        ToastService.ShowSuccess("Private key copied to clipboard (PKCS#8 PEM)");
+    }
+
+    private async Task CopyCertBase64Async()
+    {
+        if (selectedNode == null) return;
+
+        var result = await ExportService.ExportCertificateDerBase64Async(
+            selectedNode.Id, selectedNode.EntityType);
+
+        if (!result.Success)
+        {
+            ToastService.ShowError(result.Error ?? "Failed to export certificate.");
+            return;
+        }
+
+        await JS.InvokeVoidAsync("sigilCopyText", result.Pem);
+        ToastService.ShowSuccess("Certificate base64 (DER) copied to clipboard");
     }
 
     private async Task<int?> FindCaBySkiAsync(SigilDbContext db, string authorityKeyIdentifier)

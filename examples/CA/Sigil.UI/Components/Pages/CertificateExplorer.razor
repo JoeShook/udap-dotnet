@@ -811,6 +811,12 @@ else if (treeNodes.Count > 0)
                             <FluentIcon Value="@(new Icons.Regular.Size16.ArrowDownload())" />
                             .cer
                         </FluentAnchor>
+                        <FluentButton Appearance="Appearance.Outline"
+                                      IconStart="@(new Icons.Regular.Size16.Certificate())"
+                                      OnClick="CopyCertBase64Async"
+                                      title="Copy certificate as base64-encoded DER (for x5c header)">
+                            Copy Cert
+                        </FluentButton>
                         @if (selectedNodeHasPrivateKey)
                         {
                             <FluentAnchor Href="@GetPfxDownloadUrl()"
@@ -819,6 +825,12 @@ else if (treeNodes.Count > 0)
                                 <FluentIcon Value="@(new Icons.Regular.Size16.ArrowDownload())" />
                                 .p12
                             </FluentAnchor>
+                            <FluentButton Appearance="Appearance.Outline"
+                                          IconStart="@(new Icons.Regular.Size16.Key())"
+                                          OnClick="CopyPrivateKeyAsync"
+                                          title="Copy private key as PKCS#8 PEM to clipboard">
+                                Copy Key
+                            </FluentButton>
                         }
                         <FluentButton Appearance="Appearance.Outline"
                                       IconStart="@(new Icons.Regular.Size16.ArrowForward())"
