@@ -10,17 +10,16 @@
 
 using System.Security.Cryptography.X509Certificates;
 using Microsoft.AspNetCore.Components;
-using Microsoft.EntityFrameworkCore;
 using Microsoft.FluentUI.AspNetCore.Components;
-using Sigil.Common.Data;
 using Sigil.Common.Data.Entities;
+using Sigil.Common.Services;
 using Sigil.UI.Services;
 
 namespace Sigil.UI.Components.Pages;
 
 public partial class Templates
 {
-    [Inject] private IDbContextFactory<SigilDbContext> DbFactory { get; set; } = null!;
+    [Inject] private TemplateService TemplateService { get; set; } = null!;
     [Inject] private IDialogService DialogService { get; set; } = null!;
     [Inject] private IToastService ToastService { get; set; } = null!;
 
@@ -96,12 +95,7 @@ public partial class Templates
 
     private async Task LoadTemplatesAsync()
     {
-        await using var db = await DbFactory.CreateDbContextAsync();
-        templates = await db.CertificateTemplates
-            .OrderByDescending(t => t.IsPreset)
-            .ThenBy(t => t.CertificateType)
-            .ThenBy(t => t.Name)
-            .ToListAsync();
+        templates = await TemplateService.GetAllAsync();
     }
 
     private void ShowAddDialog()
@@ -234,23 +228,19 @@ public partial class Templates
     {
         if (string.IsNullOrWhiteSpace(editName)) return;
 
-        await using var db = await DbFactory.CreateDbContextAsync();
+        CertificateTemplate entity;
 
         if (isEditing && editingId.HasValue)
         {
-            var entity = await db.CertificateTemplates.FindAsync(editingId.Value);
-            if (entity != null)
-            {
-                BuildEntityFromForm(entity);
-                await db.SaveChangesAsync();
-                ToastService.ShowCopyableSuccess($"Template '{entity.Name}' updated.");
-            }
+            entity = BuildEntityFromForm();
+            entity.Id = editingId.Value;
+            await TemplateService.SaveAsync(entity);
+            ToastService.ShowCopyableSuccess($"Template '{entity.Name}' updated.");
         }
         else
         {
-            var entity = BuildEntityFromForm();
-            db.CertificateTemplates.Add(entity);
-            await db.SaveChangesAsync();
+            entity = BuildEntityFromForm();
+            await TemplateService.SaveAsync(entity);
             ToastService.ShowCopyableSuccess($"Template '{entity.Name}' created.");
         }
 
@@ -303,15 +293,8 @@ public partial class Templates
 
         if (!result.Cancelled)
         {
-            await using var db = await DbFactory.CreateDbContextAsync();
-            var entity = await db.CertificateTemplates.FindAsync(template.Id);
-            if (entity != null)
-            {
-                db.CertificateTemplates.Remove(entity);
-                await db.SaveChangesAsync();
-                ToastService.ShowCopyableSuccess($"Template '{template.Name}' deleted.");
-            }
-
+            await TemplateService.DeleteAsync(template.Id);
+            ToastService.ShowCopyableSuccess($"Template '{template.Name}' deleted.");
             await LoadTemplatesAsync();
         }
     }

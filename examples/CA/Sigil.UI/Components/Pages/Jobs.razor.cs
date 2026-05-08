@@ -9,15 +9,12 @@
 #endregion
 
 using Microsoft.AspNetCore.Components;
-using Microsoft.EntityFrameworkCore;
-using Sigil.Common.Data;
 using Sigil.Common.Services.Jobs;
 
 namespace Sigil.UI.Components.Pages;
 
 public partial class Jobs : IDisposable
 {
-    [Inject] private IDbContextFactory<SigilDbContext> DbFactory { get; set; } = null!;
     [Inject] private IRecurringJobScheduler JobScheduler { get; set; } = null!;
     [Inject] private CrlGenerationService CrlGenerationService { get; set; } = null!;
     [Inject] private Services.TimeDisplayService TimeDisplay { get; set; } = null!;
@@ -83,35 +80,18 @@ public partial class Jobs : IDisposable
 
     private async Task LoadCrlStatusesAsync()
     {
-        await using var db = await DbFactory.CreateDbContextAsync();
+        var summaries = await CrlGenerationService.GetCrlStatusesAsync();
 
-        var cas = await db.CaCertificates
-            .Where(ca => !ca.IsArchived &&
-                (ca.EncryptedPfxBytes != null || ca.StoreProviderHint != null))
-            .Include(ca => ca.Community)
-            .Include(ca => ca.Crls.Where(c => !c.IsArchived))
-            .OrderBy(ca => ca.Community.Name)
-            .ThenBy(ca => ca.Name)
-            .ToListAsync();
-
-        crlStatuses = cas.Select(ca =>
+        crlStatuses = summaries.Select(s => new CrlStatusRow
         {
-            var latestCrl = ca.Crls
-                .OrderByDescending(c => c.CrlNumber)
-                .FirstOrDefault();
-
-            return new CrlStatusRow
-            {
-                CaId = ca.Id,
-                CaName = ca.Name,
-                CommunityName = ca.Community.Name,
-                LatestCrlNumber = latestCrl?.CrlNumber,
-                NextUpdate = latestCrl?.NextUpdate ?? DateTime.MinValue,
-                HasCrl = latestCrl != null,
-                NeedsRenewal = latestCrl == null
-                    || latestCrl.NextUpdate <= DateTime.UtcNow.AddHours(24),
-                RevokedCount = latestCrl?.Revocations?.Count ?? 0
-            };
+            CaId = s.CaId,
+            CaName = s.CaName,
+            CommunityName = s.CommunityName,
+            LatestCrlNumber = s.LatestCrlNumber,
+            NextUpdate = s.NextUpdate,
+            HasCrl = s.HasCrl,
+            NeedsRenewal = s.NeedsRenewal,
+            RevokedCount = s.RevokedCount
         }).ToList();
 
         crlStatusesByCommunity = crlStatuses

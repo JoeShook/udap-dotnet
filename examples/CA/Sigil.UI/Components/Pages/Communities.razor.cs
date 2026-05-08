@@ -9,17 +9,15 @@
 #endregion
 
 using Microsoft.AspNetCore.Components;
-using Microsoft.EntityFrameworkCore;
 using Microsoft.FluentUI.AspNetCore.Components;
-using Sigil.Common.Data;
-using Sigil.Common.Data.Entities;
+using Sigil.Common.Services;
 using Sigil.Common.ViewModels;
 
 namespace Sigil.UI.Components.Pages;
 
 public partial class Communities
 {
-    [Inject] private IDbContextFactory<SigilDbContext> DbFactory { get; set; } = null!;
+    [Inject] private CommunityService CommunityService { get; set; } = null!;
     [Inject] private NavigationManager Navigation { get; set; } = null!;
     [Inject] private IDialogService DialogService { get; set; } = null!;
 
@@ -64,25 +62,7 @@ public partial class Communities
 
     private async Task LoadCommunitiesAsync()
     {
-        await using var db = await DbFactory.CreateDbContextAsync();
-
-        communities = await db.Communities
-            .Select(c => new CommunityViewModel
-            {
-                Id = c.Id,
-                Name = c.Name,
-                Description = c.Description,
-                BaseUrls = c.BaseUrls.OrderBy(bu => bu.SortOrder)
-                    .Select(bu => new BaseUrlViewModel { Url = bu.Url, PublishingBasePath = bu.PublishingBasePath })
-                    .ToList(),
-                Enabled = c.Enabled,
-                CreatedAt = c.CreatedAt,
-                RootCaCount = c.CaCertificates.Count(ca => ca.ParentId == null),
-                TotalCertCount = c.CaCertificates.Count()
-                    + c.CaCertificates.SelectMany(ca => ca.IssuedCertificates).Count()
-            })
-            .OrderBy(c => c.Name)
-            .ToListAsync();
+        communities = await CommunityService.GetAllAsync();
     }
 
     private void ShowAddDialog()
@@ -97,31 +77,12 @@ public partial class Communities
     {
         if (string.IsNullOrWhiteSpace(newCommunityName)) return;
 
-        await using var db = await DbFactory.CreateDbContextAsync();
+        var baseUrls = newCommunityBaseUrls
+            .Where(e => !string.IsNullOrWhiteSpace(e.Value))
+            .Select(e => (e.Value, (string?)e.PublishingBasePath))
+            .ToList();
 
-        var community = new Community
-        {
-            Name = newCommunityName.Trim(),
-            Description = string.IsNullOrWhiteSpace(newCommunityDescription) ? null : newCommunityDescription.Trim(),
-            Enabled = true
-        };
-
-        var sortOrder = 0;
-        foreach (var entry in newCommunityBaseUrls)
-        {
-            if (!string.IsNullOrWhiteSpace(entry.Value))
-            {
-                community.BaseUrls.Add(new CommunityBaseUrl
-                {
-                    Url = entry.Value.Trim().TrimEnd('/'),
-                    SortOrder = sortOrder++,
-                    PublishingBasePath = string.IsNullOrWhiteSpace(entry.PublishingBasePath) ? null : entry.PublishingBasePath.Trim()
-                });
-            }
-        }
-
-        db.Communities.Add(community);
-        await db.SaveChangesAsync();
+        await CommunityService.CreateAsync(newCommunityName, newCommunityDescription, baseUrls);
         addDialogHidden = true;
         await LoadCommunitiesAsync();
     }
@@ -135,14 +96,7 @@ public partial class Communities
 
         if (!result.Cancelled)
         {
-            await using var db = await DbFactory.CreateDbContextAsync();
-            var entity = await db.Communities.FindAsync(community.Id);
-            if (entity != null)
-            {
-                db.Communities.Remove(entity);
-                await db.SaveChangesAsync();
-            }
-
+            await CommunityService.DeleteAsync(community.Id);
             await LoadCommunitiesAsync();
         }
     }
@@ -162,33 +116,12 @@ public partial class Communities
     {
         if (string.IsNullOrWhiteSpace(editCommunityName)) return;
 
-        await using var db = await DbFactory.CreateDbContextAsync();
-        var entity = await db.Communities
-            .Include(c => c.BaseUrls)
-            .FirstOrDefaultAsync(c => c.Id == editCommunityId);
+        var baseUrls = editCommunityBaseUrls
+            .Where(e => !string.IsNullOrWhiteSpace(e.Value))
+            .Select(e => (e.Value, (string?)e.PublishingBasePath))
+            .ToList();
 
-        if (entity != null)
-        {
-            entity.Name = editCommunityName.Trim();
-            entity.Description = string.IsNullOrWhiteSpace(editCommunityDescription) ? null : editCommunityDescription.Trim();
-
-            entity.BaseUrls.Clear();
-            var sortOrder = 0;
-            foreach (var entry in editCommunityBaseUrls)
-            {
-                if (!string.IsNullOrWhiteSpace(entry.Value))
-                {
-                    entity.BaseUrls.Add(new CommunityBaseUrl
-                    {
-                        Url = entry.Value.Trim().TrimEnd('/'),
-                        SortOrder = sortOrder++,
-                        PublishingBasePath = string.IsNullOrWhiteSpace(entry.PublishingBasePath) ? null : entry.PublishingBasePath.Trim()
-                    });
-                }
-            }
-
-            await db.SaveChangesAsync();
-        }
+        await CommunityService.UpdateAsync(editCommunityId, editCommunityName, editCommunityDescription, baseUrls);
 
         editDialogHidden = true;
         await LoadCommunitiesAsync();

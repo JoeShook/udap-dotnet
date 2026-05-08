@@ -40,6 +40,8 @@ public partial class CertificateExplorer : IDisposable
     [Inject] private ChainValidationService ChainValidator { get; set; } = null!;
     [Inject] private CertificateIssuanceService IssuanceService { get; set; } = null!;
     [Inject] private CertificateExportService ExportService { get; set; } = null!;
+    [Inject] private CertificateManagementService ManagementService { get; set; } = null!;
+    [Inject] private CertificatePublishingService PublishingService { get; set; } = null!;
     [Inject] private ISigningProvider SigningProvider { get; set; } = null!;
     [Inject] private VaultTransitSigningProvider VaultTransitProvider { get; set; } = null!;
     [Inject] private GcpKmsSigningProvider GcpKmsProvider { get; set; } = null!;
@@ -220,31 +222,11 @@ public partial class CertificateExplorer : IDisposable
         isLoadingTree = true;
         StateHasChanged();
 
-        await using var db = await DbFactory.CreateDbContextAsync();
+        var treeData = await ManagementService.GetCommunityTreeAsync(communityId);
 
-        var community = await db.Communities.FindAsync(communityId);
-        selectedCommunityName = community?.Name ?? "Unknown";
-
-        // Load ALL CAs for this community in a flat list — EF will fix up
-        // the navigation properties (Parent/Children) automatically since
-        // all entities are in the same DbContext tracking scope.
-        var caCerts = await db.CaCertificates
-            .Where(ca => ca.CommunityId == communityId && !ca.IsArchived)
-            .Include(ca => ca.IssuedCertificates.Where(i => !i.IsArchived))
-            .Include(ca => ca.Crls.Where(c => !c.IsArchived))
-            .OrderBy(ca => ca.Name)
-            .ToListAsync();
-
-        // EF relationship fix-up populates ca.Children for all loaded entities,
-        // so BuildTreeNode's recursive walk works at any depth.
-
-        // Validate all certs in one pass (parses CAs once, stored CRLs only)
-        communityValidations = await ChainValidator.ValidateCommunityAsync(communityId);
-
-        treeNodes = caCerts
-            .Where(ca => ca.ParentId == null)
-            .Select(rootCa => BuildTreeNode(rootCa, caCerts, communityValidations))
-            .ToList();
+        selectedCommunityName = treeData.CommunityName;
+        communityValidations = treeData.Validations;
+        treeNodes = treeData.TreeNodes;
 
         treeVersion++;
         selectedTreeItem = null;
@@ -258,103 +240,6 @@ public partial class CertificateExplorer : IDisposable
         isLoadingTree = false;
     }
 
-    private static CertificateChainNodeViewModel BuildTreeNode(
-        CaCertificate ca,
-        List<CaCertificate> allCas,
-        Dictionary<string, ChainValidationResult> validationResults)
-    {
-        var caStatus = DeriveStatus(ca.Thumbprint, ca.NotAfter, ca.IsRevoked, validationResults);
-
-        var node = new CertificateChainNodeViewModel
-        {
-            Id = ca.Id,
-            Name = ca.Name,
-            Subject = ca.Subject,
-            Thumbprint = ca.Thumbprint,
-            NotAfter = ca.NotAfter,
-            CertificateRole = ca.ParentId == null ? "RootCA" : "IntermediateCA",
-            EntityType = "CaCertificate",
-            Status = caStatus,
-            KeyStorage = !string.IsNullOrEmpty(ca.StoreProviderHint)
-                    ? ca.StoreProviderHint[..ca.StoreProviderHint.IndexOf(':')]
-                : ca.EncryptedPfxBytes != null ? "local"
-                : null
-        };
-
-        foreach (var child in ca.Children.OrderBy(c => c.Name))
-        {
-            node.Children.Add(BuildTreeNode(child, allCas, validationResults));
-        }
-
-        foreach (var issued in ca.IssuedCertificates.OrderBy(i => i.Name))
-        {
-            var issuedStatus = DeriveStatus(issued.Thumbprint, issued.NotAfter, issued.IsRevoked, validationResults);
-
-            node.Children.Add(new CertificateChainNodeViewModel
-            {
-                Id = issued.Id,
-                Name = issued.Name,
-                Subject = issued.Subject,
-                Thumbprint = issued.Thumbprint,
-                NotAfter = issued.NotAfter,
-                CertificateRole = "EndEntity",
-                EntityType = "IssuedCertificate",
-                Status = issuedStatus,
-                KeyStorage = !string.IsNullOrEmpty(issued.StoreProviderHint)
-                        ? issued.StoreProviderHint[..issued.StoreProviderHint.IndexOf(':')]
-                    : issued.EncryptedPfxBytes != null ? "local"
-                    : null
-            });
-        }
-
-        // Add CRL nodes
-        foreach (var crl in ca.Crls.OrderByDescending(c => c.CrlNumber))
-        {
-            var crlStatus = DateTime.UtcNow > crl.NextUpdate
-                ? CertificateStatus.Expired
-                : DateTime.UtcNow > crl.NextUpdate.AddDays(-7)
-                    ? CertificateStatus.Expiring
-                    : CertificateStatus.Valid;
-
-            node.Children.Add(new CertificateChainNodeViewModel
-            {
-                Id = crl.Id,
-                Name = $"CRL #{crl.CrlNumber}" + (crl.FileName != null ? $" ({crl.FileName})" : ""),
-                Subject = ca.Subject,
-                NotAfter = crl.NextUpdate,
-                CertificateRole = "CRL",
-                EntityType = "Crl",
-                Status = crlStatus
-            });
-        }
-
-        return node;
-    }
-
-    private static CertificateStatus DeriveStatus(
-        string thumbprint, DateTime notAfter, bool isRevoked,
-        Dictionary<string, ChainValidationResult> validationResults)
-    {
-        if (isRevoked) return CertificateStatus.Revoked;
-        if (DateTime.UtcNow > notAfter) return CertificateStatus.Expired;
-
-        // Check chain validation result
-        if (validationResults.TryGetValue(thumbprint, out var result))
-        {
-            if (!result.IsValid)
-            {
-                // Check if there's a revocation problem in the chain
-                var hasRevocation = result.ChainLinks
-                    .Any(l => l.CrlStatus == CrlCheckStatus.Revoked);
-                if (hasRevocation) return CertificateStatus.Revoked;
-
-                return CertificateStatus.Untrusted;
-            }
-        }
-
-        if (DateTime.UtcNow > notAfter.AddDays(-30)) return CertificateStatus.Expiring;
-        return CertificateStatus.Valid;
-    }
 
     // --- Tree selection ---
 
@@ -383,11 +268,10 @@ public partial class CertificateExplorer : IDisposable
         subjectAltNames.Clear();
         CloseIssuerDetails();
 
-        await using var db = await DbFactory.CreateDbContextAsync();
-
-        // CRL selection
+        // CRL selection still uses DbFactory (CRL detail view is UI-specific)
         if (node.EntityType == "Crl")
         {
+            await using var db = await DbFactory.CreateDbContextAsync();
             var crl = await db.Crls
                 .Include(c => c.CaCertificate)
                 .Include(c => c.Revocations)
@@ -422,41 +306,24 @@ public partial class CertificateExplorer : IDisposable
                         .ToList()
                 };
 
-                // Parse CRL ASN.1 structure
                 asn1Root = Asn1Parser.Parse(crl.RawBytes);
             }
 
             return;
         }
 
-        string? pem = null;
-        string? sans = null;
+        var details = await ManagementService.GetNodeDetailsAsync(node.Id, node.EntityType);
+        selectedNodeHasPrivateKey = details.HasPrivateKey;
+        selectedNodeHasRemoteKey = details.HasRemoteKey;
+        selectedNodeAutoRenew = details.AutoRenew;
 
-        if (node.EntityType == "CaCertificate")
-        {
-            var ca = await db.CaCertificates.FindAsync(node.Id);
-            pem = ca?.X509CertificatePem;
-            selectedNodeHasPrivateKey = ca?.EncryptedPfxBytes != null;
-            selectedNodeHasRemoteKey = !string.IsNullOrEmpty(ca?.StoreProviderHint);
-            selectedNodeAutoRenew = ca?.AutoRenew ?? true;
-        }
-        else
-        {
-            var issued = await db.IssuedCertificates.FindAsync(node.Id);
-            pem = issued?.X509CertificatePem;
-            sans = issued?.SubjectAltNames;
-            selectedNodeHasPrivateKey = issued?.EncryptedPfxBytes != null;
-            selectedNodeAutoRenew = issued?.AutoRenew ?? true;
-        }
-
-        if (!string.IsNullOrEmpty(pem))
+        if (!string.IsNullOrEmpty(details.Pem))
         {
             try
             {
-                selectedCert = X509Certificate2.CreateFromPem(pem);
-                asn1Root = Asn1Parser.ParsePem(pem);
+                selectedCert = X509Certificate2.CreateFromPem(details.Pem);
+                asn1Root = Asn1Parser.ParsePem(details.Pem);
 
-                // Use pre-computed result from tree load
                 if (!string.IsNullOrEmpty(node.Thumbprint)
                     && communityValidations.TryGetValue(node.Thumbprint, out var cached))
                 {
@@ -464,7 +331,6 @@ public partial class CertificateExplorer : IDisposable
                 }
                 else
                 {
-                    // Fallback: validate on demand
                     if (node.EntityType == "CaCertificate")
                         chainValidation = await ChainValidator.ValidateCaCertificateAsync(node.Id);
                     else
@@ -474,9 +340,9 @@ public partial class CertificateExplorer : IDisposable
             catch { }
         }
 
-        if (!string.IsNullOrEmpty(sans))
+        if (!string.IsNullOrEmpty(details.SubjectAltNames))
         {
-            subjectAltNames = sans.Split(';', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
+            subjectAltNames = details.SubjectAltNames.Split(';', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
                 .ToList();
         }
         else if (selectedCert != null)
@@ -512,11 +378,10 @@ public partial class CertificateExplorer : IDisposable
             else
                 chainValidation = await ChainValidator.ValidateIssuedCertificateAsync(selectedNode.Id);
 
-            // Update the stored results and tree node status
             if (!string.IsNullOrEmpty(selectedNode.Thumbprint) && chainValidation != null)
             {
                 communityValidations[selectedNode.Thumbprint] = chainValidation;
-                selectedNode.Status = DeriveStatus(
+                selectedNode.Status = CertificateManagementService.DeriveStatus(
                     selectedNode.Thumbprint, selectedNode.NotAfter, false, communityValidations);
             }
         }
@@ -573,42 +438,13 @@ public partial class CertificateExplorer : IDisposable
 
         try
         {
-            await using var db = await DbFactory.CreateDbContextAsync();
-            var ca = await db.CaCertificates.FindAsync(selectedNode.Id);
-            if (ca == null)
-            {
-                ToastService.ShowCopyableError("CA certificate not found.");
-                return;
-            }
-
-            var cert = X509Certificate2.CreateFromPem(ca.X509CertificatePem);
-            var baseUrls = await db.CommunityBaseUrls
-                .Where(bu => bu.CommunityId == ca.CommunityId && bu.PublishingBasePath != null)
-                .ToListAsync();
-
-            if (baseUrls.Count == 0)
-            {
-                ToastService.ShowWarning("No publishing paths configured on this community's base URLs.");
-                return;
-            }
-
-            var published = 0;
-            foreach (var baseUrl in baseUrls)
-            {
-                if (string.IsNullOrEmpty(baseUrl.PublishingBasePath)) continue;
-
-                var certPath = Path.GetFullPath(Path.Combine(baseUrl.PublishingBasePath, "certs", $"{ca.Name}.cer"));
-                var certDir = Path.GetDirectoryName(certPath);
-                if (!string.IsNullOrEmpty(certDir))
-                    Directory.CreateDirectory(certDir);
-
-                var tempPath = certPath + ".tmp";
-                await File.WriteAllBytesAsync(tempPath, cert.RawData);
-                File.Move(tempPath, certPath, overwrite: true);
-                published++;
-            }
-
-            ToastService.ShowSuccess($"Published {ca.Name}.cer to {published} endpoint(s)");
+            var result = await PublishingService.PublishAiaCertificateAsync(selectedNode.Id);
+            if (result.Success)
+                ToastService.ShowSuccess($"Published certificate to {result.PublishedCount} endpoint(s)");
+            else if (result.Error?.Contains("publishing paths") == true)
+                ToastService.ShowWarning(result.Error);
+            else
+                ToastService.ShowCopyableError(result.Error ?? "AIA publish failed.");
         }
         catch (Exception ex)
         {
@@ -625,44 +461,10 @@ public partial class CertificateExplorer : IDisposable
     {
         try
         {
-            await using var db = await DbFactory.CreateDbContextAsync();
-            var ca = await db.CaCertificates.FindAsync(issuingCaId);
-            if (ca == null) return;
-
-            var baseUrls = await db.CommunityBaseUrls
-                .Where(bu => bu.CommunityId == ca.CommunityId && bu.PublishingBasePath != null)
-                .ToListAsync();
-
-            if (baseUrls.Count == 0) return;
-
-            var cert = X509Certificate2.CreateFromPem(ca.X509CertificatePem);
-
-            foreach (var baseUrl in baseUrls)
-            {
-                if (string.IsNullOrEmpty(baseUrl.PublishingBasePath)) continue;
-
-                var certPath = Path.GetFullPath(Path.Combine(baseUrl.PublishingBasePath, "certs", $"{ca.Name}.cer"));
-                if (!File.Exists(certPath))
-                {
-                    var certDir = Path.GetDirectoryName(certPath);
-                    if (!string.IsNullOrEmpty(certDir))
-                        Directory.CreateDirectory(certDir);
-
-                    var tempPath = certPath + ".tmp";
-                    await File.WriteAllBytesAsync(tempPath, cert.RawData);
-                    File.Move(tempPath, certPath, overwrite: true);
-                }
-
-                var crlPath = Path.GetFullPath(Path.Combine(baseUrl.PublishingBasePath, "crls", $"{ca.Name}.crl"));
-                if (!File.Exists(crlPath))
-                {
-                    await CrlGenService.GenerateCrlAsync(issuingCaId);
-                }
-            }
+            await PublishingService.EnsureIssuerPublishedAsync(issuingCaId);
         }
-        catch (Exception ex)
+        catch
         {
-            // Best-effort; URL validation will catch any remaining issues
         }
     }
 
@@ -683,7 +485,7 @@ public partial class CertificateExplorer : IDisposable
             if (!string.IsNullOrEmpty(selectedNode.Thumbprint) && chainValidation != null)
             {
                 communityValidations[selectedNode.Thumbprint] = chainValidation;
-                selectedNode.Status = DeriveStatus(
+                selectedNode.Status = CertificateManagementService.DeriveStatus(
                     selectedNode.Thumbprint, selectedNode.NotAfter, false, communityValidations);
             }
         }
@@ -729,29 +531,10 @@ public partial class CertificateExplorer : IDisposable
             return;
         }
 
-        await using var db = await DbFactory.CreateDbContextAsync();
+        var result = await ManagementService.RenameAsync(selectedNode.Id, selectedNode.EntityType, trimmed);
+        if (result.Success)
+            selectedNode.Name = trimmed;
 
-        if (selectedNode.EntityType == "CaCertificate")
-        {
-            var ca = await db.CaCertificates.FindAsync(selectedNode.Id);
-            if (ca != null)
-            {
-                ca.Name = trimmed;
-                await db.SaveChangesAsync();
-            }
-        }
-        else if (selectedNode.EntityType == "IssuedCertificate")
-        {
-            var issued = await db.IssuedCertificates.FindAsync(selectedNode.Id);
-            if (issued != null)
-            {
-                issued.Name = trimmed;
-                await db.SaveChangesAsync();
-            }
-        }
-
-        // Update the tree node in-place so the tree reflects the new name
-        selectedNode.Name = trimmed;
         isRenaming = false;
         StateHasChanged();
     }
@@ -808,61 +591,12 @@ public partial class CertificateExplorer : IDisposable
 
     private async Task<int?> FindCaBySkiAsync(SigilDbContext db, string authorityKeyIdentifier)
     {
-        var cas = await db.CaCertificates
-            .Where(ca => ca.CommunityId == CommunityId)
-            .ToListAsync();
-
-        foreach (var ca in cas)
-        {
-            try
-            {
-                using var caCert = X509Certificate2.CreateFromPem(ca.X509CertificatePem);
-                var skiExt = caCert.Extensions["2.5.29.14"];
-                if (skiExt != null)
-                {
-                    var ski = new X509SubjectKeyIdentifierExtension(skiExt, skiExt.Critical);
-                    if (ski.SubjectKeyIdentifier == authorityKeyIdentifier)
-                    {
-                        return ca.Id;
-                    }
-                }
-            }
-            catch { }
-        }
-
-        return null;
+        return await CertificateManagementService.FindCaBySkiInternalAsync(db, CommunityId, authorityKeyIdentifier);
     }
 
-    /// <summary>
-    /// Finds the issuing CA by matching the cert's Issuer DN against CA Subject DNs,
-    /// then verifying the signature. Used as fallback when AKI/SKI match fails.
-    /// </summary>
     private async Task<int?> FindCaByDnAndSignatureAsync(SigilDbContext db, X509Certificate2 cert)
     {
-        var cas = await db.CaCertificates
-            .Where(ca => ca.CommunityId == CommunityId)
-            .ToListAsync();
-
-        var bcParser = new Org.BouncyCastle.X509.X509CertificateParser();
-        var bcCert = bcParser.ReadCertificate(cert.RawData);
-
-        foreach (var ca in cas)
-        {
-            try
-            {
-                using var caCert = X509Certificate2.CreateFromPem(ca.X509CertificatePem);
-                var bcCa = bcParser.ReadCertificate(caCert.RawData);
-
-                if (bcCa.SubjectDN.Equivalent(bcCert.IssuerDN))
-                {
-                    bcCert.Verify(bcCa.GetPublicKey());
-                    return ca.Id; // Signature verified — this is the issuer
-                }
-            }
-            catch { }
-        }
-
-        return null;
+        return await CertificateManagementService.FindCaByDnAndSignatureInternalAsync(db, CommunityId, cert);
     }
 
     private static string NodeColor(CertificateStatus status) => status switch
@@ -1264,27 +998,7 @@ public partial class CertificateExplorer : IDisposable
     {
         if (selectedNode == null) return;
 
-        await using var db = await DbFactory.CreateDbContextAsync();
-
-        if (selectedNode.EntityType == "CaCertificate")
-        {
-            var ca = await db.CaCertificates.FindAsync(selectedNode.Id);
-            if (ca != null)
-            {
-                ca.AutoRenew = enabled;
-                await db.SaveChangesAsync();
-            }
-        }
-        else if (selectedNode.EntityType == "IssuedCertificate")
-        {
-            var issued = await db.IssuedCertificates.FindAsync(selectedNode.Id);
-            if (issued != null)
-            {
-                issued.AutoRenew = enabled;
-                await db.SaveChangesAsync();
-            }
-        }
-
+        await ManagementService.SetAutoRenewAsync(selectedNode.Id, selectedNode.EntityType, enabled);
         selectedNodeAutoRenew = enabled;
     }
 
@@ -1301,27 +1015,11 @@ public partial class CertificateExplorer : IDisposable
 
         if (result.Cancelled) return;
 
-        await using var db = await DbFactory.CreateDbContextAsync();
-        var now = DateTime.UtcNow;
-
-        switch (selectedNode.EntityType)
-        {
-            case "CaCertificate":
-                var ca = await db.CaCertificates.FindAsync(selectedNode.Id);
-                if (ca != null) { ca.IsArchived = true; ca.ArchivedAt = now; }
-                break;
-            case "IssuedCertificate":
-                var issued = await db.IssuedCertificates.FindAsync(selectedNode.Id);
-                if (issued != null) { issued.IsArchived = true; issued.ArchivedAt = now; }
-                break;
-            case "Crl":
-                var crl = await db.Crls.FindAsync(selectedNode.Id);
-                if (crl != null) { crl.IsArchived = true; crl.ArchivedAt = now; }
-                break;
-        }
-
-        await db.SaveChangesAsync();
-        ToastService.ShowCopyableSuccess($"Archived '{selectedNode.Name}'");
+        var archiveResult = await ManagementService.ArchiveAsync(selectedNode.Id, selectedNode.EntityType);
+        if (archiveResult.Success)
+            ToastService.ShowCopyableSuccess($"Archived '{selectedNode.Name}'");
+        else
+            ToastService.ShowCopyableError(archiveResult.Error ?? "Archive failed.");
 
         await ClearSelectionAndReloadTreeAsync();
     }
@@ -1337,59 +1035,18 @@ public partial class CertificateExplorer : IDisposable
 
         if (result.Cancelled) return;
 
-        await using var db = await DbFactory.CreateDbContextAsync();
+        var deleteResult = await ManagementService.DeleteAsync(
+            selectedNode.Id, selectedNode.EntityType, DeleteRemoteKeyAsync);
 
-        switch (selectedNode.EntityType)
+        if (deleteResult.Success)
         {
-            case "CaCertificate":
-                var ca = await db.CaCertificates
-                    .Include(c => c.IssuedCertificates)
-                    .Include(c => c.Crls).ThenInclude(c => c.Revocations)
-                    .Include(c => c.Children)
-                    .FirstOrDefaultAsync(c => c.Id == selectedNode.Id);
-                if (ca != null)
-                {
-                    if (ca.Children.Count > 0 || ca.IssuedCertificates.Count > 0)
-                    {
-                        ToastService.ShowCopyableError(
-                            $"Cannot delete '{ca.Name}': it has {ca.Children.Count} child CA(s) and {ca.IssuedCertificates.Count} issued cert(s). Delete or move them first.");
-                        return;
-                    }
-                    // Delete Vault Transit key if applicable
-                    await DeleteRemoteKeyAsync(ca.StoreProviderHint);
-                    // Remove associated CRLs and their revocations
-                    foreach (var crl in ca.Crls.ToList())
-                    {
-                        db.CertificateRevocations.RemoveRange(crl.Revocations);
-                        db.Crls.Remove(crl);
-                    }
-                    db.CaCertificates.Remove(ca);
-                }
-                break;
-            case "IssuedCertificate":
-                var issued = await db.IssuedCertificates.FindAsync(selectedNode.Id);
-                if (issued != null)
-                {
-                    await DeleteRemoteKeyAsync(issued.StoreProviderHint);
-                    db.IssuedCertificates.Remove(issued);
-                }
-                break;
-            case "Crl":
-                var crl2 = await db.Crls
-                    .Include(c => c.Revocations)
-                    .FirstOrDefaultAsync(c => c.Id == selectedNode.Id);
-                if (crl2 != null)
-                {
-                    db.CertificateRevocations.RemoveRange(crl2.Revocations);
-                    db.Crls.Remove(crl2);
-                }
-                break;
+            ToastService.ShowCopyableSuccess($"Permanently deleted '{selectedNode.Name}'");
+            await ClearSelectionAndReloadTreeAsync();
         }
-
-        await db.SaveChangesAsync();
-        ToastService.ShowCopyableSuccess($"Permanently deleted '{selectedNode.Name}'");
-
-        await ClearSelectionAndReloadTreeAsync();
+        else
+        {
+            ToastService.ShowCopyableError(deleteResult.Error ?? "Delete failed.");
+        }
     }
 
     /// <summary>
@@ -1447,97 +1104,24 @@ public partial class CertificateExplorer : IDisposable
     {
         if (selectedNode == null || moveTargetCommunity == null) return;
 
-        await using var db = await DbFactory.CreateDbContextAsync();
-        var targetId = moveTargetCommunity.Id;
+        var moveResult = await ManagementService.MoveAsync(
+            selectedNode.Id, selectedNode.EntityType, moveTargetCommunity.Id);
 
-        switch (selectedNode.EntityType)
-        {
-            case "CaCertificate":
-                var ca = await db.CaCertificates.FindAsync(selectedNode.Id);
-                if (ca != null)
-                {
-                    ca.CommunityId = targetId;
-                    ca.ParentId = null; // Detach from current parent — will need re-linking in target
-                }
-                break;
-            case "IssuedCertificate":
-                var issued = await db.IssuedCertificates
-                    .Include(i => i.IssuingCaCertificate)
-                    .FirstOrDefaultAsync(i => i.Id == selectedNode.Id);
-                if (issued != null)
-                {
-                    // Find a matching CA in the target community by AKI/SKI
-                    int? newIssuingCaId = null;
-                    try
-                    {
-                        using var issuedCert = X509Certificate2.CreateFromPem(issued.X509CertificatePem);
-                        var akiExt = issuedCert.Extensions["2.5.29.35"];
-                        if (akiExt?.RawData != null && akiExt.RawData.Length >= 6)
-                        {
-                            var data = akiExt.RawData;
-                            if (data[2] == 0x80)
-                            {
-                                var len = data[3];
-                                var keyId = new byte[len];
-                                Array.Copy(data, 4, keyId, 0, len);
-                                var aki = Convert.ToHexString(keyId);
-
-                                var targetCas = await db.CaCertificates
-                                    .Where(c => c.CommunityId == targetId)
-                                    .ToListAsync();
-
-                                foreach (var targetCa in targetCas)
-                                {
-                                    using var tCert = X509Certificate2.CreateFromPem(targetCa.X509CertificatePem);
-                                    var skiExt = tCert.Extensions["2.5.29.14"];
-                                    if (skiExt != null)
-                                    {
-                                        var ski = new X509SubjectKeyIdentifierExtension(skiExt, skiExt.Critical);
-                                        if (ski.SubjectKeyIdentifier == aki)
-                                        {
-                                            newIssuingCaId = targetCa.Id;
-                                            break;
-                                        }
-                                    }
-                                }
-                            }
-                        }
-                    }
-                    catch { }
-
-                    if (newIssuingCaId == null)
-                    {
-                        // Fallback: first CA in target
-                        var fallbackCa = await db.CaCertificates
-                            .Where(c => c.CommunityId == targetId)
-                            .OrderByDescending(c => c.ParentId)
-                            .FirstOrDefaultAsync();
-                        newIssuingCaId = fallbackCa?.Id;
-                    }
-
-                    if (newIssuingCaId == null)
-                    {
-                        ToastService.ShowCopyableError("Target community has no CA certificates");
-                        moveDialogHidden = true;
-                        return;
-                    }
-
-                    issued.IssuingCaCertificateId = newIssuingCaId.Value;
-                }
-                break;
-        }
-
-        await db.SaveChangesAsync();
         moveDialogHidden = true;
 
-        ToastService.ShowCopyableSuccess($"Moved '{selectedNode.Name}' to '{moveTargetCommunity.Name}'");
-
-        selectedNode = null;
-        selectedCert?.Dispose();
-        selectedCert = null;
-        chainValidation = null;
-
-        await LoadCommunityTreeAsync(CommunityId);
+        if (moveResult.Success)
+        {
+            ToastService.ShowCopyableSuccess($"Moved '{selectedNode.Name}' to '{moveTargetCommunity.Name}'");
+            selectedNode = null;
+            selectedCert?.Dispose();
+            selectedCert = null;
+            chainValidation = null;
+            await LoadCommunityTreeAsync(CommunityId);
+        }
+        else
+        {
+            ToastService.ShowCopyableError(moveResult.Error ?? "Move failed.");
+        }
     }
 
     private async Task ProcessUploadedFile(byte[] fileBytes, string fileName)
@@ -3050,58 +2634,30 @@ public partial class CertificateExplorer : IDisposable
 
         try
         {
-            await using var db = await DbFactory.CreateDbContextAsync();
-            var now = DateTime.UtcNow;
-            int? issuingCaId = null;
-
-            if (selectedNode.EntityType == "CaCertificate")
-            {
-                var ca = await db.CaCertificates.FindAsync(selectedNode.Id);
-                if (ca != null)
-                {
-                    ca.IsRevoked = true;
-                    ca.RevokedAt = now;
-                    ca.RevocationReason = selectedRevokeReason.Code;
-                    issuingCaId = ca.ParentId; // parent CA's CRL should include this
-                    await db.SaveChangesAsync();
-                }
-            }
-            else
-            {
-                var issued = await db.IssuedCertificates.FindAsync(selectedNode.Id);
-                if (issued != null)
-                {
-                    issued.IsRevoked = true;
-                    issued.RevokedAt = now;
-                    issued.RevocationReason = selectedRevokeReason.Code;
-                    issuingCaId = issued.IssuingCaCertificateId;
-                    await db.SaveChangesAsync();
-                }
-            }
+            var revokeResult = await ManagementService.RevokeAsync(
+                selectedNode.Id, selectedNode.EntityType, selectedRevokeReason.Code);
 
             revokeDialogHidden = true;
 
-            // Regenerate the issuing CA's CRL to include the revoked certificate
-            if (issuingCaId.HasValue)
+            if (revokeResult.Success)
             {
-                var crlResult = await CrlGenService.GenerateCrlAsync(issuingCaId.Value);
-                if (crlResult.IsSuccess)
+                if (revokeResult.CrlNumber.HasValue)
                 {
                     ToastService.ShowCopyableSuccess(
-                        $"Certificate '{selectedNode.Name}' revoked (reason: {selectedRevokeReason.Label}). CRL #{crlResult.CrlNumber} generated with {crlResult.RevokedCount} revocation(s).");
+                        $"Certificate '{selectedNode.Name}' revoked (reason: {selectedRevokeReason.Label}). CRL #{revokeResult.CrlNumber} generated with {revokeResult.RevokedCount} revocation(s).");
                 }
                 else
                 {
                     ToastService.ShowCopyableSuccess(
                         $"Certificate '{selectedNode.Name}' revoked (reason: {selectedRevokeReason.Label}).");
-                    ToastService.ShowCopyableError($"CRL regeneration failed: {crlResult.Error}");
                 }
+
+                if (!string.IsNullOrEmpty(revokeResult.Error))
+                    ToastService.ShowCopyableError(revokeResult.Error);
             }
             else
             {
-                // Root CA revoked — no parent CRL to update
-                ToastService.ShowCopyableSuccess(
-                    $"Certificate '{selectedNode.Name}' revoked (reason: {selectedRevokeReason.Label}).");
+                ToastService.ShowCopyableError(revokeResult.Error ?? "Revocation failed.");
             }
 
             await LoadCommunityTreeAsync(CommunityId);

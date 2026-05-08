@@ -394,8 +394,54 @@ public class CrlGenerationService
         return (crlBytes, sigAlgName);
     }
 
+    public async Task<List<CrlStatusSummary>> GetCrlStatusesAsync(CancellationToken ct = default)
+    {
+        await using var db = await _dbFactory.CreateDbContextAsync(ct);
+
+        var cas = await db.CaCertificates
+            .Where(ca => !ca.IsArchived &&
+                (ca.EncryptedPfxBytes != null || ca.StoreProviderHint != null))
+            .Include(ca => ca.Community)
+            .Include(ca => ca.Crls.Where(c => !c.IsArchived))
+            .OrderBy(ca => ca.Community.Name)
+            .ThenBy(ca => ca.Name)
+            .ToListAsync(ct);
+
+        return cas.Select(ca =>
+        {
+            var latestCrl = ca.Crls
+                .OrderByDescending(c => c.CrlNumber)
+                .FirstOrDefault();
+
+            return new CrlStatusSummary
+            {
+                CaId = ca.Id,
+                CaName = ca.Name,
+                CommunityName = ca.Community.Name,
+                LatestCrlNumber = latestCrl?.CrlNumber,
+                NextUpdate = latestCrl?.NextUpdate ?? DateTime.MinValue,
+                HasCrl = latestCrl != null,
+                NeedsRenewal = latestCrl == null
+                    || latestCrl.NextUpdate <= DateTime.UtcNow.AddHours(24),
+                RevokedCount = latestCrl?.Revocations?.Count ?? 0
+            };
+        }).ToList();
+    }
+
     private static string GetLocalSignatureAlgorithmName(string keyAlgorithm) =>
         keyAlgorithm.Equals("RSA", StringComparison.OrdinalIgnoreCase)
             ? "SHA256WithRSAEncryption"
             : "SHA256WithECDSA";
+}
+
+public class CrlStatusSummary
+{
+    public int CaId { get; init; }
+    public string CaName { get; init; } = string.Empty;
+    public string CommunityName { get; init; } = string.Empty;
+    public long? LatestCrlNumber { get; init; }
+    public DateTime NextUpdate { get; init; }
+    public bool HasCrl { get; init; }
+    public bool NeedsRenewal { get; init; }
+    public int RevokedCount { get; init; }
 }

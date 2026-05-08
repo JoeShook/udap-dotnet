@@ -60,6 +60,11 @@ try
     builder.Services.AddScoped<CrlImportService>();
     builder.Services.AddScoped<ChainValidationService>();
     builder.Services.AddScoped<CertificateExportService>();
+    builder.Services.AddScoped<DashboardService>();
+    builder.Services.AddScoped<TemplateService>();
+    builder.Services.AddScoped<CommunityService>();
+    builder.Services.AddScoped<CertificateManagementService>();
+    builder.Services.AddScoped<CertificatePublishingService>();
     builder.Services.AddHttpClient("SigilCrl");
     builder.Services.AddHttpClient();
 
