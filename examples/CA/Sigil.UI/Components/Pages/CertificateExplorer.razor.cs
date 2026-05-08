@@ -42,6 +42,7 @@ public partial class CertificateExplorer : IDisposable
     [Inject] private CertificateExportService ExportService { get; set; } = null!;
     [Inject] private CertificateManagementService ManagementService { get; set; } = null!;
     [Inject] private CertificatePublishingService PublishingService { get; set; } = null!;
+    [Inject] private CertificateImportService ImportService { get; set; } = null!;
     [Inject] private ISigningProvider SigningProvider { get; set; } = null!;
     [Inject] private VaultTransitSigningProvider VaultTransitProvider { get; set; } = null!;
     [Inject] private GcpKmsSigningProvider GcpKmsProvider { get; set; } = null!;
@@ -589,16 +590,6 @@ public partial class CertificateExplorer : IDisposable
         ToastService.ShowSuccess("Certificate base64 (DER) copied to clipboard");
     }
 
-    private async Task<int?> FindCaBySkiAsync(SigilDbContext db, string authorityKeyIdentifier)
-    {
-        return await CertificateManagementService.FindCaBySkiInternalAsync(db, CommunityId, authorityKeyIdentifier);
-    }
-
-    private async Task<int?> FindCaByDnAndSignatureAsync(SigilDbContext db, X509Certificate2 cert)
-    {
-        return await CertificateManagementService.FindCaByDnAndSignatureInternalAsync(db, CommunityId, cert);
-    }
-
     private static string NodeColor(CertificateStatus status) => status switch
     {
         CertificateStatus.Expired => "#e94560",
@@ -820,10 +811,6 @@ public partial class CertificateExplorer : IDisposable
             ProcessNextPendingCaSelect();
     }
 
-    /// <summary>
-    /// Auto-imports a certificate without the confirm dialog.
-    /// Tries empty password, then "udap-test" for PFX files.
-    /// </summary>
     private async Task<bool> TryAutoImportCert(byte[] fileBytes, string fileName)
     {
         var ext = Path.GetExtension(fileName).ToLowerInvariant();
@@ -843,7 +830,6 @@ public partial class CertificateExplorer : IDisposable
 
             if (parsed == null)
             {
-                // Queue for manual password entry after batch completes
                 pendingPasswordQueue.Enqueue((fileBytes, fileName));
                 return false;
             }
@@ -860,124 +846,17 @@ public partial class CertificateExplorer : IDisposable
 
         try
         {
-            await using var db = await DbFactory.CreateDbContextAsync();
-            var cert = parsed.Certificate;
-            var thumbprint = cert.Thumbprint;
-
-            // Check for existing cert with same thumbprint — merge if found
-            var existingCa = await db.CaCertificates
-                .FirstOrDefaultAsync(c => c.Thumbprint == thumbprint && c.CommunityId == CommunityId);
-
-            if (existingCa != null)
-            {
-                // Merge: upgrade public-only to operational if PFX now available
-                if (parsed.HasPrivateKey && existingCa.EncryptedPfxBytes == null)
-                {
-                    existingCa.EncryptedPfxBytes = fileBytes;
-                    existingCa.PfxPassword = usedPassword;
-                    await db.SaveChangesAsync();
-                    parsed.Certificate.Dispose();
-                    return true;
-                }
-
-                // Already have this cert (same thumbprint, already has key or both public)
-                parsed.Certificate.Dispose();
-                return true; // Not an error, just a no-op
-            }
-
-            var existingIssued = await db.IssuedCertificates
-                .Include(i => i.IssuingCaCertificate)
-                .FirstOrDefaultAsync(c => c.Thumbprint == thumbprint
-                    && c.IssuingCaCertificate.CommunityId == CommunityId);
-
-            if (existingIssued != null)
-            {
-                if (parsed.HasPrivateKey && existingIssued.EncryptedPfxBytes == null)
-                {
-                    existingIssued.EncryptedPfxBytes = fileBytes;
-                    existingIssued.PfxPassword = usedPassword;
-                    await db.SaveChangesAsync();
-                    parsed.Certificate.Dispose();
-                    return true;
-                }
-
-                parsed.Certificate.Dispose();
-                return true;
-            }
-
-            // New cert — find where it belongs in the chain
-            if (parsed.DetectedRole is DetectedCertRole.RootCa or DetectedCertRole.IntermediateCa)
-            {
-                int? parentId = null;
-                if (parsed.DetectedRole == DetectedCertRole.IntermediateCa)
-                {
-                    if (parsed.AuthorityKeyIdentifier != null)
-                        parentId = await FindCaBySkiAsync(db, parsed.AuthorityKeyIdentifier);
-
-                    // Fallback: match by Issuer DN + signature verification
-                    parentId ??= await FindCaByDnAndSignatureAsync(db, cert);
-                }
-
-                db.CaCertificates.Add(new CaCertificate
-                {
-                    CommunityId = CommunityId,
-                    ParentId = parentId,
-                    Name = Path.GetFileNameWithoutExtension(fileName),
-                    Subject = cert.Subject,
-                    X509CertificatePem = cert.ExportCertificatePem(),
-                    EncryptedPfxBytes = parsed.HasPrivateKey ? fileBytes : null,
-                    PfxPassword = parsed.HasPrivateKey ? usedPassword : null,
-                    Thumbprint = thumbprint,
-                    SerialNumber = cert.SerialNumber,
-                    KeyAlgorithm = parsed.Algorithm,
-                    KeySize = parsed.KeySize,
-                    NotBefore = cert.NotBefore.ToUniversalTime(),
-                    NotAfter = cert.NotAfter.ToUniversalTime(),
-                    CertSecurityLevel = CertSecurityLevel.Software,
-                    Enabled = true
-                });
-            }
-            else
-            {
-                int? issuingCaId = null;
-                if (parsed.AuthorityKeyIdentifier != null)
-                {
-                    issuingCaId = await FindCaBySkiAsync(db, parsed.AuthorityKeyIdentifier);
-                }
-
-                // Fallback: match by Issuer DN + signature verification
-                issuingCaId ??= await FindCaByDnAndSignatureAsync(db, cert);
-
-                if (issuingCaId == null)
-                {
-                    // Queue for manual CA selection
-                    pendingCaSelectQueue.Enqueue((fileBytes, fileName, usedPassword));
-                    parsed.Certificate.Dispose();
-                    return false;
-                }
-
-                db.IssuedCertificates.Add(new IssuedCertificate
-                {
-                    IssuingCaCertificateId = issuingCaId.Value,
-                    Name = Path.GetFileNameWithoutExtension(fileName),
-                    Subject = cert.Subject,
-                    SubjectAltNames = parsed.SubjectAltNames,
-                    X509CertificatePem = cert.ExportCertificatePem(),
-                    EncryptedPfxBytes = parsed.HasPrivateKey ? fileBytes : null,
-                    PfxPassword = parsed.HasPrivateKey ? usedPassword : null,
-                    Thumbprint = thumbprint,
-                    SerialNumber = cert.SerialNumber,
-                    KeyAlgorithm = parsed.Algorithm,
-                    KeySize = parsed.KeySize,
-                    NotBefore = cert.NotBefore.ToUniversalTime(),
-                    NotAfter = cert.NotAfter.ToUniversalTime(),
-                    Enabled = true
-                });
-            }
-
-            await db.SaveChangesAsync();
+            var result = await ImportService.ImportParsedCertificateAsync(
+                parsed, CommunityId, password: usedPassword, rawFileOverride: fileBytes);
             parsed.Certificate.Dispose();
-            return true;
+
+            if (result.NeedsCaSelection)
+            {
+                pendingCaSelectQueue.Enqueue((fileBytes, fileName, usedPassword));
+                return false;
+            }
+
+            return result.Success;
         }
         catch (Exception ex)
         {
@@ -1239,117 +1118,20 @@ public partial class CertificateExplorer : IDisposable
         pendingPasswordQueue.Clear();
     }
 
-    /// <summary>
-    /// Auto-imports a parsed cert (used after successful password entry in batch mode).
-    /// </summary>
     private async Task TryAutoImportCertWithParsed(ParsedCertificate parsed, string fileName, string password)
     {
         try
         {
-            await using var db = await DbFactory.CreateDbContextAsync();
-            var cert = parsed.Certificate;
-            var thumbprint = cert.Thumbprint;
+            var result = await ImportService.ImportParsedCertificateAsync(
+                parsed, CommunityId, password: password);
 
-            // Check for existing
-            var existingCa = await db.CaCertificates
-                .FirstOrDefaultAsync(c => c.Thumbprint == thumbprint && c.CommunityId == CommunityId);
-            if (existingCa != null)
+            if (result.NeedsCaSelection)
             {
-                if (parsed.HasPrivateKey && existingCa.EncryptedPfxBytes == null)
-                {
-                    existingCa.EncryptedPfxBytes = parsed.RawFileBytes;
-                    existingCa.PfxPassword = password;
-                    await db.SaveChangesAsync();
-                }
+                pendingCaSelectQueue.Enqueue((parsed.RawFileBytes ?? Array.Empty<byte>(), fileName, password));
                 parsed.Certificate.Dispose();
-                ToastService.ShowCopyableSuccess($"Imported '{fileName}'");
                 return;
             }
 
-            var existingIssued = await db.IssuedCertificates
-                .Include(i => i.IssuingCaCertificate)
-                .FirstOrDefaultAsync(c => c.Thumbprint == thumbprint
-                    && c.IssuingCaCertificate.CommunityId == CommunityId);
-            if (existingIssued != null)
-            {
-                if (parsed.HasPrivateKey && existingIssued.EncryptedPfxBytes == null)
-                {
-                    existingIssued.EncryptedPfxBytes = parsed.RawFileBytes;
-                    existingIssued.PfxPassword = password;
-                    await db.SaveChangesAsync();
-                }
-                parsed.Certificate.Dispose();
-                ToastService.ShowCopyableSuccess($"Imported '{fileName}'");
-                return;
-            }
-
-            if (parsed.DetectedRole is DetectedCertRole.RootCa or DetectedCertRole.IntermediateCa)
-            {
-                int? parentId = null;
-                if (parsed.DetectedRole == DetectedCertRole.IntermediateCa)
-                {
-                    if (parsed.AuthorityKeyIdentifier != null)
-                        parentId = await FindCaBySkiAsync(db, parsed.AuthorityKeyIdentifier);
-
-                    parentId ??= await FindCaByDnAndSignatureAsync(db, cert);
-                }
-
-                db.CaCertificates.Add(new CaCertificate
-                {
-                    CommunityId = CommunityId,
-                    ParentId = parentId,
-                    Name = Path.GetFileNameWithoutExtension(fileName),
-                    Subject = cert.Subject,
-                    X509CertificatePem = cert.ExportCertificatePem(),
-                    EncryptedPfxBytes = parsed.HasPrivateKey ? parsed.RawFileBytes : null,
-                    PfxPassword = parsed.HasPrivateKey ? password : null,
-                    Thumbprint = thumbprint,
-                    SerialNumber = cert.SerialNumber,
-                    KeyAlgorithm = parsed.Algorithm,
-                    KeySize = parsed.KeySize,
-                    NotBefore = cert.NotBefore.ToUniversalTime(),
-                    NotAfter = cert.NotAfter.ToUniversalTime(),
-                    CertSecurityLevel = CertSecurityLevel.Software,
-                    Enabled = true
-                });
-            }
-            else
-            {
-                int? issuingCaId = parsed.AuthorityKeyIdentifier != null
-                    ? await FindCaBySkiAsync(db, parsed.AuthorityKeyIdentifier)
-                    : null;
-
-                // Fallback: match by Issuer DN + signature verification
-                issuingCaId ??= await FindCaByDnAndSignatureAsync(db, cert);
-
-                if (issuingCaId == null)
-                {
-                    // Queue for manual CA selection
-                    pendingCaSelectQueue.Enqueue((parsed.RawFileBytes ?? Array.Empty<byte>(), fileName, password));
-                    parsed.Certificate.Dispose();
-                    return;
-                }
-
-                db.IssuedCertificates.Add(new IssuedCertificate
-                {
-                    IssuingCaCertificateId = issuingCaId.Value,
-                    Name = Path.GetFileNameWithoutExtension(fileName),
-                    Subject = cert.Subject,
-                    SubjectAltNames = parsed.SubjectAltNames,
-                    X509CertificatePem = cert.ExportCertificatePem(),
-                    EncryptedPfxBytes = parsed.HasPrivateKey ? parsed.RawFileBytes : null,
-                    PfxPassword = parsed.HasPrivateKey ? password : null,
-                    Thumbprint = thumbprint,
-                    SerialNumber = cert.SerialNumber,
-                    KeyAlgorithm = parsed.Algorithm,
-                    KeySize = parsed.KeySize,
-                    NotBefore = cert.NotBefore.ToUniversalTime(),
-                    NotAfter = cert.NotAfter.ToUniversalTime(),
-                    Enabled = true
-                });
-            }
-
-            await db.SaveChangesAsync();
             parsed.Certificate.Dispose();
             ToastService.ShowCopyableSuccess($"Imported '{fileName}'");
         }
@@ -1414,91 +1196,23 @@ public partial class CertificateExplorer : IDisposable
 
         try
         {
-            await using var db = await DbFactory.CreateDbContextAsync();
-            var cert = parsedCert.Certificate;
+            var result = await ImportService.ImportParsedCertificateAsync(
+                parsedCert, CommunityId,
+                name: importName,
+                password: pfxPassword,
+                issuingCaId: matchedParentCaId);
 
-            // Validate issuer relationship if a parent CA was matched
-            if (matchedParentCaId.HasValue)
+            if (result.NeedsCaSelection)
             {
-                var parentCaEntity = await db.CaCertificates.FindAsync(matchedParentCaId.Value);
-                if (parentCaEntity != null)
-                {
-                    using var parentCert = X509Certificate2.CreateFromPem(parentCaEntity.X509CertificatePem);
-                    var issuerError = CertificateIssuanceService.VerifyIssuedBy(cert, parentCert);
-                    if (issuerError != null)
-                    {
-                        importError = $"Cannot link to '{parentCaEntity.Name}': {issuerError}";
-                        confirmDialogHidden = true;
-                        return;
-                    }
-                }
+                confirmDialogHidden = true;
+                pendingCaSelectParsed = parsedCert;
+                parsedCert = null;
+                await ShowCaSelectDialog(
+                    pendingCaSelectParsed.RawFileBytes,
+                    pendingCaSelectParsed.FileName,
+                    pendingCaSelectParsed.HasPrivateKey ? pfxPassword : null);
+                return;
             }
-
-            if (parsedCert.DetectedRole is DetectedCertRole.RootCa or DetectedCertRole.IntermediateCa)
-            {
-                var entity = new CaCertificate
-                {
-                    CommunityId = CommunityId,
-                    ParentId = parsedCert.DetectedRole == DetectedCertRole.IntermediateCa ? matchedParentCaId : null,
-                    Name = importName.Trim(),
-                    Subject = cert.Subject,
-                    X509CertificatePem = cert.ExportCertificatePem(),
-                    EncryptedPfxBytes = parsedCert.HasPrivateKey ? parsedCert.RawFileBytes : null,
-                    PfxPassword = parsedCert.HasPrivateKey ? pfxPassword : null,
-                    Thumbprint = cert.Thumbprint,
-                    SerialNumber = cert.SerialNumber,
-                    KeyAlgorithm = parsedCert.Algorithm,
-                    KeySize = parsedCert.KeySize,
-                    NotBefore = cert.NotBefore.ToUniversalTime(),
-                    NotAfter = cert.NotAfter.ToUniversalTime(),
-                    CertSecurityLevel = CertSecurityLevel.Software,
-                    Enabled = true
-                };
-
-                db.CaCertificates.Add(entity);
-            }
-            else
-            {
-                var issuingCaId = matchedParentCaId;
-
-                // Fallback: match by Issuer DN + signature verification
-                issuingCaId ??= await FindCaByDnAndSignatureAsync(db, cert);
-
-                if (issuingCaId == null)
-                {
-                    // Pass the already-parsed cert to the CA selection dialog (no re-parse needed)
-                    confirmDialogHidden = true;
-                    pendingCaSelectParsed = parsedCert;
-                    parsedCert = null; // Transfer ownership, don't dispose
-                    await ShowCaSelectDialog(
-                        pendingCaSelectParsed.RawFileBytes,
-                        pendingCaSelectParsed.FileName,
-                        pendingCaSelectParsed.HasPrivateKey ? pfxPassword : null);
-                    return;
-                }
-
-                var entity = new IssuedCertificate
-                {
-                    IssuingCaCertificateId = issuingCaId.Value,
-                    Name = importName.Trim(),
-                    Subject = cert.Subject,
-                    SubjectAltNames = parsedCert.SubjectAltNames,
-                    X509CertificatePem = cert.ExportCertificatePem(),
-                    EncryptedPfxBytes = parsedCert.HasPrivateKey ? parsedCert.RawFileBytes : null,
-                    PfxPassword = parsedCert.HasPrivateKey ? pfxPassword : null,
-                    Thumbprint = cert.Thumbprint,
-                    SerialNumber = cert.SerialNumber,
-                    KeyAlgorithm = parsedCert.Algorithm,
-                    KeySize = parsedCert.KeySize,
-                    NotBefore = cert.NotBefore.ToUniversalTime(),
-                    NotAfter = cert.NotAfter.ToUniversalTime(),
-                    Enabled = true
-                };
-
-                db.IssuedCertificates.Add(entity);
-            }
-
-            await db.SaveChangesAsync();
 
             confirmDialogHidden = true;
             showDropZone = false;
@@ -1506,8 +1220,15 @@ public partial class CertificateExplorer : IDisposable
             parsedCert?.Certificate.Dispose();
             parsedCert = null;
 
-            ToastService.ShowCopyableSuccess($"Certificate '{importName}' imported successfully.");
-            await LoadCommunityTreeAsync(CommunityId);
+            if (result.Success)
+            {
+                ToastService.ShowCopyableSuccess($"Certificate '{importName}' imported successfully.");
+                await LoadCommunityTreeAsync(CommunityId);
+            }
+            else
+            {
+                importError = result.Error ?? "Import failed.";
+            }
         }
         catch (Exception ex)
         {
@@ -1643,103 +1364,25 @@ public partial class CertificateExplorer : IDisposable
 
     private async Task SaveWithCaAssignmentAsync(ParsedCertificate parsed)
     {
-        await using var db = await DbFactory.CreateDbContextAsync();
-        var cert = parsed.Certificate;
-        var thumbprint = cert.Thumbprint;
+        var result = await ImportService.ImportParsedCertificateAsync(
+            parsed, CommunityId,
+            name: Path.GetFileNameWithoutExtension(pendingFileName),
+            password: pfxPassword,
+            issuingCaId: selectedCaForAssignment!.Id,
+            rawFileOverride: pendingFileBytes);
 
-        // Check for existing cert — merge if duplicate (e.g. .cer + .pfx for same cert)
-        var existingCa = await db.CaCertificates
-            .FirstOrDefaultAsync(c => c.Thumbprint == thumbprint && c.CommunityId == CommunityId);
-        if (existingCa != null)
-        {
-            if (parsed.HasPrivateKey && existingCa.EncryptedPfxBytes == null)
-            {
-                existingCa.EncryptedPfxBytes = pendingFileBytes;
-                existingCa.PfxPassword = pfxPassword;
-                await db.SaveChangesAsync();
-            }
-            parsed.Certificate.Dispose();
-            ToastService.ShowCopyableSuccess($"Merged PFX into existing '{existingCa.Name}'");
-            return;
-        }
+        parsed.Certificate.Dispose();
 
-        var existingIssued = await db.IssuedCertificates
-            .Include(i => i.IssuingCaCertificate)
-            .FirstOrDefaultAsync(c => c.Thumbprint == thumbprint
-                && c.IssuingCaCertificate.CommunityId == CommunityId);
-        if (existingIssued != null)
+        if (result.Success)
         {
-            if (parsed.HasPrivateKey && existingIssued.EncryptedPfxBytes == null)
-            {
-                existingIssued.EncryptedPfxBytes = pendingFileBytes;
-                existingIssued.PfxPassword = pfxPassword;
-                await db.SaveChangesAsync();
-            }
-            parsed.Certificate.Dispose();
-            ToastService.ShowCopyableSuccess($"Merged PFX into existing '{existingIssued.Name}'");
-            return;
-        }
-
-        // Validate the cert was actually signed by the selected CA
-        var selectedCaEntity = await db.CaCertificates.FindAsync(selectedCaForAssignment!.Id);
-        if (selectedCaEntity != null)
-        {
-            using var caCert = X509Certificate2.CreateFromPem(selectedCaEntity.X509CertificatePem);
-            var issuerError = CertificateIssuanceService.VerifyIssuedBy(cert, caCert);
-            if (issuerError != null)
-            {
-                parsed.Certificate.Dispose();
-                ToastService.ShowCopyableError($"Cannot assign under '{selectedCaEntity.Name}': {issuerError}");
-                return;
-            }
-        }
-
-        // New cert — assign under selected CA
-        if (parsed.DetectedRole is DetectedCertRole.RootCa or DetectedCertRole.IntermediateCa)
-        {
-            db.CaCertificates.Add(new CaCertificate
-            {
-                CommunityId = CommunityId,
-                ParentId = selectedCaForAssignment.Id,
-                Name = Path.GetFileNameWithoutExtension(pendingFileName),
-                Subject = cert.Subject,
-                X509CertificatePem = cert.ExportCertificatePem(),
-                EncryptedPfxBytes = parsed.HasPrivateKey ? pendingFileBytes : null,
-                PfxPassword = parsed.HasPrivateKey ? pfxPassword : null,
-                Thumbprint = thumbprint,
-                SerialNumber = cert.SerialNumber,
-                KeyAlgorithm = parsed.Algorithm,
-                KeySize = parsed.KeySize,
-                NotBefore = cert.NotBefore.ToUniversalTime(),
-                NotAfter = cert.NotAfter.ToUniversalTime(),
-                CertSecurityLevel = CertSecurityLevel.Software,
-                Enabled = true
-            });
+            var label = result.AlreadyExists ? "Merged PFX into existing" : "assigned under";
+            ToastService.ShowCopyableSuccess(
+                $"'{result.ImportedName}' {label} '{selectedCaForAssignment!.Name}'");
         }
         else
         {
-            db.IssuedCertificates.Add(new IssuedCertificate
-            {
-                IssuingCaCertificateId = selectedCaForAssignment!.Id,
-                Name = Path.GetFileNameWithoutExtension(pendingFileName),
-                Subject = cert.Subject,
-                SubjectAltNames = parsed.SubjectAltNames,
-                X509CertificatePem = cert.ExportCertificatePem(),
-                EncryptedPfxBytes = parsed.HasPrivateKey ? pendingFileBytes : null,
-                PfxPassword = parsed.HasPrivateKey ? pfxPassword : null,
-                Thumbprint = thumbprint,
-                SerialNumber = cert.SerialNumber,
-                KeyAlgorithm = parsed.Algorithm,
-                KeySize = parsed.KeySize,
-                NotBefore = cert.NotBefore.ToUniversalTime(),
-                NotAfter = cert.NotAfter.ToUniversalTime(),
-                Enabled = true
-            });
+            ToastService.ShowCopyableError(result.Error ?? "Import failed.");
         }
-
-        await db.SaveChangesAsync();
-        parsed.Certificate.Dispose();
-        ToastService.ShowCopyableSuccess($"'{Path.GetFileNameWithoutExtension(pendingFileName)}' assigned under '{selectedCaForAssignment!.Name}'");
     }
 
     private void SkipCaAssignment()
