@@ -25,11 +25,7 @@ public class CertificateExportServiceTests : IDisposable
 
     public CertificateExportServiceTests()
     {
-        var options = new DbContextOptionsBuilder<SigilDbContext>()
-            .UseInMemoryDatabase(databaseName: Guid.NewGuid().ToString())
-            .Options;
-
-        _dbFactory = new TestDbContextFactory(options);
+        _dbFactory = new TestDbContextFactory();
     }
 
     private CertificateExportService CreateService() =>
@@ -297,17 +293,4 @@ public class CertificateExportServiceTests : IDisposable
 
     #endregion
 
-    private sealed class TestDbContextFactory : IDbContextFactory<SigilDbContext>
-    {
-        private readonly DbContextOptions<SigilDbContext> _options;
-
-        public TestDbContextFactory(DbContextOptions<SigilDbContext> options)
-        {
-            _options = options;
-            using var db = new SigilDbContext(_options);
-            db.Database.EnsureCreated();
-        }
-
-        public SigilDbContext CreateDbContext() => new(_options);
-    }
 }
