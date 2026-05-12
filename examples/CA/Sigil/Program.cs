@@ -25,6 +25,7 @@ using Hangfire.Storage;
 using Sigil.Common.Services;
 using Sigil.Common.Services.Jobs;
 using Sigil.Common.Services.Signing;
+using Sigil.Common.Validators;
 using Sigil.Gcp;
 using Sigil.Services;
 using Sigil.Vault;
@@ -65,6 +66,7 @@ try
     builder.Services.AddScoped<CommunityService>();
     builder.Services.AddScoped<CertificateManagementService>();
     builder.Services.AddScoped<CertificatePublishingService>();
+    builder.Services.AddSingleton<IssuanceValidator>();
     builder.Services.AddHttpClient("SigilCrl");
     builder.Services.AddHttpClient();
 

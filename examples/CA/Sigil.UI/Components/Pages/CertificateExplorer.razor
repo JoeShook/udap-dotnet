@@ -314,6 +314,20 @@
                 <FluentDatePicker @bind-Value="issuanceNotAfterNullable" Label="Not After" Style="flex: 1;" />
             </div>
 
+            @if (urlChangeWarnings.Count > 0)
+            {
+                <FluentMessageBar Title="Template changes CDP/AIA URLs"
+                                  Intent="@MessageIntent.Warning"
+                                  Style="margin: 0.5rem 0;">
+                    <ul style="margin: 0.25rem 0; padding-left: 1.25rem;">
+                        @foreach (var w in urlChangeWarnings)
+                        {
+                            <li>@w</li>
+                        }
+                    </ul>
+                </FluentMessageBar>
+            }
+
             @* CDP URLs *@
             @if (selectedTemplate?.IncludeCdp == true)
             {

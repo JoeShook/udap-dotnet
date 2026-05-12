@@ -16,6 +16,7 @@ using Microsoft.Extensions.Logging;
 using Sigil.Common.Data;
 using Sigil.Common.Data.Entities;
 using Sigil.Common.Services.Signing;
+using Sigil.Common.Validators;
 using Sigil.Common.ViewModels;
 
 namespace Sigil.Common.Services;
@@ -31,16 +32,21 @@ public class CertificateIssuanceService
     private readonly IDbContextFactory<SigilDbContext> _dbFactory;
     private readonly ILogger<CertificateIssuanceService> _logger;
     private readonly ISigningProvider _signingProvider;
+    private readonly IssuanceValidator _validator;
 
     public CertificateIssuanceService(
         IDbContextFactory<SigilDbContext> dbFactory,
         ILogger<CertificateIssuanceService> logger,
-        ISigningProvider? signingProvider = null)
+        ISigningProvider? signingProvider = null,
+        IssuanceValidator? validator = null)
     {
         _dbFactory = dbFactory;
         _logger = logger;
         _signingProvider = signingProvider ?? new LocalSigningProvider();
+        _validator = validator ?? new IssuanceValidator();
     }
+
+    public IssuanceValidator Validator => _validator;
 
     /// <summary>
     /// Whether the active signing provider is remote (keys don't leave the provider).

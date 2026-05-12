@@ -1,0 +1,191 @@
+#region (c) 2026 Joseph Shook. All rights reserved.
+// /*
+//  Authors:
+//     Joseph Shook   JoeShook@Gmail.com
+//                    Joseph.Shook@Surescripts.com
+//
+//  See LICENSE in the project root for license information.
+// */
+#endregion
+
+using FluentAssertions;
+using Sigil.Common.Data.Entities;
+using Sigil.Common.Validators;
+
+namespace Sigil.Signing.Tests;
+
+public class IssuanceValidatorTests
+{
+    private readonly IssuanceValidator _validator = new();
+
+    [Fact]
+    public void CompareTemplateUrls_NoChanges_ReturnsEmpty()
+    {
+        var original = new List<string> { "https://pki.example.com/crls/CA.crl" };
+        var template = new List<string> { "https://pki.example.com/crls/CA.crl" };
+
+        var warnings = _validator.CompareTemplateUrls(original, [], template, []);
+
+        warnings.Should().BeEmpty();
+    }
+
+    [Fact]
+    public void CompareTemplateUrls_CdpAdded_ReturnsWarning()
+    {
+        var warnings = _validator.CompareTemplateUrls(
+            [], [],
+            ["https://new.com/crls/CA.crl"], []);
+
+        warnings.Should().ContainSingle();
+        warnings[0].Category.Should().Be("CDP");
+        warnings[0].Message.Should().Contain("added");
+    }
+
+    [Fact]
+    public void CompareTemplateUrls_CdpRemoved_ReturnsWarning()
+    {
+        var warnings = _validator.CompareTemplateUrls(
+            ["https://old.com/crls/CA.crl"], [],
+            [], []);
+
+        warnings.Should().ContainSingle();
+        warnings[0].Category.Should().Be("CDP");
+        warnings[0].Message.Should().Contain("removed");
+    }
+
+    [Fact]
+    public void CompareTemplateUrls_AiaChanged_ReturnsBothWarnings()
+    {
+        var warnings = _validator.CompareTemplateUrls(
+            [], ["https://old.com/certs/CA.cer"],
+            [], ["https://new.com/certs/CA.cer"]);
+
+        warnings.Should().HaveCount(2);
+        warnings.Should().Contain(w => w.Message.Contains("removed"));
+        warnings.Should().Contain(w => w.Message.Contains("added"));
+    }
+
+    [Fact]
+    public void CompareTemplateUrls_CaseInsensitive()
+    {
+        var warnings = _validator.CompareTemplateUrls(
+            ["HTTPS://PKI.EXAMPLE.COM/crls/CA.crl"], [],
+            ["https://pki.example.com/crls/CA.crl"], []);
+
+        warnings.Should().BeEmpty();
+    }
+
+    [Fact]
+    public void CompareTemplateUrls_MultipleChanges_ReturnsAll()
+    {
+        var warnings = _validator.CompareTemplateUrls(
+            ["https://old.com/crls/CA.crl"], ["https://old.com/certs/CA.cer"],
+            ["https://new.com/crls/CA.crl"], ["https://new.com/certs/CA.cer"]);
+
+        warnings.Should().HaveCount(4);
+        warnings.Count(w => w.Category == "CDP").Should().Be(2);
+        warnings.Count(w => w.Category == "AIA").Should().Be(2);
+    }
+
+    [Fact]
+    public void ExpandCdpTemplates_WithBaseUrls_ExpandsPlaceholders()
+    {
+        var template = new CertificateTemplate
+        {
+            IncludeCdp = true,
+            CdpUrlTemplate = "{BaseUrl}/crls/{CAName}.crl"
+        };
+
+        var result = _validator.ExpandCdpTemplates(
+            template,
+            ["https://pki.example.com"],
+            "Root-CA");
+
+        result.Should().ContainSingle()
+            .Which.Should().Be("https://pki.example.com/crls/Root-CA.crl");
+    }
+
+    [Fact]
+    public void ExpandAiaTemplates_WithBaseUrls_ExpandsPlaceholders()
+    {
+        var template = new CertificateTemplate
+        {
+            IncludeAia = true,
+            AiaUrlTemplate = "{BaseUrl}/certs/{CAName}.cer"
+        };
+
+        var result = _validator.ExpandAiaTemplates(
+            template,
+            ["https://pki.example.com"],
+            "Root-CA");
+
+        result.Should().ContainSingle()
+            .Which.Should().Be("https://pki.example.com/certs/Root-CA.cer");
+    }
+
+    [Fact]
+    public void ExpandCdpTemplates_DefaultTemplate_WhenNoCustomTemplate()
+    {
+        var template = new CertificateTemplate
+        {
+            IncludeCdp = true,
+            CdpUrlTemplate = null
+        };
+
+        var result = _validator.ExpandCdpTemplates(
+            template,
+            ["https://pki.example.com"],
+            "Intermediate");
+
+        result.Should().ContainSingle()
+            .Which.Should().Be("https://pki.example.com/crls/Intermediate.crl");
+    }
+
+    [Fact]
+    public void ExpandCdpTemplates_NotEnabled_ReturnsEmpty()
+    {
+        var template = new CertificateTemplate
+        {
+            IncludeCdp = false,
+            CdpUrlTemplate = "{BaseUrl}/crls/{CAName}.crl"
+        };
+
+        var result = _validator.ExpandCdpTemplates(template, ["https://pki.example.com"], "CA");
+
+        result.Should().BeEmpty();
+    }
+
+    [Fact]
+    public void ExpandCdpTemplates_MultipleBaseUrls_ExpandsAll()
+    {
+        var template = new CertificateTemplate
+        {
+            IncludeCdp = true,
+            CdpUrlTemplate = "{BaseUrl}/crls/{CAName}.crl"
+        };
+
+        var result = _validator.ExpandCdpTemplates(
+            template,
+            ["https://a.com", "https://b.com"],
+            "CA");
+
+        result.Should().HaveCount(2);
+        result[0].Should().Be("https://a.com/crls/CA.crl");
+        result[1].Should().Be("https://b.com/crls/CA.crl");
+    }
+
+    [Fact]
+    public void ExpandCdpTemplates_NoBaseUrls_ExpandsCaNameOnly()
+    {
+        var template = new CertificateTemplate
+        {
+            IncludeCdp = true,
+            CdpUrlTemplate = "{BaseUrl}/crls/{CAName}.crl"
+        };
+
+        var result = _validator.ExpandCdpTemplates(template, [], "My-CA");
+
+        result.Should().ContainSingle()
+            .Which.Should().Contain("My-CA.crl");
+    }
+}

@@ -137,6 +137,9 @@ public partial class CertificateExplorer : IDisposable
     private bool isRenewMode;
     private List<IssuanceSanEntry> renewalSans = new();
     private string renewalSubjectDn = string.Empty;
+    private List<string> renewalOriginalCdpUrls = new();
+    private List<string> renewalOriginalAiaUrls = new();
+    private List<string> urlChangeWarnings = new();
 
     // Revoke dialog
     private bool revokeDialogHidden = true;
@@ -1592,6 +1595,7 @@ public partial class CertificateExplorer : IDisposable
     private async Task ShowIssuanceDialog(int? issuingCaId, string? issuingCaName)
     {
         isRenewMode = false;
+        urlChangeWarnings.Clear();
         issuingCaIdForIssuance = issuingCaId;
         issuingCaNameForIssuance = issuingCaName;
         issuingCaNotAfter = null;
@@ -1645,22 +1649,27 @@ public partial class CertificateExplorer : IDisposable
 
         issuanceNotBeforeNullable = DateTime.UtcNow;
         var desiredNotAfter = DateTime.UtcNow.AddDays(template.ValidityDays);
-        // Clamp to issuing CA's expiry
         if (issuingCaNotAfter.HasValue && desiredNotAfter > issuingCaNotAfter.Value)
             desiredNotAfter = issuingCaNotAfter.Value;
         issuanceNotAfterNullable = desiredNotAfter;
 
-        var cdpTemplate = template.CdpUrlTemplate;
-        if (template.IncludeCdp && string.IsNullOrWhiteSpace(cdpTemplate))
-            cdpTemplate = "{BaseUrl}/crls/{CAName}.crl";
-        issuanceCdpUrls = ExpandUrlTemplates(cdpTemplate)
-            .Select(u => new IssuanceUrlEntry { Value = u }).ToList();
+        var baseUrls = (selectedCommunity?.BaseUrls ?? new())
+            .Select(bu => bu.Url).ToList();
+        var validator = IssuanceService.Validator;
+        var newCdpUrls = validator.ExpandCdpTemplates(template, baseUrls, issuingCaNameForIssuance);
+        var newAiaUrls = validator.ExpandAiaTemplates(template, baseUrls, issuingCaNameForIssuance);
 
-        var aiaTemplate = template.AiaUrlTemplate;
-        if (template.IncludeAia && string.IsNullOrWhiteSpace(aiaTemplate))
-            aiaTemplate = "{BaseUrl}/certs/{CAName}.cer";
-        issuanceAiaUrls = ExpandUrlTemplates(aiaTemplate)
-            .Select(u => new IssuanceUrlEntry { Value = u }).ToList();
+        urlChangeWarnings.Clear();
+        if (isRenewMode && renewalOriginalCdpUrls.Count + renewalOriginalAiaUrls.Count > 0)
+        {
+            var warnings = validator.CompareTemplateUrls(
+                renewalOriginalCdpUrls, renewalOriginalAiaUrls,
+                newCdpUrls, newAiaUrls);
+            urlChangeWarnings = warnings.Select(w => w.Message).ToList();
+        }
+
+        issuanceCdpUrls = newCdpUrls.Select(u => new IssuanceUrlEntry { Value = u }).ToList();
+        issuanceAiaUrls = newAiaUrls.Select(u => new IssuanceUrlEntry { Value = u }).ToList();
 
         if (isRenewMode)
         {
@@ -1855,6 +1864,10 @@ public partial class CertificateExplorer : IDisposable
     {
         if (selectedNode == null || selectedCert == null) return;
 
+        renewalOriginalCdpUrls = ExtractExtensionUrls(selectedCert, "2.5.29.31");
+        renewalOriginalAiaUrls = ExtractExtensionUrls(selectedCert, "1.3.6.1.5.5.7.1.1");
+        urlChangeWarnings.Clear();
+
         renewalSubjectDn = selectedCert.Subject;
         renewalSans.Clear();
         foreach (var san in subjectAltNames)
@@ -1990,8 +2003,10 @@ public partial class CertificateExplorer : IDisposable
     {
         if (selectedNode == null || selectedCert == null) return;
 
-        // Extract SANs and subject from existing cert BEFORE opening the dialog,
-        // so they survive template selection changes
+        renewalOriginalCdpUrls = ExtractExtensionUrls(selectedCert, "2.5.29.31");
+        renewalOriginalAiaUrls = ExtractExtensionUrls(selectedCert, "1.3.6.1.5.5.7.1.1");
+        urlChangeWarnings.Clear();
+
         renewalSubjectDn = selectedCert.Subject;
         renewalSans.Clear();
         foreach (var san in subjectAltNames)
@@ -2178,31 +2193,7 @@ public partial class CertificateExplorer : IDisposable
         return false;
     }
 
-    private List<string> ExpandUrlTemplates(string? template)
-    {
-        if (string.IsNullOrWhiteSpace(template)) return new();
 
-        var baseUrls = selectedCommunity?.BaseUrls ?? new();
-        if (baseUrls.Count == 0)
-        {
-            var result = template;
-            if (issuingCaNameForIssuance != null)
-                result = result.Replace("{CAName}", issuingCaNameForIssuance, StringComparison.OrdinalIgnoreCase);
-            return string.IsNullOrWhiteSpace(result) ? new() : new() { result };
-        }
-
-        var expanded = new List<string>();
-        foreach (var baseUrl in baseUrls)
-        {
-            var result = template
-                .Replace("{BaseUrl}", baseUrl.Url.TrimEnd('/'), StringComparison.OrdinalIgnoreCase);
-            if (issuingCaNameForIssuance != null)
-                result = result.Replace("{CAName}", issuingCaNameForIssuance, StringComparison.OrdinalIgnoreCase);
-            expanded.Add(result);
-        }
-
-        return expanded;
-    }
 
     private static string? ExtractCrlAki(byte[] crlBytes)
     {
