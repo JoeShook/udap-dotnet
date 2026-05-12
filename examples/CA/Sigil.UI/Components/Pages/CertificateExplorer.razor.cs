@@ -39,6 +39,10 @@ public partial class CertificateExplorer : IDisposable
     [Inject] private CrlImportService CrlImporter { get; set; } = null!;
     [Inject] private ChainValidationService ChainValidator { get; set; } = null!;
     [Inject] private CertificateIssuanceService IssuanceService { get; set; } = null!;
+    [Inject] private CertificateExportService ExportService { get; set; } = null!;
+    [Inject] private CertificateManagementService ManagementService { get; set; } = null!;
+    [Inject] private CertificatePublishingService PublishingService { get; set; } = null!;
+    [Inject] private CertificateImportService ImportService { get; set; } = null!;
     [Inject] private ISigningProvider SigningProvider { get; set; } = null!;
     [Inject] private VaultTransitSigningProvider VaultTransitProvider { get; set; } = null!;
     [Inject] private GcpKmsSigningProvider GcpKmsProvider { get; set; } = null!;
@@ -219,31 +223,11 @@ public partial class CertificateExplorer : IDisposable
         isLoadingTree = true;
         StateHasChanged();
 
-        await using var db = await DbFactory.CreateDbContextAsync();
+        var treeData = await ManagementService.GetCommunityTreeAsync(communityId);
 
-        var community = await db.Communities.FindAsync(communityId);
-        selectedCommunityName = community?.Name ?? "Unknown";
-
-        // Load ALL CAs for this community in a flat list — EF will fix up
-        // the navigation properties (Parent/Children) automatically since
-        // all entities are in the same DbContext tracking scope.
-        var caCerts = await db.CaCertificates
-            .Where(ca => ca.CommunityId == communityId && !ca.IsArchived)
-            .Include(ca => ca.IssuedCertificates.Where(i => !i.IsArchived))
-            .Include(ca => ca.Crls.Where(c => !c.IsArchived))
-            .OrderBy(ca => ca.Name)
-            .ToListAsync();
-
-        // EF relationship fix-up populates ca.Children for all loaded entities,
-        // so BuildTreeNode's recursive walk works at any depth.
-
-        // Validate all certs in one pass (parses CAs once, stored CRLs only)
-        communityValidations = await ChainValidator.ValidateCommunityAsync(communityId);
-
-        treeNodes = caCerts
-            .Where(ca => ca.ParentId == null)
-            .Select(rootCa => BuildTreeNode(rootCa, caCerts, communityValidations))
-            .ToList();
+        selectedCommunityName = treeData.CommunityName;
+        communityValidations = treeData.Validations;
+        treeNodes = treeData.TreeNodes;
 
         treeVersion++;
         selectedTreeItem = null;
@@ -257,103 +241,6 @@ public partial class CertificateExplorer : IDisposable
         isLoadingTree = false;
     }
 
-    private static CertificateChainNodeViewModel BuildTreeNode(
-        CaCertificate ca,
-        List<CaCertificate> allCas,
-        Dictionary<string, ChainValidationResult> validationResults)
-    {
-        var caStatus = DeriveStatus(ca.Thumbprint, ca.NotAfter, ca.IsRevoked, validationResults);
-
-        var node = new CertificateChainNodeViewModel
-        {
-            Id = ca.Id,
-            Name = ca.Name,
-            Subject = ca.Subject,
-            Thumbprint = ca.Thumbprint,
-            NotAfter = ca.NotAfter,
-            CertificateRole = ca.ParentId == null ? "RootCA" : "IntermediateCA",
-            EntityType = "CaCertificate",
-            Status = caStatus,
-            KeyStorage = !string.IsNullOrEmpty(ca.StoreProviderHint)
-                    ? ca.StoreProviderHint[..ca.StoreProviderHint.IndexOf(':')]
-                : ca.EncryptedPfxBytes != null ? "local"
-                : null
-        };
-
-        foreach (var child in ca.Children.OrderBy(c => c.Name))
-        {
-            node.Children.Add(BuildTreeNode(child, allCas, validationResults));
-        }
-
-        foreach (var issued in ca.IssuedCertificates.OrderBy(i => i.Name))
-        {
-            var issuedStatus = DeriveStatus(issued.Thumbprint, issued.NotAfter, issued.IsRevoked, validationResults);
-
-            node.Children.Add(new CertificateChainNodeViewModel
-            {
-                Id = issued.Id,
-                Name = issued.Name,
-                Subject = issued.Subject,
-                Thumbprint = issued.Thumbprint,
-                NotAfter = issued.NotAfter,
-                CertificateRole = "EndEntity",
-                EntityType = "IssuedCertificate",
-                Status = issuedStatus,
-                KeyStorage = !string.IsNullOrEmpty(issued.StoreProviderHint)
-                        ? issued.StoreProviderHint[..issued.StoreProviderHint.IndexOf(':')]
-                    : issued.EncryptedPfxBytes != null ? "local"
-                    : null
-            });
-        }
-
-        // Add CRL nodes
-        foreach (var crl in ca.Crls.OrderByDescending(c => c.CrlNumber))
-        {
-            var crlStatus = DateTime.UtcNow > crl.NextUpdate
-                ? CertificateStatus.Expired
-                : DateTime.UtcNow > crl.NextUpdate.AddDays(-7)
-                    ? CertificateStatus.Expiring
-                    : CertificateStatus.Valid;
-
-            node.Children.Add(new CertificateChainNodeViewModel
-            {
-                Id = crl.Id,
-                Name = $"CRL #{crl.CrlNumber}" + (crl.FileName != null ? $" ({crl.FileName})" : ""),
-                Subject = ca.Subject,
-                NotAfter = crl.NextUpdate,
-                CertificateRole = "CRL",
-                EntityType = "Crl",
-                Status = crlStatus
-            });
-        }
-
-        return node;
-    }
-
-    private static CertificateStatus DeriveStatus(
-        string thumbprint, DateTime notAfter, bool isRevoked,
-        Dictionary<string, ChainValidationResult> validationResults)
-    {
-        if (isRevoked) return CertificateStatus.Revoked;
-        if (DateTime.UtcNow > notAfter) return CertificateStatus.Expired;
-
-        // Check chain validation result
-        if (validationResults.TryGetValue(thumbprint, out var result))
-        {
-            if (!result.IsValid)
-            {
-                // Check if there's a revocation problem in the chain
-                var hasRevocation = result.ChainLinks
-                    .Any(l => l.CrlStatus == CrlCheckStatus.Revoked);
-                if (hasRevocation) return CertificateStatus.Revoked;
-
-                return CertificateStatus.Untrusted;
-            }
-        }
-
-        if (DateTime.UtcNow > notAfter.AddDays(-30)) return CertificateStatus.Expiring;
-        return CertificateStatus.Valid;
-    }
 
     // --- Tree selection ---
 
@@ -382,11 +269,10 @@ public partial class CertificateExplorer : IDisposable
         subjectAltNames.Clear();
         CloseIssuerDetails();
 
-        await using var db = await DbFactory.CreateDbContextAsync();
-
-        // CRL selection
+        // CRL selection still uses DbFactory (CRL detail view is UI-specific)
         if (node.EntityType == "Crl")
         {
+            await using var db = await DbFactory.CreateDbContextAsync();
             var crl = await db.Crls
                 .Include(c => c.CaCertificate)
                 .Include(c => c.Revocations)
@@ -421,41 +307,24 @@ public partial class CertificateExplorer : IDisposable
                         .ToList()
                 };
 
-                // Parse CRL ASN.1 structure
                 asn1Root = Asn1Parser.Parse(crl.RawBytes);
             }
 
             return;
         }
 
-        string? pem = null;
-        string? sans = null;
+        var details = await ManagementService.GetNodeDetailsAsync(node.Id, node.EntityType);
+        selectedNodeHasPrivateKey = details.HasPrivateKey;
+        selectedNodeHasRemoteKey = details.HasRemoteKey;
+        selectedNodeAutoRenew = details.AutoRenew;
 
-        if (node.EntityType == "CaCertificate")
-        {
-            var ca = await db.CaCertificates.FindAsync(node.Id);
-            pem = ca?.X509CertificatePem;
-            selectedNodeHasPrivateKey = ca?.EncryptedPfxBytes != null;
-            selectedNodeHasRemoteKey = !string.IsNullOrEmpty(ca?.StoreProviderHint);
-            selectedNodeAutoRenew = ca?.AutoRenew ?? true;
-        }
-        else
-        {
-            var issued = await db.IssuedCertificates.FindAsync(node.Id);
-            pem = issued?.X509CertificatePem;
-            sans = issued?.SubjectAltNames;
-            selectedNodeHasPrivateKey = issued?.EncryptedPfxBytes != null;
-            selectedNodeAutoRenew = issued?.AutoRenew ?? true;
-        }
-
-        if (!string.IsNullOrEmpty(pem))
+        if (!string.IsNullOrEmpty(details.Pem))
         {
             try
             {
-                selectedCert = X509Certificate2.CreateFromPem(pem);
-                asn1Root = Asn1Parser.ParsePem(pem);
+                selectedCert = X509Certificate2.CreateFromPem(details.Pem);
+                asn1Root = Asn1Parser.ParsePem(details.Pem);
 
-                // Use pre-computed result from tree load
                 if (!string.IsNullOrEmpty(node.Thumbprint)
                     && communityValidations.TryGetValue(node.Thumbprint, out var cached))
                 {
@@ -463,7 +332,6 @@ public partial class CertificateExplorer : IDisposable
                 }
                 else
                 {
-                    // Fallback: validate on demand
                     if (node.EntityType == "CaCertificate")
                         chainValidation = await ChainValidator.ValidateCaCertificateAsync(node.Id);
                     else
@@ -473,9 +341,9 @@ public partial class CertificateExplorer : IDisposable
             catch { }
         }
 
-        if (!string.IsNullOrEmpty(sans))
+        if (!string.IsNullOrEmpty(details.SubjectAltNames))
         {
-            subjectAltNames = sans.Split(';', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
+            subjectAltNames = details.SubjectAltNames.Split(';', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
                 .ToList();
         }
         else if (selectedCert != null)
@@ -511,11 +379,10 @@ public partial class CertificateExplorer : IDisposable
             else
                 chainValidation = await ChainValidator.ValidateIssuedCertificateAsync(selectedNode.Id);
 
-            // Update the stored results and tree node status
             if (!string.IsNullOrEmpty(selectedNode.Thumbprint) && chainValidation != null)
             {
                 communityValidations[selectedNode.Thumbprint] = chainValidation;
-                selectedNode.Status = DeriveStatus(
+                selectedNode.Status = CertificateManagementService.DeriveStatus(
                     selectedNode.Thumbprint, selectedNode.NotAfter, false, communityValidations);
             }
         }
@@ -572,42 +439,13 @@ public partial class CertificateExplorer : IDisposable
 
         try
         {
-            await using var db = await DbFactory.CreateDbContextAsync();
-            var ca = await db.CaCertificates.FindAsync(selectedNode.Id);
-            if (ca == null)
-            {
-                ToastService.ShowCopyableError("CA certificate not found.");
-                return;
-            }
-
-            var cert = X509Certificate2.CreateFromPem(ca.X509CertificatePem);
-            var baseUrls = await db.CommunityBaseUrls
-                .Where(bu => bu.CommunityId == ca.CommunityId && bu.PublishingBasePath != null)
-                .ToListAsync();
-
-            if (baseUrls.Count == 0)
-            {
-                ToastService.ShowWarning("No publishing paths configured on this community's base URLs.");
-                return;
-            }
-
-            var published = 0;
-            foreach (var baseUrl in baseUrls)
-            {
-                if (string.IsNullOrEmpty(baseUrl.PublishingBasePath)) continue;
-
-                var certPath = Path.GetFullPath(Path.Combine(baseUrl.PublishingBasePath, "certs", $"{ca.Name}.cer"));
-                var certDir = Path.GetDirectoryName(certPath);
-                if (!string.IsNullOrEmpty(certDir))
-                    Directory.CreateDirectory(certDir);
-
-                var tempPath = certPath + ".tmp";
-                await File.WriteAllBytesAsync(tempPath, cert.RawData);
-                File.Move(tempPath, certPath, overwrite: true);
-                published++;
-            }
-
-            ToastService.ShowSuccess($"Published {ca.Name}.cer to {published} endpoint(s)");
+            var result = await PublishingService.PublishAiaCertificateAsync(selectedNode.Id);
+            if (result.Success)
+                ToastService.ShowSuccess($"Published certificate to {result.PublishedCount} endpoint(s)");
+            else if (result.Error?.Contains("publishing paths") == true)
+                ToastService.ShowWarning(result.Error);
+            else
+                ToastService.ShowCopyableError(result.Error ?? "AIA publish failed.");
         }
         catch (Exception ex)
         {
@@ -624,44 +462,10 @@ public partial class CertificateExplorer : IDisposable
     {
         try
         {
-            await using var db = await DbFactory.CreateDbContextAsync();
-            var ca = await db.CaCertificates.FindAsync(issuingCaId);
-            if (ca == null) return;
-
-            var baseUrls = await db.CommunityBaseUrls
-                .Where(bu => bu.CommunityId == ca.CommunityId && bu.PublishingBasePath != null)
-                .ToListAsync();
-
-            if (baseUrls.Count == 0) return;
-
-            var cert = X509Certificate2.CreateFromPem(ca.X509CertificatePem);
-
-            foreach (var baseUrl in baseUrls)
-            {
-                if (string.IsNullOrEmpty(baseUrl.PublishingBasePath)) continue;
-
-                var certPath = Path.GetFullPath(Path.Combine(baseUrl.PublishingBasePath, "certs", $"{ca.Name}.cer"));
-                if (!File.Exists(certPath))
-                {
-                    var certDir = Path.GetDirectoryName(certPath);
-                    if (!string.IsNullOrEmpty(certDir))
-                        Directory.CreateDirectory(certDir);
-
-                    var tempPath = certPath + ".tmp";
-                    await File.WriteAllBytesAsync(tempPath, cert.RawData);
-                    File.Move(tempPath, certPath, overwrite: true);
-                }
-
-                var crlPath = Path.GetFullPath(Path.Combine(baseUrl.PublishingBasePath, "crls", $"{ca.Name}.crl"));
-                if (!File.Exists(crlPath))
-                {
-                    await CrlGenService.GenerateCrlAsync(issuingCaId);
-                }
-            }
+            await PublishingService.EnsureIssuerPublishedAsync(issuingCaId);
         }
-        catch (Exception ex)
+        catch
         {
-            // Best-effort; URL validation will catch any remaining issues
         }
     }
 
@@ -682,7 +486,7 @@ public partial class CertificateExplorer : IDisposable
             if (!string.IsNullOrEmpty(selectedNode.Thumbprint) && chainValidation != null)
             {
                 communityValidations[selectedNode.Thumbprint] = chainValidation;
-                selectedNode.Status = DeriveStatus(
+                selectedNode.Status = CertificateManagementService.DeriveStatus(
                     selectedNode.Thumbprint, selectedNode.NotAfter, false, communityValidations);
             }
         }
@@ -728,29 +532,10 @@ public partial class CertificateExplorer : IDisposable
             return;
         }
 
-        await using var db = await DbFactory.CreateDbContextAsync();
+        var result = await ManagementService.RenameAsync(selectedNode.Id, selectedNode.EntityType, trimmed);
+        if (result.Success)
+            selectedNode.Name = trimmed;
 
-        if (selectedNode.EntityType == "CaCertificate")
-        {
-            var ca = await db.CaCertificates.FindAsync(selectedNode.Id);
-            if (ca != null)
-            {
-                ca.Name = trimmed;
-                await db.SaveChangesAsync();
-            }
-        }
-        else if (selectedNode.EntityType == "IssuedCertificate")
-        {
-            var issued = await db.IssuedCertificates.FindAsync(selectedNode.Id);
-            if (issued != null)
-            {
-                issued.Name = trimmed;
-                await db.SaveChangesAsync();
-            }
-        }
-
-        // Update the tree node in-place so the tree reflects the new name
-        selectedNode.Name = trimmed;
         isRenaming = false;
         StateHasChanged();
     }
@@ -771,63 +556,38 @@ public partial class CertificateExplorer : IDisposable
             : $"/api/issued/{selectedNode.Id}/download/p12";
     }
 
-    private async Task<int?> FindCaBySkiAsync(SigilDbContext db, string authorityKeyIdentifier)
+    private async Task CopyPrivateKeyAsync()
     {
-        var cas = await db.CaCertificates
-            .Where(ca => ca.CommunityId == CommunityId)
-            .ToListAsync();
+        if (selectedNode == null) return;
 
-        foreach (var ca in cas)
+        var result = await ExportService.ExportPrivateKeyPemAsync(
+            selectedNode.Id, selectedNode.EntityType);
+
+        if (!result.Success)
         {
-            try
-            {
-                using var caCert = X509Certificate2.CreateFromPem(ca.X509CertificatePem);
-                var skiExt = caCert.Extensions["2.5.29.14"];
-                if (skiExt != null)
-                {
-                    var ski = new X509SubjectKeyIdentifierExtension(skiExt, skiExt.Critical);
-                    if (ski.SubjectKeyIdentifier == authorityKeyIdentifier)
-                    {
-                        return ca.Id;
-                    }
-                }
-            }
-            catch { }
+            ToastService.ShowError(result.Error ?? "Failed to export private key.");
+            return;
         }
 
-        return null;
+        await JS.InvokeVoidAsync("sigilCopyText", result.Pem);
+        ToastService.ShowSuccess("Private key copied to clipboard (PKCS#8 PEM)");
     }
 
-    /// <summary>
-    /// Finds the issuing CA by matching the cert's Issuer DN against CA Subject DNs,
-    /// then verifying the signature. Used as fallback when AKI/SKI match fails.
-    /// </summary>
-    private async Task<int?> FindCaByDnAndSignatureAsync(SigilDbContext db, X509Certificate2 cert)
+    private async Task CopyCertBase64Async()
     {
-        var cas = await db.CaCertificates
-            .Where(ca => ca.CommunityId == CommunityId)
-            .ToListAsync();
+        if (selectedNode == null) return;
 
-        var bcParser = new Org.BouncyCastle.X509.X509CertificateParser();
-        var bcCert = bcParser.ReadCertificate(cert.RawData);
+        var result = await ExportService.ExportCertificateDerBase64Async(
+            selectedNode.Id, selectedNode.EntityType);
 
-        foreach (var ca in cas)
+        if (!result.Success)
         {
-            try
-            {
-                using var caCert = X509Certificate2.CreateFromPem(ca.X509CertificatePem);
-                var bcCa = bcParser.ReadCertificate(caCert.RawData);
-
-                if (bcCa.SubjectDN.Equivalent(bcCert.IssuerDN))
-                {
-                    bcCert.Verify(bcCa.GetPublicKey());
-                    return ca.Id; // Signature verified — this is the issuer
-                }
-            }
-            catch { }
+            ToastService.ShowError(result.Error ?? "Failed to export certificate.");
+            return;
         }
 
-        return null;
+        await JS.InvokeVoidAsync("sigilCopyText", result.Pem);
+        ToastService.ShowSuccess("Certificate base64 (DER) copied to clipboard");
     }
 
     private static string NodeColor(CertificateStatus status) => status switch
@@ -1051,10 +811,6 @@ public partial class CertificateExplorer : IDisposable
             ProcessNextPendingCaSelect();
     }
 
-    /// <summary>
-    /// Auto-imports a certificate without the confirm dialog.
-    /// Tries empty password, then "udap-test" for PFX files.
-    /// </summary>
     private async Task<bool> TryAutoImportCert(byte[] fileBytes, string fileName)
     {
         var ext = Path.GetExtension(fileName).ToLowerInvariant();
@@ -1074,7 +830,6 @@ public partial class CertificateExplorer : IDisposable
 
             if (parsed == null)
             {
-                // Queue for manual password entry after batch completes
                 pendingPasswordQueue.Enqueue((fileBytes, fileName));
                 return false;
             }
@@ -1091,124 +846,17 @@ public partial class CertificateExplorer : IDisposable
 
         try
         {
-            await using var db = await DbFactory.CreateDbContextAsync();
-            var cert = parsed.Certificate;
-            var thumbprint = cert.Thumbprint;
-
-            // Check for existing cert with same thumbprint — merge if found
-            var existingCa = await db.CaCertificates
-                .FirstOrDefaultAsync(c => c.Thumbprint == thumbprint && c.CommunityId == CommunityId);
-
-            if (existingCa != null)
-            {
-                // Merge: upgrade public-only to operational if PFX now available
-                if (parsed.HasPrivateKey && existingCa.EncryptedPfxBytes == null)
-                {
-                    existingCa.EncryptedPfxBytes = fileBytes;
-                    existingCa.PfxPassword = usedPassword;
-                    await db.SaveChangesAsync();
-                    parsed.Certificate.Dispose();
-                    return true;
-                }
-
-                // Already have this cert (same thumbprint, already has key or both public)
-                parsed.Certificate.Dispose();
-                return true; // Not an error, just a no-op
-            }
-
-            var existingIssued = await db.IssuedCertificates
-                .Include(i => i.IssuingCaCertificate)
-                .FirstOrDefaultAsync(c => c.Thumbprint == thumbprint
-                    && c.IssuingCaCertificate.CommunityId == CommunityId);
-
-            if (existingIssued != null)
-            {
-                if (parsed.HasPrivateKey && existingIssued.EncryptedPfxBytes == null)
-                {
-                    existingIssued.EncryptedPfxBytes = fileBytes;
-                    existingIssued.PfxPassword = usedPassword;
-                    await db.SaveChangesAsync();
-                    parsed.Certificate.Dispose();
-                    return true;
-                }
-
-                parsed.Certificate.Dispose();
-                return true;
-            }
-
-            // New cert — find where it belongs in the chain
-            if (parsed.DetectedRole is DetectedCertRole.RootCa or DetectedCertRole.IntermediateCa)
-            {
-                int? parentId = null;
-                if (parsed.DetectedRole == DetectedCertRole.IntermediateCa)
-                {
-                    if (parsed.AuthorityKeyIdentifier != null)
-                        parentId = await FindCaBySkiAsync(db, parsed.AuthorityKeyIdentifier);
-
-                    // Fallback: match by Issuer DN + signature verification
-                    parentId ??= await FindCaByDnAndSignatureAsync(db, cert);
-                }
-
-                db.CaCertificates.Add(new CaCertificate
-                {
-                    CommunityId = CommunityId,
-                    ParentId = parentId,
-                    Name = Path.GetFileNameWithoutExtension(fileName),
-                    Subject = cert.Subject,
-                    X509CertificatePem = cert.ExportCertificatePem(),
-                    EncryptedPfxBytes = parsed.HasPrivateKey ? fileBytes : null,
-                    PfxPassword = parsed.HasPrivateKey ? usedPassword : null,
-                    Thumbprint = thumbprint,
-                    SerialNumber = cert.SerialNumber,
-                    KeyAlgorithm = parsed.Algorithm,
-                    KeySize = parsed.KeySize,
-                    NotBefore = cert.NotBefore.ToUniversalTime(),
-                    NotAfter = cert.NotAfter.ToUniversalTime(),
-                    CertSecurityLevel = CertSecurityLevel.Software,
-                    Enabled = true
-                });
-            }
-            else
-            {
-                int? issuingCaId = null;
-                if (parsed.AuthorityKeyIdentifier != null)
-                {
-                    issuingCaId = await FindCaBySkiAsync(db, parsed.AuthorityKeyIdentifier);
-                }
-
-                // Fallback: match by Issuer DN + signature verification
-                issuingCaId ??= await FindCaByDnAndSignatureAsync(db, cert);
-
-                if (issuingCaId == null)
-                {
-                    // Queue for manual CA selection
-                    pendingCaSelectQueue.Enqueue((fileBytes, fileName, usedPassword));
-                    parsed.Certificate.Dispose();
-                    return false;
-                }
-
-                db.IssuedCertificates.Add(new IssuedCertificate
-                {
-                    IssuingCaCertificateId = issuingCaId.Value,
-                    Name = Path.GetFileNameWithoutExtension(fileName),
-                    Subject = cert.Subject,
-                    SubjectAltNames = parsed.SubjectAltNames,
-                    X509CertificatePem = cert.ExportCertificatePem(),
-                    EncryptedPfxBytes = parsed.HasPrivateKey ? fileBytes : null,
-                    PfxPassword = parsed.HasPrivateKey ? usedPassword : null,
-                    Thumbprint = thumbprint,
-                    SerialNumber = cert.SerialNumber,
-                    KeyAlgorithm = parsed.Algorithm,
-                    KeySize = parsed.KeySize,
-                    NotBefore = cert.NotBefore.ToUniversalTime(),
-                    NotAfter = cert.NotAfter.ToUniversalTime(),
-                    Enabled = true
-                });
-            }
-
-            await db.SaveChangesAsync();
+            var result = await ImportService.ImportParsedCertificateAsync(
+                parsed, CommunityId, password: usedPassword, rawFileOverride: fileBytes);
             parsed.Certificate.Dispose();
-            return true;
+
+            if (result.NeedsCaSelection)
+            {
+                pendingCaSelectQueue.Enqueue((fileBytes, fileName, usedPassword));
+                return false;
+            }
+
+            return result.Success;
         }
         catch (Exception ex)
         {
@@ -1229,27 +877,7 @@ public partial class CertificateExplorer : IDisposable
     {
         if (selectedNode == null) return;
 
-        await using var db = await DbFactory.CreateDbContextAsync();
-
-        if (selectedNode.EntityType == "CaCertificate")
-        {
-            var ca = await db.CaCertificates.FindAsync(selectedNode.Id);
-            if (ca != null)
-            {
-                ca.AutoRenew = enabled;
-                await db.SaveChangesAsync();
-            }
-        }
-        else if (selectedNode.EntityType == "IssuedCertificate")
-        {
-            var issued = await db.IssuedCertificates.FindAsync(selectedNode.Id);
-            if (issued != null)
-            {
-                issued.AutoRenew = enabled;
-                await db.SaveChangesAsync();
-            }
-        }
-
+        await ManagementService.SetAutoRenewAsync(selectedNode.Id, selectedNode.EntityType, enabled);
         selectedNodeAutoRenew = enabled;
     }
 
@@ -1266,27 +894,11 @@ public partial class CertificateExplorer : IDisposable
 
         if (result.Cancelled) return;
 
-        await using var db = await DbFactory.CreateDbContextAsync();
-        var now = DateTime.UtcNow;
-
-        switch (selectedNode.EntityType)
-        {
-            case "CaCertificate":
-                var ca = await db.CaCertificates.FindAsync(selectedNode.Id);
-                if (ca != null) { ca.IsArchived = true; ca.ArchivedAt = now; }
-                break;
-            case "IssuedCertificate":
-                var issued = await db.IssuedCertificates.FindAsync(selectedNode.Id);
-                if (issued != null) { issued.IsArchived = true; issued.ArchivedAt = now; }
-                break;
-            case "Crl":
-                var crl = await db.Crls.FindAsync(selectedNode.Id);
-                if (crl != null) { crl.IsArchived = true; crl.ArchivedAt = now; }
-                break;
-        }
-
-        await db.SaveChangesAsync();
-        ToastService.ShowCopyableSuccess($"Archived '{selectedNode.Name}'");
+        var archiveResult = await ManagementService.ArchiveAsync(selectedNode.Id, selectedNode.EntityType);
+        if (archiveResult.Success)
+            ToastService.ShowCopyableSuccess($"Archived '{selectedNode.Name}'");
+        else
+            ToastService.ShowCopyableError(archiveResult.Error ?? "Archive failed.");
 
         await ClearSelectionAndReloadTreeAsync();
     }
@@ -1302,59 +914,18 @@ public partial class CertificateExplorer : IDisposable
 
         if (result.Cancelled) return;
 
-        await using var db = await DbFactory.CreateDbContextAsync();
+        var deleteResult = await ManagementService.DeleteAsync(
+            selectedNode.Id, selectedNode.EntityType, DeleteRemoteKeyAsync);
 
-        switch (selectedNode.EntityType)
+        if (deleteResult.Success)
         {
-            case "CaCertificate":
-                var ca = await db.CaCertificates
-                    .Include(c => c.IssuedCertificates)
-                    .Include(c => c.Crls).ThenInclude(c => c.Revocations)
-                    .Include(c => c.Children)
-                    .FirstOrDefaultAsync(c => c.Id == selectedNode.Id);
-                if (ca != null)
-                {
-                    if (ca.Children.Count > 0 || ca.IssuedCertificates.Count > 0)
-                    {
-                        ToastService.ShowCopyableError(
-                            $"Cannot delete '{ca.Name}': it has {ca.Children.Count} child CA(s) and {ca.IssuedCertificates.Count} issued cert(s). Delete or move them first.");
-                        return;
-                    }
-                    // Delete Vault Transit key if applicable
-                    await DeleteRemoteKeyAsync(ca.StoreProviderHint);
-                    // Remove associated CRLs and their revocations
-                    foreach (var crl in ca.Crls.ToList())
-                    {
-                        db.CertificateRevocations.RemoveRange(crl.Revocations);
-                        db.Crls.Remove(crl);
-                    }
-                    db.CaCertificates.Remove(ca);
-                }
-                break;
-            case "IssuedCertificate":
-                var issued = await db.IssuedCertificates.FindAsync(selectedNode.Id);
-                if (issued != null)
-                {
-                    await DeleteRemoteKeyAsync(issued.StoreProviderHint);
-                    db.IssuedCertificates.Remove(issued);
-                }
-                break;
-            case "Crl":
-                var crl2 = await db.Crls
-                    .Include(c => c.Revocations)
-                    .FirstOrDefaultAsync(c => c.Id == selectedNode.Id);
-                if (crl2 != null)
-                {
-                    db.CertificateRevocations.RemoveRange(crl2.Revocations);
-                    db.Crls.Remove(crl2);
-                }
-                break;
+            ToastService.ShowCopyableSuccess($"Permanently deleted '{selectedNode.Name}'");
+            await ClearSelectionAndReloadTreeAsync();
         }
-
-        await db.SaveChangesAsync();
-        ToastService.ShowCopyableSuccess($"Permanently deleted '{selectedNode.Name}'");
-
-        await ClearSelectionAndReloadTreeAsync();
+        else
+        {
+            ToastService.ShowCopyableError(deleteResult.Error ?? "Delete failed.");
+        }
     }
 
     /// <summary>
@@ -1412,97 +983,24 @@ public partial class CertificateExplorer : IDisposable
     {
         if (selectedNode == null || moveTargetCommunity == null) return;
 
-        await using var db = await DbFactory.CreateDbContextAsync();
-        var targetId = moveTargetCommunity.Id;
+        var moveResult = await ManagementService.MoveAsync(
+            selectedNode.Id, selectedNode.EntityType, moveTargetCommunity.Id);
 
-        switch (selectedNode.EntityType)
-        {
-            case "CaCertificate":
-                var ca = await db.CaCertificates.FindAsync(selectedNode.Id);
-                if (ca != null)
-                {
-                    ca.CommunityId = targetId;
-                    ca.ParentId = null; // Detach from current parent — will need re-linking in target
-                }
-                break;
-            case "IssuedCertificate":
-                var issued = await db.IssuedCertificates
-                    .Include(i => i.IssuingCaCertificate)
-                    .FirstOrDefaultAsync(i => i.Id == selectedNode.Id);
-                if (issued != null)
-                {
-                    // Find a matching CA in the target community by AKI/SKI
-                    int? newIssuingCaId = null;
-                    try
-                    {
-                        using var issuedCert = X509Certificate2.CreateFromPem(issued.X509CertificatePem);
-                        var akiExt = issuedCert.Extensions["2.5.29.35"];
-                        if (akiExt?.RawData != null && akiExt.RawData.Length >= 6)
-                        {
-                            var data = akiExt.RawData;
-                            if (data[2] == 0x80)
-                            {
-                                var len = data[3];
-                                var keyId = new byte[len];
-                                Array.Copy(data, 4, keyId, 0, len);
-                                var aki = Convert.ToHexString(keyId);
-
-                                var targetCas = await db.CaCertificates
-                                    .Where(c => c.CommunityId == targetId)
-                                    .ToListAsync();
-
-                                foreach (var targetCa in targetCas)
-                                {
-                                    using var tCert = X509Certificate2.CreateFromPem(targetCa.X509CertificatePem);
-                                    var skiExt = tCert.Extensions["2.5.29.14"];
-                                    if (skiExt != null)
-                                    {
-                                        var ski = new X509SubjectKeyIdentifierExtension(skiExt, skiExt.Critical);
-                                        if (ski.SubjectKeyIdentifier == aki)
-                                        {
-                                            newIssuingCaId = targetCa.Id;
-                                            break;
-                                        }
-                                    }
-                                }
-                            }
-                        }
-                    }
-                    catch { }
-
-                    if (newIssuingCaId == null)
-                    {
-                        // Fallback: first CA in target
-                        var fallbackCa = await db.CaCertificates
-                            .Where(c => c.CommunityId == targetId)
-                            .OrderByDescending(c => c.ParentId)
-                            .FirstOrDefaultAsync();
-                        newIssuingCaId = fallbackCa?.Id;
-                    }
-
-                    if (newIssuingCaId == null)
-                    {
-                        ToastService.ShowCopyableError("Target community has no CA certificates");
-                        moveDialogHidden = true;
-                        return;
-                    }
-
-                    issued.IssuingCaCertificateId = newIssuingCaId.Value;
-                }
-                break;
-        }
-
-        await db.SaveChangesAsync();
         moveDialogHidden = true;
 
-        ToastService.ShowCopyableSuccess($"Moved '{selectedNode.Name}' to '{moveTargetCommunity.Name}'");
-
-        selectedNode = null;
-        selectedCert?.Dispose();
-        selectedCert = null;
-        chainValidation = null;
-
-        await LoadCommunityTreeAsync(CommunityId);
+        if (moveResult.Success)
+        {
+            ToastService.ShowCopyableSuccess($"Moved '{selectedNode.Name}' to '{moveTargetCommunity.Name}'");
+            selectedNode = null;
+            selectedCert?.Dispose();
+            selectedCert = null;
+            chainValidation = null;
+            await LoadCommunityTreeAsync(CommunityId);
+        }
+        else
+        {
+            ToastService.ShowCopyableError(moveResult.Error ?? "Move failed.");
+        }
     }
 
     private async Task ProcessUploadedFile(byte[] fileBytes, string fileName)
@@ -1620,117 +1118,20 @@ public partial class CertificateExplorer : IDisposable
         pendingPasswordQueue.Clear();
     }
 
-    /// <summary>
-    /// Auto-imports a parsed cert (used after successful password entry in batch mode).
-    /// </summary>
     private async Task TryAutoImportCertWithParsed(ParsedCertificate parsed, string fileName, string password)
     {
         try
         {
-            await using var db = await DbFactory.CreateDbContextAsync();
-            var cert = parsed.Certificate;
-            var thumbprint = cert.Thumbprint;
+            var result = await ImportService.ImportParsedCertificateAsync(
+                parsed, CommunityId, password: password);
 
-            // Check for existing
-            var existingCa = await db.CaCertificates
-                .FirstOrDefaultAsync(c => c.Thumbprint == thumbprint && c.CommunityId == CommunityId);
-            if (existingCa != null)
+            if (result.NeedsCaSelection)
             {
-                if (parsed.HasPrivateKey && existingCa.EncryptedPfxBytes == null)
-                {
-                    existingCa.EncryptedPfxBytes = parsed.RawFileBytes;
-                    existingCa.PfxPassword = password;
-                    await db.SaveChangesAsync();
-                }
+                pendingCaSelectQueue.Enqueue((parsed.RawFileBytes ?? Array.Empty<byte>(), fileName, password));
                 parsed.Certificate.Dispose();
-                ToastService.ShowCopyableSuccess($"Imported '{fileName}'");
                 return;
             }
 
-            var existingIssued = await db.IssuedCertificates
-                .Include(i => i.IssuingCaCertificate)
-                .FirstOrDefaultAsync(c => c.Thumbprint == thumbprint
-                    && c.IssuingCaCertificate.CommunityId == CommunityId);
-            if (existingIssued != null)
-            {
-                if (parsed.HasPrivateKey && existingIssued.EncryptedPfxBytes == null)
-                {
-                    existingIssued.EncryptedPfxBytes = parsed.RawFileBytes;
-                    existingIssued.PfxPassword = password;
-                    await db.SaveChangesAsync();
-                }
-                parsed.Certificate.Dispose();
-                ToastService.ShowCopyableSuccess($"Imported '{fileName}'");
-                return;
-            }
-
-            if (parsed.DetectedRole is DetectedCertRole.RootCa or DetectedCertRole.IntermediateCa)
-            {
-                int? parentId = null;
-                if (parsed.DetectedRole == DetectedCertRole.IntermediateCa)
-                {
-                    if (parsed.AuthorityKeyIdentifier != null)
-                        parentId = await FindCaBySkiAsync(db, parsed.AuthorityKeyIdentifier);
-
-                    parentId ??= await FindCaByDnAndSignatureAsync(db, cert);
-                }
-
-                db.CaCertificates.Add(new CaCertificate
-                {
-                    CommunityId = CommunityId,
-                    ParentId = parentId,
-                    Name = Path.GetFileNameWithoutExtension(fileName),
-                    Subject = cert.Subject,
-                    X509CertificatePem = cert.ExportCertificatePem(),
-                    EncryptedPfxBytes = parsed.HasPrivateKey ? parsed.RawFileBytes : null,
-                    PfxPassword = parsed.HasPrivateKey ? password : null,
-                    Thumbprint = thumbprint,
-                    SerialNumber = cert.SerialNumber,
-                    KeyAlgorithm = parsed.Algorithm,
-                    KeySize = parsed.KeySize,
-                    NotBefore = cert.NotBefore.ToUniversalTime(),
-                    NotAfter = cert.NotAfter.ToUniversalTime(),
-                    CertSecurityLevel = CertSecurityLevel.Software,
-                    Enabled = true
-                });
-            }
-            else
-            {
-                int? issuingCaId = parsed.AuthorityKeyIdentifier != null
-                    ? await FindCaBySkiAsync(db, parsed.AuthorityKeyIdentifier)
-                    : null;
-
-                // Fallback: match by Issuer DN + signature verification
-                issuingCaId ??= await FindCaByDnAndSignatureAsync(db, cert);
-
-                if (issuingCaId == null)
-                {
-                    // Queue for manual CA selection
-                    pendingCaSelectQueue.Enqueue((parsed.RawFileBytes ?? Array.Empty<byte>(), fileName, password));
-                    parsed.Certificate.Dispose();
-                    return;
-                }
-
-                db.IssuedCertificates.Add(new IssuedCertificate
-                {
-                    IssuingCaCertificateId = issuingCaId.Value,
-                    Name = Path.GetFileNameWithoutExtension(fileName),
-                    Subject = cert.Subject,
-                    SubjectAltNames = parsed.SubjectAltNames,
-                    X509CertificatePem = cert.ExportCertificatePem(),
-                    EncryptedPfxBytes = parsed.HasPrivateKey ? parsed.RawFileBytes : null,
-                    PfxPassword = parsed.HasPrivateKey ? password : null,
-                    Thumbprint = thumbprint,
-                    SerialNumber = cert.SerialNumber,
-                    KeyAlgorithm = parsed.Algorithm,
-                    KeySize = parsed.KeySize,
-                    NotBefore = cert.NotBefore.ToUniversalTime(),
-                    NotAfter = cert.NotAfter.ToUniversalTime(),
-                    Enabled = true
-                });
-            }
-
-            await db.SaveChangesAsync();
             parsed.Certificate.Dispose();
             ToastService.ShowCopyableSuccess($"Imported '{fileName}'");
         }
@@ -1795,91 +1196,23 @@ public partial class CertificateExplorer : IDisposable
 
         try
         {
-            await using var db = await DbFactory.CreateDbContextAsync();
-            var cert = parsedCert.Certificate;
+            var result = await ImportService.ImportParsedCertificateAsync(
+                parsedCert, CommunityId,
+                name: importName,
+                password: pfxPassword,
+                issuingCaId: matchedParentCaId);
 
-            // Validate issuer relationship if a parent CA was matched
-            if (matchedParentCaId.HasValue)
+            if (result.NeedsCaSelection)
             {
-                var parentCaEntity = await db.CaCertificates.FindAsync(matchedParentCaId.Value);
-                if (parentCaEntity != null)
-                {
-                    using var parentCert = X509Certificate2.CreateFromPem(parentCaEntity.X509CertificatePem);
-                    var issuerError = CertificateIssuanceService.VerifyIssuedBy(cert, parentCert);
-                    if (issuerError != null)
-                    {
-                        importError = $"Cannot link to '{parentCaEntity.Name}': {issuerError}";
-                        confirmDialogHidden = true;
-                        return;
-                    }
-                }
+                confirmDialogHidden = true;
+                pendingCaSelectParsed = parsedCert;
+                parsedCert = null;
+                await ShowCaSelectDialog(
+                    pendingCaSelectParsed.RawFileBytes,
+                    pendingCaSelectParsed.FileName,
+                    pendingCaSelectParsed.HasPrivateKey ? pfxPassword : null);
+                return;
             }
-
-            if (parsedCert.DetectedRole is DetectedCertRole.RootCa or DetectedCertRole.IntermediateCa)
-            {
-                var entity = new CaCertificate
-                {
-                    CommunityId = CommunityId,
-                    ParentId = parsedCert.DetectedRole == DetectedCertRole.IntermediateCa ? matchedParentCaId : null,
-                    Name = importName.Trim(),
-                    Subject = cert.Subject,
-                    X509CertificatePem = cert.ExportCertificatePem(),
-                    EncryptedPfxBytes = parsedCert.HasPrivateKey ? parsedCert.RawFileBytes : null,
-                    PfxPassword = parsedCert.HasPrivateKey ? pfxPassword : null,
-                    Thumbprint = cert.Thumbprint,
-                    SerialNumber = cert.SerialNumber,
-                    KeyAlgorithm = parsedCert.Algorithm,
-                    KeySize = parsedCert.KeySize,
-                    NotBefore = cert.NotBefore.ToUniversalTime(),
-                    NotAfter = cert.NotAfter.ToUniversalTime(),
-                    CertSecurityLevel = CertSecurityLevel.Software,
-                    Enabled = true
-                };
-
-                db.CaCertificates.Add(entity);
-            }
-            else
-            {
-                var issuingCaId = matchedParentCaId;
-
-                // Fallback: match by Issuer DN + signature verification
-                issuingCaId ??= await FindCaByDnAndSignatureAsync(db, cert);
-
-                if (issuingCaId == null)
-                {
-                    // Pass the already-parsed cert to the CA selection dialog (no re-parse needed)
-                    confirmDialogHidden = true;
-                    pendingCaSelectParsed = parsedCert;
-                    parsedCert = null; // Transfer ownership, don't dispose
-                    await ShowCaSelectDialog(
-                        pendingCaSelectParsed.RawFileBytes,
-                        pendingCaSelectParsed.FileName,
-                        pendingCaSelectParsed.HasPrivateKey ? pfxPassword : null);
-                    return;
-                }
-
-                var entity = new IssuedCertificate
-                {
-                    IssuingCaCertificateId = issuingCaId.Value,
-                    Name = importName.Trim(),
-                    Subject = cert.Subject,
-                    SubjectAltNames = parsedCert.SubjectAltNames,
-                    X509CertificatePem = cert.ExportCertificatePem(),
-                    EncryptedPfxBytes = parsedCert.HasPrivateKey ? parsedCert.RawFileBytes : null,
-                    PfxPassword = parsedCert.HasPrivateKey ? pfxPassword : null,
-                    Thumbprint = cert.Thumbprint,
-                    SerialNumber = cert.SerialNumber,
-                    KeyAlgorithm = parsedCert.Algorithm,
-                    KeySize = parsedCert.KeySize,
-                    NotBefore = cert.NotBefore.ToUniversalTime(),
-                    NotAfter = cert.NotAfter.ToUniversalTime(),
-                    Enabled = true
-                };
-
-                db.IssuedCertificates.Add(entity);
-            }
-
-            await db.SaveChangesAsync();
 
             confirmDialogHidden = true;
             showDropZone = false;
@@ -1887,8 +1220,15 @@ public partial class CertificateExplorer : IDisposable
             parsedCert?.Certificate.Dispose();
             parsedCert = null;
 
-            ToastService.ShowCopyableSuccess($"Certificate '{importName}' imported successfully.");
-            await LoadCommunityTreeAsync(CommunityId);
+            if (result.Success)
+            {
+                ToastService.ShowCopyableSuccess($"Certificate '{importName}' imported successfully.");
+                await LoadCommunityTreeAsync(CommunityId);
+            }
+            else
+            {
+                importError = result.Error ?? "Import failed.";
+            }
         }
         catch (Exception ex)
         {
@@ -2024,103 +1364,25 @@ public partial class CertificateExplorer : IDisposable
 
     private async Task SaveWithCaAssignmentAsync(ParsedCertificate parsed)
     {
-        await using var db = await DbFactory.CreateDbContextAsync();
-        var cert = parsed.Certificate;
-        var thumbprint = cert.Thumbprint;
+        var result = await ImportService.ImportParsedCertificateAsync(
+            parsed, CommunityId,
+            name: Path.GetFileNameWithoutExtension(pendingFileName),
+            password: pfxPassword,
+            issuingCaId: selectedCaForAssignment!.Id,
+            rawFileOverride: pendingFileBytes);
 
-        // Check for existing cert — merge if duplicate (e.g. .cer + .pfx for same cert)
-        var existingCa = await db.CaCertificates
-            .FirstOrDefaultAsync(c => c.Thumbprint == thumbprint && c.CommunityId == CommunityId);
-        if (existingCa != null)
-        {
-            if (parsed.HasPrivateKey && existingCa.EncryptedPfxBytes == null)
-            {
-                existingCa.EncryptedPfxBytes = pendingFileBytes;
-                existingCa.PfxPassword = pfxPassword;
-                await db.SaveChangesAsync();
-            }
-            parsed.Certificate.Dispose();
-            ToastService.ShowCopyableSuccess($"Merged PFX into existing '{existingCa.Name}'");
-            return;
-        }
+        parsed.Certificate.Dispose();
 
-        var existingIssued = await db.IssuedCertificates
-            .Include(i => i.IssuingCaCertificate)
-            .FirstOrDefaultAsync(c => c.Thumbprint == thumbprint
-                && c.IssuingCaCertificate.CommunityId == CommunityId);
-        if (existingIssued != null)
+        if (result.Success)
         {
-            if (parsed.HasPrivateKey && existingIssued.EncryptedPfxBytes == null)
-            {
-                existingIssued.EncryptedPfxBytes = pendingFileBytes;
-                existingIssued.PfxPassword = pfxPassword;
-                await db.SaveChangesAsync();
-            }
-            parsed.Certificate.Dispose();
-            ToastService.ShowCopyableSuccess($"Merged PFX into existing '{existingIssued.Name}'");
-            return;
-        }
-
-        // Validate the cert was actually signed by the selected CA
-        var selectedCaEntity = await db.CaCertificates.FindAsync(selectedCaForAssignment!.Id);
-        if (selectedCaEntity != null)
-        {
-            using var caCert = X509Certificate2.CreateFromPem(selectedCaEntity.X509CertificatePem);
-            var issuerError = CertificateIssuanceService.VerifyIssuedBy(cert, caCert);
-            if (issuerError != null)
-            {
-                parsed.Certificate.Dispose();
-                ToastService.ShowCopyableError($"Cannot assign under '{selectedCaEntity.Name}': {issuerError}");
-                return;
-            }
-        }
-
-        // New cert — assign under selected CA
-        if (parsed.DetectedRole is DetectedCertRole.RootCa or DetectedCertRole.IntermediateCa)
-        {
-            db.CaCertificates.Add(new CaCertificate
-            {
-                CommunityId = CommunityId,
-                ParentId = selectedCaForAssignment.Id,
-                Name = Path.GetFileNameWithoutExtension(pendingFileName),
-                Subject = cert.Subject,
-                X509CertificatePem = cert.ExportCertificatePem(),
-                EncryptedPfxBytes = parsed.HasPrivateKey ? pendingFileBytes : null,
-                PfxPassword = parsed.HasPrivateKey ? pfxPassword : null,
-                Thumbprint = thumbprint,
-                SerialNumber = cert.SerialNumber,
-                KeyAlgorithm = parsed.Algorithm,
-                KeySize = parsed.KeySize,
-                NotBefore = cert.NotBefore.ToUniversalTime(),
-                NotAfter = cert.NotAfter.ToUniversalTime(),
-                CertSecurityLevel = CertSecurityLevel.Software,
-                Enabled = true
-            });
+            var label = result.AlreadyExists ? "Merged PFX into existing" : "assigned under";
+            ToastService.ShowCopyableSuccess(
+                $"'{result.ImportedName}' {label} '{selectedCaForAssignment!.Name}'");
         }
         else
         {
-            db.IssuedCertificates.Add(new IssuedCertificate
-            {
-                IssuingCaCertificateId = selectedCaForAssignment!.Id,
-                Name = Path.GetFileNameWithoutExtension(pendingFileName),
-                Subject = cert.Subject,
-                SubjectAltNames = parsed.SubjectAltNames,
-                X509CertificatePem = cert.ExportCertificatePem(),
-                EncryptedPfxBytes = parsed.HasPrivateKey ? pendingFileBytes : null,
-                PfxPassword = parsed.HasPrivateKey ? pfxPassword : null,
-                Thumbprint = thumbprint,
-                SerialNumber = cert.SerialNumber,
-                KeyAlgorithm = parsed.Algorithm,
-                KeySize = parsed.KeySize,
-                NotBefore = cert.NotBefore.ToUniversalTime(),
-                NotAfter = cert.NotAfter.ToUniversalTime(),
-                Enabled = true
-            });
+            ToastService.ShowCopyableError(result.Error ?? "Import failed.");
         }
-
-        await db.SaveChangesAsync();
-        parsed.Certificate.Dispose();
-        ToastService.ShowCopyableSuccess($"'{Path.GetFileNameWithoutExtension(pendingFileName)}' assigned under '{selectedCaForAssignment!.Name}'");
     }
 
     private void SkipCaAssignment()
@@ -3015,58 +2277,30 @@ public partial class CertificateExplorer : IDisposable
 
         try
         {
-            await using var db = await DbFactory.CreateDbContextAsync();
-            var now = DateTime.UtcNow;
-            int? issuingCaId = null;
-
-            if (selectedNode.EntityType == "CaCertificate")
-            {
-                var ca = await db.CaCertificates.FindAsync(selectedNode.Id);
-                if (ca != null)
-                {
-                    ca.IsRevoked = true;
-                    ca.RevokedAt = now;
-                    ca.RevocationReason = selectedRevokeReason.Code;
-                    issuingCaId = ca.ParentId; // parent CA's CRL should include this
-                    await db.SaveChangesAsync();
-                }
-            }
-            else
-            {
-                var issued = await db.IssuedCertificates.FindAsync(selectedNode.Id);
-                if (issued != null)
-                {
-                    issued.IsRevoked = true;
-                    issued.RevokedAt = now;
-                    issued.RevocationReason = selectedRevokeReason.Code;
-                    issuingCaId = issued.IssuingCaCertificateId;
-                    await db.SaveChangesAsync();
-                }
-            }
+            var revokeResult = await ManagementService.RevokeAsync(
+                selectedNode.Id, selectedNode.EntityType, selectedRevokeReason.Code);
 
             revokeDialogHidden = true;
 
-            // Regenerate the issuing CA's CRL to include the revoked certificate
-            if (issuingCaId.HasValue)
+            if (revokeResult.Success)
             {
-                var crlResult = await CrlGenService.GenerateCrlAsync(issuingCaId.Value);
-                if (crlResult.IsSuccess)
+                if (revokeResult.CrlNumber.HasValue)
                 {
                     ToastService.ShowCopyableSuccess(
-                        $"Certificate '{selectedNode.Name}' revoked (reason: {selectedRevokeReason.Label}). CRL #{crlResult.CrlNumber} generated with {crlResult.RevokedCount} revocation(s).");
+                        $"Certificate '{selectedNode.Name}' revoked (reason: {selectedRevokeReason.Label}). CRL #{revokeResult.CrlNumber} generated with {revokeResult.RevokedCount} revocation(s).");
                 }
                 else
                 {
                     ToastService.ShowCopyableSuccess(
                         $"Certificate '{selectedNode.Name}' revoked (reason: {selectedRevokeReason.Label}).");
-                    ToastService.ShowCopyableError($"CRL regeneration failed: {crlResult.Error}");
                 }
+
+                if (!string.IsNullOrEmpty(revokeResult.Error))
+                    ToastService.ShowCopyableError(revokeResult.Error);
             }
             else
             {
-                // Root CA revoked — no parent CRL to update
-                ToastService.ShowCopyableSuccess(
-                    $"Certificate '{selectedNode.Name}' revoked (reason: {selectedRevokeReason.Label}).");
+                ToastService.ShowCopyableError(revokeResult.Error ?? "Revocation failed.");
             }
 
             await LoadCommunityTreeAsync(CommunityId);

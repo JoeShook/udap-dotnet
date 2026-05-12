@@ -227,3 +227,4 @@ examples/clients/UdapEd/Client/wwwroot/temp/MudBlazor.min.css
 /coverage-results
 /.claude
 docs/specifications/SSRAA/V2.0.0/ssraa_full-ig_v2.0.0.zip
+examples/CA/.claude/settings.local.json

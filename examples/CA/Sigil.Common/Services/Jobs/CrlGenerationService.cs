@@ -205,7 +205,37 @@ public class CrlGenerationService
             "Generated CRL #{CrlNumber} for CA '{CaName}' with {RevokedCount} revocations, next update {NextUpdate}",
             nextCrlNumber, ca.Name, revocationEntries.Count, nextUpdate);
 
-        // Publish CRL to configured endpoints using the CA's own name (non-fatal on failure)
+        await PublishCrlToFileSystemAsync(db, ca, crlBytes, ct);
+
+        return CrlGenerationResult.Success(crlEntity.Id, nextCrlNumber, revocationEntries.Count, nextUpdate);
+    }
+
+    /// <summary>
+    /// Publishes the latest CRL for the specified CA to all configured filesystem endpoints.
+    /// Safe to call even if the CRL was not just regenerated — ensures the filesystem stays in sync with the DB.
+    /// </summary>
+    public async Task PublishCrlAsync(int caCertificateId, CancellationToken ct = default)
+    {
+        await using var db = await _dbFactory.CreateDbContextAsync(ct);
+
+        var ca = await db.CaCertificates
+            .Include(c => c.Crls.Where(crl => !crl.IsArchived))
+            .FirstOrDefaultAsync(c => c.Id == caCertificateId, ct);
+
+        if (ca == null) return;
+
+        var latestCrl = ca.Crls
+            .OrderByDescending(c => c.CrlNumber)
+            .FirstOrDefault();
+
+        if (latestCrl == null) return;
+
+        await PublishCrlToFileSystemAsync(db, ca, latestCrl.RawBytes, ct);
+    }
+
+    private async Task PublishCrlToFileSystemAsync(
+        SigilDbContext db, CaCertificate ca, byte[] crlBytes, CancellationToken ct)
+    {
         var baseUrls = await db.CommunityBaseUrls
             .Where(bu => bu.CommunityId == ca.CommunityId && bu.PublishingBasePath != null)
             .ToListAsync(ct);
@@ -231,8 +261,6 @@ public class CrlGenerationService
                 _logger.LogError(ex, "Failed to publish CRL for CA '{CaName}'", ca.Name);
             }
         }
-
-        return CrlGenerationResult.Success(crlEntity.Id, nextCrlNumber, revocationEntries.Count, nextUpdate);
     }
 
     private (byte[] CrlBytes, string SignatureAlgorithm) GenerateCrlLocal(
@@ -366,8 +394,54 @@ public class CrlGenerationService
         return (crlBytes, sigAlgName);
     }
 
+    public async Task<List<CrlStatusSummary>> GetCrlStatusesAsync(CancellationToken ct = default)
+    {
+        await using var db = await _dbFactory.CreateDbContextAsync(ct);
+
+        var cas = await db.CaCertificates
+            .Where(ca => !ca.IsArchived &&
+                (ca.EncryptedPfxBytes != null || ca.StoreProviderHint != null))
+            .Include(ca => ca.Community)
+            .Include(ca => ca.Crls.Where(c => !c.IsArchived))
+            .OrderBy(ca => ca.Community.Name)
+            .ThenBy(ca => ca.Name)
+            .ToListAsync(ct);
+
+        return cas.Select(ca =>
+        {
+            var latestCrl = ca.Crls
+                .OrderByDescending(c => c.CrlNumber)
+                .FirstOrDefault();
+
+            return new CrlStatusSummary
+            {
+                CaId = ca.Id,
+                CaName = ca.Name,
+                CommunityName = ca.Community.Name,
+                LatestCrlNumber = latestCrl?.CrlNumber,
+                NextUpdate = latestCrl?.NextUpdate ?? DateTime.MinValue,
+                HasCrl = latestCrl != null,
+                NeedsRenewal = latestCrl == null
+                    || latestCrl.NextUpdate <= DateTime.UtcNow.AddHours(24),
+                RevokedCount = latestCrl?.Revocations?.Count ?? 0
+            };
+        }).ToList();
+    }
+
     private static string GetLocalSignatureAlgorithmName(string keyAlgorithm) =>
         keyAlgorithm.Equals("RSA", StringComparison.OrdinalIgnoreCase)
             ? "SHA256WithRSAEncryption"
             : "SHA256WithECDSA";
+}
+
+public class CrlStatusSummary
+{
+    public int CaId { get; init; }
+    public string CaName { get; init; } = string.Empty;
+    public string CommunityName { get; init; } = string.Empty;
+    public long? LatestCrlNumber { get; init; }
+    public DateTime NextUpdate { get; init; }
+    public bool HasCrl { get; init; }
+    public bool NeedsRenewal { get; init; }
+    public int RevokedCount { get; init; }
 }

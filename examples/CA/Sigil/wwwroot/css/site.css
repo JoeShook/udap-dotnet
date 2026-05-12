@@ -25,3 +25,29 @@ code {
 .fluent-data-grid .col-width-draghandle:hover {
     opacity: 0.5;
 }
+
+/* Dialog right-edge resize handle */
+.sigil-resize-handle {
+    position: absolute;
+    right: -4px;
+    top: 50%;
+    transform: translateY(-50%);
+    width: 8px;
+    height: 48px;
+    cursor: ew-resize;
+    z-index: 10;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+.sigil-resize-handle::after {
+    content: '';
+    width: 3px;
+    height: 32px;
+    border-radius: 2px;
+    background: rgba(255, 255, 255, 0.25);
+    transition: background 0.15s;
+}
+.sigil-resize-handle:hover::after {
+    background: rgba(255, 255, 255, 0.5);
+}

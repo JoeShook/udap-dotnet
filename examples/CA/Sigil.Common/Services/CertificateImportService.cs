@@ -20,6 +20,20 @@ using Sigil.Common.ViewModels;
 
 namespace Sigil.Common.Services;
 
+public record SingleImportResult
+{
+    public bool Success { get; init; }
+    public bool AlreadyExists { get; init; }
+    public bool NeedsCaSelection { get; init; }
+    public string? Error { get; init; }
+    public string? ImportedName { get; init; }
+
+    public static SingleImportResult Imported(string name) => new() { Success = true, ImportedName = name };
+    public static SingleImportResult Merged(string name) => new() { Success = true, AlreadyExists = true, ImportedName = name };
+    public static SingleImportResult NoCaFound() => new() { NeedsCaSelection = true };
+    public static SingleImportResult Failed(string error) => new() { Error = error };
+}
+
 public class CertificateImportService
 {
     private readonly IDbContextFactory<SigilDbContext> _dbFactory;
@@ -31,6 +45,124 @@ public class CertificateImportService
     {
         _dbFactory = dbFactory;
         _logger = logger;
+    }
+
+    /// <summary>
+    /// Imports a single parsed certificate into the database.
+    /// Handles dedup by thumbprint, AKI/SKI chain matching, and entity creation.
+    /// Returns NeedsCaSelection if no issuing CA can be determined automatically.
+    /// </summary>
+    public async Task<SingleImportResult> ImportParsedCertificateAsync(
+        ParsedCertificate parsed,
+        int communityId,
+        string? name = null,
+        string? password = null,
+        int? issuingCaId = null,
+        byte[]? rawFileOverride = null,
+        CancellationToken ct = default)
+    {
+        await using var db = await _dbFactory.CreateDbContextAsync(ct);
+        var cert = parsed.Certificate;
+        var thumbprint = cert.Thumbprint;
+        var fileBytes = rawFileOverride ?? parsed.RawFileBytes;
+        var certName = name ?? Path.GetFileNameWithoutExtension(parsed.FileName);
+
+        // --- Dedup: check existing by thumbprint ---
+        var existingCa = await db.CaCertificates
+            .FirstOrDefaultAsync(c => c.Thumbprint == thumbprint && c.CommunityId == communityId, ct);
+        if (existingCa != null)
+        {
+            if (parsed.HasPrivateKey && existingCa.EncryptedPfxBytes == null)
+            {
+                existingCa.EncryptedPfxBytes = fileBytes;
+                existingCa.PfxPassword = password;
+                await db.SaveChangesAsync(ct);
+            }
+            return SingleImportResult.Merged(existingCa.Name);
+        }
+
+        var existingIssued = await db.IssuedCertificates
+            .Include(i => i.IssuingCaCertificate)
+            .FirstOrDefaultAsync(c => c.Thumbprint == thumbprint
+                && c.IssuingCaCertificate.CommunityId == communityId, ct);
+        if (existingIssued != null)
+        {
+            if (parsed.HasPrivateKey && existingIssued.EncryptedPfxBytes == null)
+            {
+                existingIssued.EncryptedPfxBytes = fileBytes;
+                existingIssued.PfxPassword = password;
+                await db.SaveChangesAsync(ct);
+            }
+            return SingleImportResult.Merged(existingIssued.Name);
+        }
+
+        // --- New cert: determine chain placement ---
+        if (parsed.DetectedRole is DetectedCertRole.RootCa or DetectedCertRole.IntermediateCa)
+        {
+            int? parentId = null;
+            if (parsed.DetectedRole == DetectedCertRole.IntermediateCa)
+            {
+                parentId = issuingCaId;
+                if (parentId == null && parsed.AuthorityKeyIdentifier != null)
+                    parentId = await CertificateManagementService.FindCaBySkiInternalAsync(
+                        db, communityId, parsed.AuthorityKeyIdentifier, ct);
+                parentId ??= await CertificateManagementService.FindCaByDnAndSignatureInternalAsync(
+                    db, communityId, cert, ct);
+            }
+
+            db.CaCertificates.Add(new CaCertificate
+            {
+                CommunityId = communityId,
+                ParentId = parentId,
+                Name = certName.Trim(),
+                Subject = cert.Subject,
+                X509CertificatePem = cert.ExportCertificatePem(),
+                EncryptedPfxBytes = parsed.HasPrivateKey ? fileBytes : null,
+                PfxPassword = parsed.HasPrivateKey ? password : null,
+                Thumbprint = thumbprint,
+                SerialNumber = cert.SerialNumber,
+                KeyAlgorithm = parsed.Algorithm,
+                KeySize = parsed.KeySize,
+                NotBefore = cert.NotBefore.ToUniversalTime(),
+                NotAfter = cert.NotAfter.ToUniversalTime(),
+                CertSecurityLevel = CertSecurityLevel.Software,
+                Enabled = true
+            });
+        }
+        else
+        {
+            // End-entity cert
+            var resolvedCaId = issuingCaId;
+            if (resolvedCaId == null && parsed.AuthorityKeyIdentifier != null)
+                resolvedCaId = await CertificateManagementService.FindCaBySkiInternalAsync(
+                    db, communityId, parsed.AuthorityKeyIdentifier, ct);
+            resolvedCaId ??= await CertificateManagementService.FindCaByDnAndSignatureInternalAsync(
+                db, communityId, cert, ct);
+
+            if (resolvedCaId == null)
+                return SingleImportResult.NoCaFound();
+
+            db.IssuedCertificates.Add(new IssuedCertificate
+            {
+                IssuingCaCertificateId = resolvedCaId.Value,
+                Name = certName.Trim(),
+                Subject = cert.Subject,
+                SubjectAltNames = parsed.SubjectAltNames,
+                X509CertificatePem = cert.ExportCertificatePem(),
+                EncryptedPfxBytes = parsed.HasPrivateKey ? fileBytes : null,
+                PfxPassword = parsed.HasPrivateKey ? password : null,
+                Thumbprint = thumbprint,
+                SerialNumber = cert.SerialNumber,
+                KeyAlgorithm = parsed.Algorithm,
+                KeySize = parsed.KeySize,
+                NotBefore = cert.NotBefore.ToUniversalTime(),
+                NotAfter = cert.NotAfter.ToUniversalTime(),
+                Enabled = true
+            });
+        }
+
+        await db.SaveChangesAsync(ct);
+        return SingleImportResult.Imported(certName.Trim());
     }
 
     /// <summary>

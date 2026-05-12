@@ -71,6 +71,31 @@
             }
         };
 
+        window.sigilDialogResize = (function() {
+            document.addEventListener('mousedown', function(e) {
+                var handle = e.target.closest('.sigil-resize-handle');
+                if (!handle) return;
+                e.preventDefault();
+                var dialog = handle.closest('fluent-dialog');
+                if (!dialog) return;
+                var control = dialog.shadowRoot && dialog.shadowRoot.querySelector('[part="control"]');
+                var target = control || dialog;
+                var rect = target.getBoundingClientRect();
+                var centerX = rect.left + rect.width / 2;
+                function onMove(ev) {
+                    var newW = Math.max(400, 2 * (ev.clientX - centerX));
+                    dialog.style.setProperty('--dialog-width', newW + 'px');
+                    dialog.style.minWidth = newW + 'px';
+                }
+                function onUp() {
+                    document.removeEventListener('mousemove', onMove);
+                    document.removeEventListener('mouseup', onUp);
+                }
+                document.addEventListener('mousemove', onMove);
+                document.addEventListener('mouseup', onUp);
+            });
+        })();
+
         window.sigilColResize = function(table) {
             if (!table) return;
             var cols = table.querySelectorAll('col');

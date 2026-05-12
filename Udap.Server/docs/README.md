@@ -22,7 +22,7 @@ For SSRAA or TEFCA community-specific validation rules, add the corresponding pa
 
 - [`Udap.Ssraa.Server`](https://www.nuget.org/packages/Udap.Ssraa.Server) — HL7 v3 PurposeOfUse enforcement
 - [`Udap.Tefca.Server`](https://www.nuget.org/packages/Udap.Tefca.Server) — TEFCA Exchange Purpose (XP) code validation, SAN matching
-- [`Udap.Tefca.Model`](https://www.nuget.org/packages/Udap.Tefca.Model) — TEFCA extension models (`tefca-ias`, `tefca_smart`)
+- [`Udap.Tefca.Model`](https://www.nuget.org/packages/Udap.Tefca.Model) — TEFCA extension models (`tefca-ias`, XP constants)
 
 ## Full Example
 
