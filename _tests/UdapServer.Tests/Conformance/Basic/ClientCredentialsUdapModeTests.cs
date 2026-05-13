@@ -1078,7 +1078,7 @@ public class ClientCredentialsUdapModeTests
 
 
         //Store validation
-        Assert.Equal(1, _mockPipeline.Clients.Count);
+        Assert.Single(_mockPipeline.Clients);
 
     }
 
@@ -1339,7 +1339,7 @@ public class ClientCredentialsUdapModeTests
         Assert.Equal(HttpStatusCode.BadRequest, regResponse.StatusCode);
         var errorResult = await regResponse.Content.ReadFromJsonAsync<UdapDynamicClientRegistrationErrorResponse>();
         Assert.NotNull(errorResult);
-        Assert.Equal("invalid_client_metadata", errorResult!.Error);
+        Assert.Equal("invalid_client_metadata", errorResult.Error);
         Assert.Equal("software_statement replayed", errorResult.ErrorDescription);
         
     }

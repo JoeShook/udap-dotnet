@@ -97,7 +97,7 @@ public class UdapDynamicClientRegistrationDocumentTest
         Assert.Equal(UdapConstants.RegistrationDocumentValues.TokenEndpointAuthMethodValue, documentDeserialize.TokenEndpointAuthMethod);
         Assert.Equal(document.Scope, documentDeserialize.Scope);
         Assert.Equal(document.LogoUri, documentDeserialize.LogoUri);
-        Assert.Equal(1, documentDeserialize.GrantTypes!.Count);
+        Assert.Single(documentDeserialize.GrantTypes!);
         Assert.Equal(document.SoftwareStatement, documentDeserialize.SoftwareStatement); //echo back software statement
         Assert.Empty(documentDeserialize.ResponseTypes!);
         Assert.Equal("Testing 123", documentDeserialize["MyClaim"].ToString());

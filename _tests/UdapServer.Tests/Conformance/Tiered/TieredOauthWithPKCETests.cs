@@ -527,7 +527,7 @@ public class TieredOauthWithPKCETests
         Assert.StartsWith("https://idpserver/connect/authorize", backChannelChallengeResponse.Headers.Location!.AbsoluteUri);
         
         // _testOutputHelper.WriteLine(backChannelChallengeResponse.Headers.Location!.AbsoluteUri);
-        Assert.NotEmpty(QueryHelpers.ParseQuery(backChannelChallengeResponse.Headers.Location.Query).Single(p => p.Key == "client_id").Value);
+        Assert.True(QueryHelpers.ParseQuery(backChannelChallengeResponse.Headers.Location.Query).Single(p => p.Key == "client_id").Value.Count > 0);
         var backChannelState = QueryHelpers.ParseQuery(backChannelChallengeResponse.Headers.Location.Query).Single(p => p.Key == "state").Value.ToString();
         Assert.False(string.IsNullOrEmpty(backChannelState));
         
@@ -557,7 +557,7 @@ public class TieredOauthWithPKCETests
         Assert.NotNull(authorizeCallbackResult.Headers.Location);
         Assert.StartsWith("https://server/federation/udap-tiered/signin?", authorizeCallbackResult.Headers.Location!.AbsoluteUri);
 
-        Assert.NotEmpty(QueryHelpers.ParseQuery(authorizeCallbackResult.Headers.Location.Query).Single(p => p.Key == "code").Value);
+        Assert.True(QueryHelpers.ParseQuery(authorizeCallbackResult.Headers.Location.Query).Single(p => p.Key == "code").Value.Count > 0);
 
         //
         // Validate backchannel state is the same
@@ -829,7 +829,7 @@ public class TieredOauthWithPKCETests
         Assert.StartsWith("https://idpserver2/connect/authorize", backChannelChallengeResponse.Headers.Location!.AbsoluteUri);
 
         // _testOutputHelper.WriteLine(backChannelChallengeResponse.Headers.Location!.AbsoluteUri);
-        Assert.NotEmpty(QueryHelpers.ParseQuery(backChannelChallengeResponse.Headers.Location.Query).Single(p => p.Key == "client_id").Value);
+        Assert.True(QueryHelpers.ParseQuery(backChannelChallengeResponse.Headers.Location.Query).Single(p => p.Key == "client_id").Value.Count > 0);
         var backChannelState = QueryHelpers.ParseQuery(backChannelChallengeResponse.Headers.Location.Query).Single(p => p.Key == "state").Value.ToString();
         Assert.False(string.IsNullOrEmpty(backChannelState));
 
@@ -1137,7 +1137,7 @@ public class TieredOauthWithPKCETests
         Assert.StartsWith("https://idpserver2/connect/authorize", backChannelChallengeResponse.Headers.Location!.AbsoluteUri);
 
         // _testOutputHelper.WriteLine(backChannelChallengeResponse.Headers.Location!.AbsoluteUri);
-        Assert.NotEmpty(QueryHelpers.ParseQuery(backChannelChallengeResponse.Headers.Location.Query).Single(p => p.Key == "client_id").Value);
+        Assert.True(QueryHelpers.ParseQuery(backChannelChallengeResponse.Headers.Location.Query).Single(p => p.Key == "client_id").Value.Count > 0);
         var backChannelState = QueryHelpers.ParseQuery(backChannelChallengeResponse.Headers.Location.Query).Single(p => p.Key == "state").Value.ToString();
         Assert.False(string.IsNullOrEmpty(backChannelState));
 
@@ -1443,7 +1443,7 @@ public class TieredOauthWithPKCETests
         Assert.NotNull(authorizeCallbackResult.Headers.Location);
         Assert.StartsWith("https://server/federation/udap-tiered/signin?", authorizeCallbackResult.Headers.Location!.AbsoluteUri);
 
-        Assert.NotEmpty(QueryHelpers.ParseQuery(authorizeCallbackResult.Headers.Location.Query).Single(p => p.Key == "code").Value);
+        Assert.True(QueryHelpers.ParseQuery(authorizeCallbackResult.Headers.Location.Query).Single(p => p.Key == "code").Value.Count > 0);
 
         Assert.Equal(_mockAuthorServerPipeline.GetClientState(authorizeCallbackResult), backChannelState, StringComparer.OrdinalIgnoreCase);
         Assert.NotEqual(backChannelState, clientState);

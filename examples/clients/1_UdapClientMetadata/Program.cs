@@ -100,7 +100,7 @@ Other --community options to try against the https://fhirlabs.net/fhir/r4 baseUr
 
         string? community = options.Community;
 
-        udapClient.Problem += element => logger.LogWarning(element.ChainElementStatus.Summarize(TrustChainValidator.DefaultProblemFlags));
+        udapClient.Problem += element => logger.LogWarning(element.Problems.Summarize(TrustChainValidator.DefaultProblemFlags));
         udapClient.Untrusted += certificate2 => logger.LogWarning("Untrusted: " + certificate2.Subject);
         udapClient.TokenError += message => logger.LogWarning("TokenError: " + message);
 
