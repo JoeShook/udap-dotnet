@@ -61,11 +61,19 @@ public class TieredOauthTests
     public TieredOauthTests(ITestOutputHelper testOutputHelper)
     {
         _testOutputHelper = testOutputHelper;
+#if NET9_0_OR_GREATER
+        _community1Anchor = X509CertificateLoader.LoadCertificateFromFile("CertStore/anchors/caLocalhostCert.cer");
+        _community1IntermediateCert = X509CertificateLoader.LoadCertificateFromFile("CertStore/intermediates/intermediateLocalhostCert.cer");
+
+        _community2Anchor = X509CertificateLoader.LoadCertificateFromFile("CertStore/anchors/caLocalhostCert2.cer");
+        _community2IntermediateCert = X509CertificateLoader.LoadCertificateFromFile("CertStore/intermediates/intermediateLocalhostCert2.cer");
+#else
         _community1Anchor = new X509Certificate2("CertStore/anchors/caLocalhostCert.cer");
         _community1IntermediateCert = new X509Certificate2("CertStore/intermediates/intermediateLocalhostCert.cer");
 
         _community2Anchor = new X509Certificate2("CertStore/anchors/caLocalhostCert2.cer");
         _community2IntermediateCert = new X509Certificate2("CertStore/intermediates/intermediateLocalhostCert2.cer");
+#endif
     }
 
     private void BuildUdapAuthorizationServer(List<string>? tieredOAuthScopes = null)
@@ -1220,7 +1228,11 @@ public class TieredOauthTests
 
     private async Task<UdapDynamicClientRegistrationDocument?> RegisterClientWithAuthServer()
     {
+#if NET9_0_OR_GREATER
+        var clientCert = X509CertificateLoader.LoadPkcs12FromFile("CertStore/issued/fhirLabsApiClientLocalhostCert.pfx", "udap-test");
+#else
         var clientCert = new X509Certificate2("CertStore/issued/fhirLabsApiClientLocalhostCert.pfx", "udap-test");
+#endif
 
         var udapClient = _mockAuthorServerPipeline.Resolve<IUdapClient>();
 

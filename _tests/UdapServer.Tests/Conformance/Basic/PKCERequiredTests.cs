@@ -48,8 +48,13 @@ public class PKCERequiredTests
     public PKCERequiredTests(ITestOutputHelper testOutputHelper)
     {
         _testOutputHelper = testOutputHelper;
+#if NET9_0_OR_GREATER
+        var sureFhirLabsAnchor = X509CertificateLoader.LoadCertificateFromFile("CertStore/anchors/SureFhirLabs_CA.cer");
+        var intermediateCert = X509CertificateLoader.LoadCertificateFromFile("CertStore/intermediates/SureFhirLabs_Intermediate.cer");
+#else
         var sureFhirLabsAnchor = new X509Certificate2("CertStore/anchors/SureFhirLabs_CA.cer");
         var intermediateCert = new X509Certificate2("CertStore/intermediates/SureFhirLabs_Intermediate.cer");
+#endif
 
         _mockPipeline.OnPostConfigureServices += s =>
         {
@@ -135,7 +140,11 @@ public class PKCERequiredTests
     [Fact]
     public async Task AuthorizeWithPKCSE_accepted()
     {
+#if NET9_0_OR_GREATER
+        var clientCert = X509CertificateLoader.LoadPkcs12FromFile("CertStore/issued/fhirlabs.net.client.pfx", "udap-test");
+#else
         var clientCert = new X509Certificate2("CertStore/issued/fhirlabs.net.client.pfx", "udap-test");
+#endif
 
         var signedSoftwareStatement = UdapDcrBuilderForAuthorizationCode
             .Create(clientCert)
@@ -254,7 +263,11 @@ public class PKCERequiredTests
     [Fact]
     public async Task AuthorizeWithPKCSE_Missing_code_challenge()
     {
+#if NET9_0_OR_GREATER
+        var clientCert = X509CertificateLoader.LoadPkcs12FromFile("CertStore/issued/fhirlabs.net.client.pfx", "udap-test");
+#else
         var clientCert = new X509Certificate2("CertStore/issued/fhirlabs.net.client.pfx", "udap-test");
+#endif
 
         var signedSoftwareStatement = UdapDcrBuilderForAuthorizationCode
             .Create(clientCert)
@@ -324,7 +337,11 @@ public class PKCERequiredTests
     [Fact]
     public async Task AuthorizeWithPKCSE_Invalid_code_verifier()
     {
+#if NET9_0_OR_GREATER
+        var clientCert = X509CertificateLoader.LoadPkcs12FromFile("CertStore/issued/fhirlabs.net.client.pfx", "udap-test");
+#else
         var clientCert = new X509Certificate2("CertStore/issued/fhirlabs.net.client.pfx", "udap-test");
+#endif
 
         var signedSoftwareStatement = UdapDcrBuilderForAuthorizationCode
             .Create(clientCert)

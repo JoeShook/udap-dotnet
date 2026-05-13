@@ -121,7 +121,11 @@ public class UdapControllerMultiHostTest : IClassFixture<ApiForCommunityTestFixt
 
             // Verify signing cert SAN matches the base URL
             var x5cArray = jwt.Header["x5c"] as List<object>;
+#if NET9_0_OR_GREATER
+            var cert = X509CertificateLoader.LoadCertificate(Convert.FromBase64String(x5cArray!.First().ToString()!));
+#else
             var cert = new X509Certificate2(Convert.FromBase64String(x5cArray!.First().ToString()!));
+#endif
             var subjectAltName = cert.GetNameInfo(X509NameType.UrlName, false);
             Assert.Equal(baseUrl, subjectAltName);
 

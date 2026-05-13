@@ -273,7 +273,7 @@ public class CrlGenerationService
         if (ca.EncryptedPfxBytes == null)
             throw new InvalidOperationException($"CA '{ca.Name}' has no PFX key available for local signing.");
 
-        using var x509Ca = new X509Certificate2(ca.EncryptedPfxBytes, ca.PfxPassword,
+        using var x509Ca = X509CertificateLoader.LoadPkcs12(ca.EncryptedPfxBytes, ca.PfxPassword,
             X509KeyStorageFlags.Exportable | X509KeyStorageFlags.EphemeralKeySet);
 
         var bouncyCaCert = DotNetUtilities.FromX509Certificate(x509Ca);

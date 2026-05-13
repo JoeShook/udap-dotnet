@@ -264,7 +264,7 @@ public class CertificateImportServiceTests
     private static ParsedCertificate CreateParsedRootCaFrom(
         X509Certificate2 existingCert, bool hasPrivateKey = false)
     {
-        var cert = new X509Certificate2(existingCert.RawData);
+        var cert = X509CertificateLoader.LoadCertificate(existingCert.RawData);
 
         return new ParsedCertificate
         {

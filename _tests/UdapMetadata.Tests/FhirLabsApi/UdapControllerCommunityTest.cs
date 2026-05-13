@@ -426,7 +426,11 @@ public class UdapControllerCommunityTest : IClassFixture<ApiForCommunityTestFixt
 
         var tokenHeader = jwt.Header;
         var x5CArray = tokenHeader["x5c"] as List<object>;
+#if NET9_0_OR_GREATER
+        var cert = X509CertificateLoader.LoadCertificate(Convert.FromBase64String(x5CArray!.First().ToString()!));
+#else
         var cert = new X509Certificate2(Convert.FromBase64String(x5CArray!.First().ToString()!));
+#endif
         var subjectAltName = cert.GetNameInfo(X509NameType.UrlName, false);
         Assert.Equal(issClaim.Value, subjectAltName);
 
@@ -516,12 +520,20 @@ public async Task ValidateChainWithMyAnchorAndIntermediateTest()
         {
             AnchorCertificates = new HashSet<Anchor>
             {
+#if NET9_0_OR_GREATER
+                new Anchor(X509CertificateLoader.LoadCertificateFromFile("./CertStore/anchors/caLocalhostCert2.cer"))
+#else
                 new Anchor(new X509Certificate2("./CertStore/anchors/caLocalhostCert2.cer"))
+#endif
                 {
                     //TODO:  Implement a ICertificateResolver, injected into TrustChainValidator to follow AIA extensions, resolving intermediate certificates
                     Intermediates =
                     [
+#if NET9_0_OR_GREATER
+                        new Intermediate(X509CertificateLoader.LoadCertificateFromFile("./CertStore/intermediates/intermediateLocalhostCert2.cer"))
+#else
                         new Intermediate(new X509Certificate2("./CertStore/intermediates/intermediateLocalhostCert2.cer"))
+#endif
                     ]
                 }
             }
@@ -589,7 +601,11 @@ public async Task ValidateChainWithMyAnchorTest()
             {
                 AnchorCertificates = new HashSet<Anchor>
                 {
+#if NET9_0_OR_GREATER
+                    new Anchor(X509CertificateLoader.LoadCertificateFromFile("./CertStore/anchors/caLocalhostCert2.cer"))
+#else
                     new Anchor(new X509Certificate2("./CertStore/anchors/caLocalhostCert2.cer"))
+#endif
                     // No intermediate and no way to load it because this test cert has no AIA extension to follow.
                     // ************* DRAGONS ***********************
                     // Watch out for the intermediate getting cached now that I have Udap.Certificate.Server running for integration work.
@@ -668,6 +684,15 @@ public async Task ValidateChainWithMyAnchorAndIntermediateFailTest()
             {
                 AnchorCertificates = new HashSet<Anchor>
                 {
+#if NET9_0_OR_GREATER
+                    new Anchor(X509CertificateLoader.LoadCertificateFromFile("./CertStore/anchors/caLocalhostCert.cer"), "udap://Provider2")
+                    {
+                        Intermediates =
+                        [
+                            new Intermediate(X509CertificateLoader.LoadCertificateFromFile("./CertStore/intermediates/intermediateLocalhostCert.cer"))
+                        ]
+                    }
+#else
                     new Anchor(new X509Certificate2("./CertStore/anchors/caLocalhostCert.cer"), "udap://Provider2")
                     {
                         Intermediates =
@@ -675,6 +700,7 @@ public async Task ValidateChainWithMyAnchorAndIntermediateFailTest()
                             new Intermediate(new X509Certificate2("./CertStore/intermediates/intermediateLocalhostCert.cer"))
                         ]
                     }
+#endif
                 }
             });
 
@@ -750,7 +776,11 @@ public async Task ValidateChainWithMyAnchorFailTest()
             {
                 AnchorCertificates = new HashSet<Anchor>
                 {
+#if NET9_0_OR_GREATER
+                    new Anchor(X509CertificateLoader.LoadCertificateFromFile("./CertStore/anchors/caLocalhostCert.cer"))
+#else
                     new Anchor(new X509Certificate2("./CertStore/anchors/caLocalhostCert.cer"))
+#endif
                 }
             });
 

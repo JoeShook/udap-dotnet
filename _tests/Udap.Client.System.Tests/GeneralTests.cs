@@ -190,7 +190,11 @@ namespace Udap.Client.System.Tests
             // _testOutputHelper.WriteLine(tokenHeader.X5c);
             var x5CArray = JsonNode.Parse(tokenHeader.X5c)?.AsArray()!;
 
+#if NET9_0_OR_GREATER
+            var cert = X509CertificateLoader.LoadCertificate(Convert.FromBase64String(x5CArray.First()!.ToString()));
+#else
             var cert = new X509Certificate2(Convert.FromBase64String(x5CArray.First()!.ToString()));
+#endif
             var tokenHandler = new JwtSecurityTokenHandler();
 
             tokenHandler.ValidateToken(metadata.SignedMetadata, new TokenValidationParameters
@@ -254,7 +258,11 @@ namespace Udap.Client.System.Tests
             // _testOutputHelper.WriteLine(tokenHeader.X5c);
             var x5CArray = JsonNode.Parse(tokenHeader.X5c)?.AsArray()!;
             
+#if NET9_0_OR_GREATER
+            var cert = X509CertificateLoader.LoadCertificate(Convert.FromBase64String(x5CArray.First()!.ToString()));
+#else
             var cert = new X509Certificate2(Convert.FromBase64String(x5CArray.First()!.ToString()));
+#endif
             var tokenHandler = new JwtSecurityTokenHandler();
             
             tokenHandler.ValidateToken(metadata.SignedMetadata, new TokenValidationParameters

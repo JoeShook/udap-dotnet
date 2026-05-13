@@ -150,7 +150,7 @@ public class CertificateExportServiceTests : IDisposable
         var derBytes = Convert.FromBase64String(result.Pem!);
         derBytes.Should().NotBeEmpty();
 
-        using var roundTripped = new X509Certificate2(derBytes);
+        using var roundTripped = X509CertificateLoader.LoadCertificate(derBytes);
         roundTripped.Thumbprint.Should().Be(cert.Thumbprint);
         cert.Dispose();
     }

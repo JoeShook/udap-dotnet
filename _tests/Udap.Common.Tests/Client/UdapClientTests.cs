@@ -15,7 +15,6 @@ using Microsoft.Extensions.Options;
 using NSubstitute;
 using System.IdentityModel.Tokens.Jwt;
 using System.Net;
-using System.Security.Cryptography.X509Certificates;
 using System.Text.Json;
 using Udap.Client.Client;
 using Udap.Client.Configuration;
@@ -24,7 +23,6 @@ using Udap.Common.Metadata;
 using Udap.Model;
 using Udap.Support.Tests.Client;
 using Xunit.Abstractions;
-using Xunit.Sdk;
 
 namespace Udap.Common.Tests.Client;
 
@@ -101,7 +99,7 @@ public class UdapClientTests
         Assert.False(string.IsNullOrEmpty(hl7B2B));
 
 
-        Assert.Contains("hl7-b2b", disco.UdapAuthorizationExtensionsRequired);
+        Assert.Contains("hl7-b2b", disco.UdapAuthorizationExtensionsRequired!);
 
 
         var certificationsSupported = disco.UdapCertificationsSupported!.SingleOrDefault(c => c == "http://MyUdapCertification");
@@ -268,13 +266,13 @@ public class UdapClientTests
         Assert.True(disco.IsError, disco.Raw);
         Assert.NotNull(udapClient.UdapServerMetaData);
         Assert.True(_diagnosticsValidator.TokenErrorCalled);
-        Assert.True(_diagnosticsValidator.ActualErrorMessages.Any(m => m.Contains("Failed JWT Validation")));
+        Assert.Contains(_diagnosticsValidator.ActualErrorMessages, m => m.Contains("Failed JWT Validation"));
         // https://san.mismatch.fhirlabs.net/fhir/r4 is the subject alt used to sign software statement
-        Assert.True(_diagnosticsValidator.ActualErrorMessages.Any(m => m.Contains("https://san.mismatch.fhirlabs.net/fhir/r4")));
+        Assert.Contains(_diagnosticsValidator.ActualErrorMessages, m => m.Contains("https://san.mismatch.fhirlabs.net/fhir/r4"));
     }
 
     [Fact]
-    public async Task InvalidJwtTokentBadIssMatchToBaseUrlTest()
+    public async Task InvalidJwtTokenBadIssMatchToBaseUrlTest()
     {
         var (httpClientMock, udapClientDiscoveryValidator, udapClientIOptions, trustAnchorStore) = await BuildClientSupport("http://fhirlabs.net/IssMismatchToBaseUrl/r4", "udap://Iss.Mismatch.To.BaseUrl/");
 
@@ -290,7 +288,7 @@ public class UdapClientTests
         Assert.True(disco.IsError, disco.Raw);
         Assert.NotNull(udapClient.UdapServerMetaData);
         Assert.True(_diagnosticsValidator.TokenErrorCalled);
-        Assert.True(_diagnosticsValidator.ActualErrorMessages.Any(m => m.Contains("JWT iss does not match baseUrl.")));
+        Assert.Contains(_diagnosticsValidator.ActualErrorMessages, m => m.Contains("JWT iss does not match baseUrl."));
     }
 
     // [Fact]

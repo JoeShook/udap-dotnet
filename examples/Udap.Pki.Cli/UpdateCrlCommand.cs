@@ -87,7 +87,7 @@ public class UpdateCrlCommand : AsyncCommand<UpdateCrlSettings>
         caP12Stream.Position = 0;
 
         // Load CA certificate
-        var caCert = new X509Certificate2(caP12Stream.ToArray(), password, X509KeyStorageFlags.Exportable);
+        var caCert = X509CertificateLoader.LoadPkcs12(caP12Stream.ToArray(), password, X509KeyStorageFlags.Exportable);
 
         // Download CRL
         using var crlStream = new MemoryStream();

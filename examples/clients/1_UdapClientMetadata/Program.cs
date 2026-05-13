@@ -88,7 +88,7 @@ Other --community options to try against the https://fhirlabs.net/fhir/r4 baseUr
         TrustAnchorMemoryStore? trustAnchorStore = null;
         if (!string.IsNullOrEmpty(options.TrustAnchor))
         {
-            var anchorCert = new X509Certificate2(options.TrustAnchor);
+            var anchorCert = X509CertificateLoader.LoadCertificateFromFile(options.TrustAnchor);
             trustAnchorStore = new TrustAnchorMemoryStore()
             {
                 AnchorCertificates = new HashSet<Anchor>
