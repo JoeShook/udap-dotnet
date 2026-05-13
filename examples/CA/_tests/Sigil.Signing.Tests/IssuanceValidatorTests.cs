@@ -8,7 +8,7 @@
 // */
 #endregion
 
-using FluentAssertions;
+using Shouldly;
 using Sigil.Common.Data.Entities;
 using Sigil.Common.Validators;
 
@@ -26,7 +26,7 @@ public class IssuanceValidatorTests
 
         var warnings = _validator.CompareTemplateUrls(original, [], template, []);
 
-        warnings.Should().BeEmpty();
+        warnings.ShouldBeEmpty();
     }
 
     [Fact]
@@ -36,9 +36,9 @@ public class IssuanceValidatorTests
             [], [],
             ["https://new.com/crls/CA.crl"], []);
 
-        warnings.Should().ContainSingle();
-        warnings[0].Category.Should().Be("CDP");
-        warnings[0].Message.Should().Contain("added");
+        warnings.ShouldHaveSingleItem();
+        warnings[0].Category.ShouldBe("CDP");
+        warnings[0].Message.ShouldContain("added");
     }
 
     [Fact]
@@ -48,9 +48,9 @@ public class IssuanceValidatorTests
             ["https://old.com/crls/CA.crl"], [],
             [], []);
 
-        warnings.Should().ContainSingle();
-        warnings[0].Category.Should().Be("CDP");
-        warnings[0].Message.Should().Contain("removed");
+        warnings.ShouldHaveSingleItem();
+        warnings[0].Category.ShouldBe("CDP");
+        warnings[0].Message.ShouldContain("removed");
     }
 
     [Fact]
@@ -60,9 +60,9 @@ public class IssuanceValidatorTests
             [], ["https://old.com/certs/CA.cer"],
             [], ["https://new.com/certs/CA.cer"]);
 
-        warnings.Should().HaveCount(2);
-        warnings.Should().Contain(w => w.Message.Contains("removed"));
-        warnings.Should().Contain(w => w.Message.Contains("added"));
+        warnings.Count.ShouldBe(2);
+        warnings.ShouldContain(w => w.Message.Contains("removed"));
+        warnings.ShouldContain(w => w.Message.Contains("added"));
     }
 
     [Fact]
@@ -72,7 +72,7 @@ public class IssuanceValidatorTests
             ["HTTPS://PKI.EXAMPLE.COM/crls/CA.crl"], [],
             ["https://pki.example.com/crls/CA.crl"], []);
 
-        warnings.Should().BeEmpty();
+        warnings.ShouldBeEmpty();
     }
 
     [Fact]
@@ -82,9 +82,9 @@ public class IssuanceValidatorTests
             ["https://old.com/crls/CA.crl"], ["https://old.com/certs/CA.cer"],
             ["https://new.com/crls/CA.crl"], ["https://new.com/certs/CA.cer"]);
 
-        warnings.Should().HaveCount(4);
-        warnings.Count(w => w.Category == "CDP").Should().Be(2);
-        warnings.Count(w => w.Category == "AIA").Should().Be(2);
+        warnings.Count.ShouldBe(4);
+        warnings.Count(w => w.Category == "CDP").ShouldBe(2);
+        warnings.Count(w => w.Category == "AIA").ShouldBe(2);
     }
 
     [Fact]
@@ -101,8 +101,7 @@ public class IssuanceValidatorTests
             ["https://pki.example.com"],
             "Root-CA");
 
-        result.Should().ContainSingle()
-            .Which.Should().Be("https://pki.example.com/crls/Root-CA.crl");
+        result.ShouldHaveSingleItem().ShouldBe("https://pki.example.com/crls/Root-CA.crl");
     }
 
     [Fact]
@@ -119,8 +118,7 @@ public class IssuanceValidatorTests
             ["https://pki.example.com"],
             "Root-CA");
 
-        result.Should().ContainSingle()
-            .Which.Should().Be("https://pki.example.com/certs/Root-CA.cer");
+        result.ShouldHaveSingleItem().ShouldBe("https://pki.example.com/certs/Root-CA.cer");
     }
 
     [Fact]
@@ -137,8 +135,7 @@ public class IssuanceValidatorTests
             ["https://pki.example.com"],
             "Intermediate");
 
-        result.Should().ContainSingle()
-            .Which.Should().Be("https://pki.example.com/crls/Intermediate.crl");
+        result.ShouldHaveSingleItem().ShouldBe("https://pki.example.com/crls/Intermediate.crl");
     }
 
     [Fact]
@@ -152,7 +149,7 @@ public class IssuanceValidatorTests
 
         var result = _validator.ExpandCdpTemplates(template, ["https://pki.example.com"], "CA");
 
-        result.Should().BeEmpty();
+        result.ShouldBeEmpty();
     }
 
     [Fact]
@@ -169,9 +166,9 @@ public class IssuanceValidatorTests
             ["https://a.com", "https://b.com"],
             "CA");
 
-        result.Should().HaveCount(2);
-        result[0].Should().Be("https://a.com/crls/CA.crl");
-        result[1].Should().Be("https://b.com/crls/CA.crl");
+        result.Count.ShouldBe(2);
+        result[0].ShouldBe("https://a.com/crls/CA.crl");
+        result[1].ShouldBe("https://b.com/crls/CA.crl");
     }
 
     [Fact]
@@ -185,8 +182,7 @@ public class IssuanceValidatorTests
 
         var result = _validator.ExpandCdpTemplates(template, [], "My-CA");
 
-        result.Should().ContainSingle()
-            .Which.Should().Contain("My-CA.crl");
+        result.ShouldHaveSingleItem().ShouldContain("My-CA.crl");
     }
 
     [Fact]
@@ -199,7 +195,7 @@ public class IssuanceValidatorTests
 
         var result = _validator.FindSupersededCaIds(cas);
 
-        result.Should().BeEmpty();
+        result.ShouldBeEmpty();
     }
 
     [Fact]
@@ -213,7 +209,7 @@ public class IssuanceValidatorTests
 
         var result = _validator.FindSupersededCaIds(cas);
 
-        result.Should().ContainSingle().Which.Should().Be(1);
+        result.ShouldHaveSingleItem().ShouldBe(1);
     }
 
     [Fact]
@@ -227,7 +223,7 @@ public class IssuanceValidatorTests
 
         var result = _validator.FindSupersededCaIds(cas);
 
-        result.Should().BeEmpty();
+        result.ShouldBeEmpty();
     }
 
     [Fact]
@@ -241,7 +237,7 @@ public class IssuanceValidatorTests
 
         var result = _validator.FindSupersededCaIds(cas);
 
-        result.Should().BeEmpty();
+        result.ShouldBeEmpty();
     }
 
     [Fact]
@@ -255,7 +251,7 @@ public class IssuanceValidatorTests
 
         var result = _validator.FindSupersededCaIds(cas);
 
-        result.Should().BeEmpty();
+        result.ShouldBeEmpty();
     }
 
     [Fact]
@@ -270,9 +266,9 @@ public class IssuanceValidatorTests
 
         var result = _validator.FindSupersededCaIds(cas);
 
-        result.Should().HaveCount(2);
-        result.Should().Contain(1);
-        result.Should().Contain(2);
+        result.Count.ShouldBe(2);
+        result.ShouldContain(1);
+        result.ShouldContain(2);
     }
 
     [Fact]
@@ -286,6 +282,6 @@ public class IssuanceValidatorTests
 
         var result = _validator.FindSupersededCaIds(cas);
 
-        result.Should().ContainSingle().Which.Should().Be(1);
+        result.ShouldHaveSingleItem().ShouldBe(1);
     }
 }

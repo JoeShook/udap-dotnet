@@ -10,7 +10,7 @@
 
 using System.Security.Cryptography;
 using System.Security.Cryptography.X509Certificates;
-using FluentAssertions;
+using Shouldly;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging.Abstractions;
 using Sigil.Common.Data;
@@ -35,13 +35,13 @@ public class CertificateImportServiceTests
 
         var result = await service.ImportParsedCertificateAsync(parsed, communityId);
 
-        result.Success.Should().BeTrue();
-        result.AlreadyExists.Should().BeFalse();
+        result.Success.ShouldBeTrue();
+        result.AlreadyExists.ShouldBeFalse();
 
         await using var db = _dbFactory.CreateDbContext();
         var ca = await db.CaCertificates.FirstOrDefaultAsync(c => c.CommunityId == communityId);
-        ca.Should().NotBeNull();
-        ca!.Subject.Should().Contain("Root");
+        ca.ShouldNotBeNull();
+        ca!.Subject.ShouldContain("Root");
         parsed.Certificate.Dispose();
     }
 
@@ -55,12 +55,12 @@ public class CertificateImportServiceTests
         var result = await service.ImportParsedCertificateAsync(
             parsed, communityId, issuingCaId: caId);
 
-        result.Success.Should().BeTrue();
+        result.Success.ShouldBeTrue();
 
         await using var db = _dbFactory.CreateDbContext();
         var issued = await db.IssuedCertificates.FirstOrDefaultAsync();
-        issued.Should().NotBeNull();
-        issued!.IssuingCaCertificateId.Should().Be(caId);
+        issued.ShouldNotBeNull();
+        issued!.IssuingCaCertificateId.ShouldBe(caId);
         parsed.Certificate.Dispose();
     }
 
@@ -73,8 +73,8 @@ public class CertificateImportServiceTests
 
         var result = await service.ImportParsedCertificateAsync(parsed, communityId);
 
-        result.NeedsCaSelection.Should().BeTrue();
-        result.Success.Should().BeFalse();
+        result.NeedsCaSelection.ShouldBeTrue();
+        result.Success.ShouldBeFalse();
         parsed.Certificate.Dispose();
     }
 
@@ -86,18 +86,18 @@ public class CertificateImportServiceTests
 
         var parsed1 = CreateParsedRootCa();
         var result1 = await service.ImportParsedCertificateAsync(parsed1, communityId);
-        result1.Success.Should().BeTrue();
+        result1.Success.ShouldBeTrue();
 
         // Import the same cert again — should merge, not duplicate
         var parsed2 = CreateParsedRootCaFrom(parsed1.Certificate);
         var result2 = await service.ImportParsedCertificateAsync(parsed2, communityId);
 
-        result2.Success.Should().BeTrue();
-        result2.AlreadyExists.Should().BeTrue();
+        result2.Success.ShouldBeTrue();
+        result2.AlreadyExists.ShouldBeTrue();
 
         await using var db = _dbFactory.CreateDbContext();
         var count = await db.CaCertificates.CountAsync(c => c.CommunityId == communityId);
-        count.Should().Be(1);
+        count.ShouldBe(1);
 
         parsed1.Certificate.Dispose();
         parsed2.Certificate.Dispose();
@@ -118,13 +118,13 @@ public class CertificateImportServiceTests
         var result = await service.ImportParsedCertificateAsync(
             parsed2, communityId, password: "pass", rawFileOverride: pfxBytes);
 
-        result.Success.Should().BeTrue();
-        result.AlreadyExists.Should().BeTrue();
+        result.Success.ShouldBeTrue();
+        result.AlreadyExists.ShouldBeTrue();
 
         await using var db = _dbFactory.CreateDbContext();
         var ca = await db.CaCertificates.FirstAsync(c => c.Thumbprint == parsed1.Certificate.Thumbprint);
-        ca.EncryptedPfxBytes.Should().NotBeNull();
-        ca.PfxPassword.Should().Be("pass");
+        ca.EncryptedPfxBytes.ShouldNotBeNull();
+        ca.PfxPassword.ShouldBe("pass");
 
         parsed1.Certificate.Dispose();
         parsed2.Certificate.Dispose();
@@ -140,7 +140,7 @@ public class CertificateImportServiceTests
         var result = await service.ImportParsedCertificateAsync(
             parsed, communityId, name: "My Custom CA");
 
-        result.ImportedName.Should().Be("My Custom CA");
+        result.ImportedName.ShouldBe("My Custom CA");
         parsed.Certificate.Dispose();
     }
 
@@ -154,13 +154,13 @@ public class CertificateImportServiceTests
         var result = await service.ImportParsedCertificateAsync(
             parsed, communityId, issuingCaId: caId);
 
-        result.Success.Should().BeTrue();
+        result.Success.ShouldBeTrue();
 
         await using var db = _dbFactory.CreateDbContext();
         var intermediate = await db.CaCertificates
             .FirstOrDefaultAsync(c => c.Thumbprint == parsed.Certificate.Thumbprint);
-        intermediate.Should().NotBeNull();
-        intermediate!.ParentId.Should().Be(caId);
+        intermediate.ShouldNotBeNull();
+        intermediate!.ParentId.ShouldBe(caId);
         parsed.Certificate.Dispose();
     }
 

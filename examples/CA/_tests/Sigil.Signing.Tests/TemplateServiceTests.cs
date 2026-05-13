@@ -8,7 +8,7 @@
 // */
 #endregion
 
-using FluentAssertions;
+using Shouldly;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging.Abstractions;
 using Sigil.Common.Data;
@@ -31,7 +31,7 @@ public class TemplateServiceTests
 
         var result = await service.GetAllAsync();
 
-        result.Should().BeEmpty();
+        result.ShouldBeEmpty();
     }
 
     [Fact]
@@ -49,8 +49,8 @@ public class TemplateServiceTests
 
         var saved = await service.SaveAsync(template);
 
-        saved.Id.Should().BeGreaterThan(0);
-        saved.Name.Should().Be("Test Template");
+        saved.Id.ShouldBeGreaterThan(0);
+        saved.Name.ShouldBe("Test Template");
     }
 
     [Fact]
@@ -79,9 +79,9 @@ public class TemplateServiceTests
         await service.SaveAsync(updated);
 
         var all = await service.GetAllAsync();
-        all.Should().ContainSingle();
-        all[0].Name.Should().Be("Updated");
-        all[0].KeySize.Should().Be(4096);
+        all.ShouldHaveSingleItem();
+        all[0].Name.ShouldBe("Updated");
+        all[0].KeySize.ShouldBe(4096);
     }
 
     [Fact]
@@ -100,7 +100,7 @@ public class TemplateServiceTests
         await service.DeleteAsync(saved.Id);
 
         var all = await service.GetAllAsync();
-        all.Should().BeEmpty();
+        all.ShouldBeEmpty();
     }
 
     [Fact]
@@ -120,12 +120,12 @@ public class TemplateServiceTests
 
         var service = CreateService();
         var all = await service.GetAllAsync();
-        all.Should().ContainSingle();
+        all.ShouldHaveSingleItem();
 
         await service.DeleteAsync(all[0].Id);
 
         var afterDelete = await service.GetAllAsync();
-        afterDelete.Should().ContainSingle();
+        afterDelete.ShouldHaveSingleItem();
     }
 
     [Fact]
@@ -156,9 +156,9 @@ public class TemplateServiceTests
         await db.SaveChangesAsync();
 
         var all = await service.GetAllAsync();
-        all.Should().HaveCount(3);
-        all[0].IsPreset.Should().BeTrue();
-        all[1].Name.Should().Be("Alpha");
-        all[2].Name.Should().Be("Zebra");
+        all.Count.ShouldBe(3);
+        all[0].IsPreset.ShouldBeTrue();
+        all[1].Name.ShouldBe("Alpha");
+        all[2].Name.ShouldBe("Zebra");
     }
 }

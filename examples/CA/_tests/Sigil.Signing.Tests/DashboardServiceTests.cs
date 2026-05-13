@@ -10,7 +10,7 @@
 
 using System.Security.Cryptography;
 using System.Security.Cryptography.X509Certificates;
-using FluentAssertions;
+using Shouldly;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging.Abstractions;
 using Sigil.Common.Data;
@@ -33,15 +33,15 @@ public class DashboardServiceTests
 
         var data = await service.GetDashboardAsync();
 
-        data.CommunityCount.Should().Be(0);
-        data.CaCertCount.Should().Be(0);
-        data.IssuedCertCount.Should().Be(0);
-        data.TemplateCount.Should().Be(0);
-        data.RevokedCertCount.Should().Be(0);
-        data.CommunitySummaries.Should().BeEmpty();
-        data.ExpiringCerts.Should().BeEmpty();
-        data.ExpiredCerts.Should().BeEmpty();
-        data.OverdueCrls.Should().BeEmpty();
+        data.CommunityCount.ShouldBe(0);
+        data.CaCertCount.ShouldBe(0);
+        data.IssuedCertCount.ShouldBe(0);
+        data.TemplateCount.ShouldBe(0);
+        data.RevokedCertCount.ShouldBe(0);
+        data.CommunitySummaries.ShouldBeEmpty();
+        data.ExpiringCerts.ShouldBeEmpty();
+        data.ExpiredCerts.ShouldBeEmpty();
+        data.OverdueCrls.ShouldBeEmpty();
     }
 
     [Fact]
@@ -52,9 +52,9 @@ public class DashboardServiceTests
 
         var data = await service.GetDashboardAsync();
 
-        data.CommunityCount.Should().Be(1);
-        data.CaCertCount.Should().Be(1);
-        data.IssuedCertCount.Should().Be(1);
+        data.CommunityCount.ShouldBe(1);
+        data.CaCertCount.ShouldBe(1);
+        data.IssuedCertCount.ShouldBe(1);
     }
 
     [Fact]
@@ -65,7 +65,7 @@ public class DashboardServiceTests
 
         var data = await service.GetDashboardAsync();
 
-        data.ExpiredCerts.Should().ContainSingle(c => c.CertType == "CA");
+        data.ExpiredCerts.Where(c => c.CertType == "CA").ShouldHaveSingleItem();
     }
 
     [Fact]
@@ -76,7 +76,7 @@ public class DashboardServiceTests
 
         var data = await service.GetDashboardAsync();
 
-        data.ExpiringCerts.Should().ContainSingle(c => c.CertType == "CA");
+        data.ExpiringCerts.Where(c => c.CertType == "CA").ShouldHaveSingleItem();
     }
 
     [Fact]
@@ -87,11 +87,11 @@ public class DashboardServiceTests
 
         var data = await service.GetDashboardAsync();
 
-        data.CommunitySummaries.Should().ContainSingle();
+        data.CommunitySummaries.ShouldHaveSingleItem();
         var summary = data.CommunitySummaries[0];
-        summary.CaCount.Should().Be(1);
-        summary.IssuedCount.Should().Be(1);
-        summary.Name.Should().Be("Test Community");
+        summary.CaCount.ShouldBe(1);
+        summary.IssuedCount.ShouldBe(1);
+        summary.Name.ShouldBe("Test Community");
     }
 
     [Fact]
@@ -102,7 +102,7 @@ public class DashboardServiceTests
 
         var data = await service.GetDashboardAsync();
 
-        data.RevokedCertCount.Should().Be(1);
+        data.RevokedCertCount.ShouldBe(1);
     }
 
     private async Task SeedCommunityWithCertsAsync(

@@ -8,7 +8,7 @@
 // */
 #endregion
 
-using FluentAssertions;
+using Shouldly;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging.Abstractions;
 using Sigil.Common.Data;
@@ -30,7 +30,7 @@ public class CommunityServiceTests
 
         var result = await service.GetAllAsync();
 
-        result.Should().BeEmpty();
+        result.ShouldBeEmpty();
     }
 
     [Fact]
@@ -40,13 +40,13 @@ public class CommunityServiceTests
 
         var community = await service.CreateAsync("My Community", "A test community", []);
 
-        community.Id.Should().BeGreaterThan(0);
-        community.Name.Should().Be("My Community");
+        community.Id.ShouldBeGreaterThan(0);
+        community.Name.ShouldBe("My Community");
 
         var all = await service.GetAllAsync();
-        all.Should().ContainSingle();
-        all[0].Name.Should().Be("My Community");
-        all[0].Description.Should().Be("A test community");
+        all.ShouldHaveSingleItem();
+        all[0].Name.ShouldBe("My Community");
+        all[0].Description.ShouldBe("A test community");
     }
 
     [Fact]
@@ -63,11 +63,11 @@ public class CommunityServiceTests
         await service.CreateAsync("URL Community", null, urls);
 
         var all = await service.GetAllAsync();
-        all.Should().ContainSingle();
-        all[0].BaseUrls.Should().HaveCount(2);
-        all[0].BaseUrls[0].Url.Should().Be("https://example.com/fhir");
-        all[0].BaseUrls[0].PublishingBasePath.Should().Be("/publish/path");
-        all[0].BaseUrls[1].Url.Should().Be("https://other.com/fhir");
+        all.ShouldHaveSingleItem();
+        all[0].BaseUrls.Count.ShouldBe(2);
+        all[0].BaseUrls[0].Url.ShouldBe("https://example.com/fhir");
+        all[0].BaseUrls[0].PublishingBasePath.ShouldBe("/publish/path");
+        all[0].BaseUrls[1].Url.ShouldBe("https://other.com/fhir");
     }
 
     [Fact]
@@ -78,8 +78,8 @@ public class CommunityServiceTests
         await service.CreateAsync("  Spaced  ", null, [("  https://example.com/  ", null)]);
 
         var all = await service.GetAllAsync();
-        all[0].Name.Should().Be("Spaced");
-        all[0].BaseUrls[0].Url.Should().Be("https://example.com");
+        all[0].Name.ShouldBe("Spaced");
+        all[0].BaseUrls[0].Url.ShouldBe("https://example.com");
     }
 
     [Fact]
@@ -92,11 +92,11 @@ public class CommunityServiceTests
             [("https://new.com", "/new/path")]);
 
         var all = await service.GetAllAsync();
-        all.Should().ContainSingle();
-        all[0].Name.Should().Be("Renamed");
-        all[0].Description.Should().Be("New desc");
-        all[0].BaseUrls.Should().ContainSingle();
-        all[0].BaseUrls[0].Url.Should().Be("https://new.com");
+        all.ShouldHaveSingleItem();
+        all[0].Name.ShouldBe("Renamed");
+        all[0].Description.ShouldBe("New desc");
+        all[0].BaseUrls.ShouldHaveSingleItem();
+        all[0].BaseUrls[0].Url.ShouldBe("https://new.com");
     }
 
     [Fact]
@@ -108,7 +108,7 @@ public class CommunityServiceTests
         await service.DeleteAsync(community.Id);
 
         var all = await service.GetAllAsync();
-        all.Should().BeEmpty();
+        all.ShouldBeEmpty();
     }
 
     [Fact]
@@ -118,7 +118,7 @@ public class CommunityServiceTests
 
         var act = () => service.DeleteAsync(99999);
 
-        await act.Should().NotThrowAsync();
+        await Should.NotThrowAsync(act);
     }
 
     [Fact]
@@ -131,9 +131,9 @@ public class CommunityServiceTests
 
         var all = await service.GetAllAsync();
 
-        all.Should().HaveCount(3);
-        all[0].Name.Should().Be("Alpha");
-        all[1].Name.Should().Be("Middle");
-        all[2].Name.Should().Be("Zebra");
+        all.Count.ShouldBe(3);
+        all[0].Name.ShouldBe("Alpha");
+        all[1].Name.ShouldBe("Middle");
+        all[2].Name.ShouldBe("Zebra");
     }
 }
