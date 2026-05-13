@@ -162,6 +162,8 @@ public partial class CertificateExplorer : IDisposable
     private DateTime? resignNotBefore = DateTime.UtcNow;
     private DateTime? resignNotAfter = DateTime.UtcNow.AddYears(5);
     private string resignPfxPassword = string.Empty;
+    private DotNetObjectReference<CertificateExplorer>? dotNetRef;
+    private bool pendingDragDropInit;
 
     protected override async Task OnInitializedAsync()
     {
@@ -209,6 +211,123 @@ public partial class CertificateExplorer : IDisposable
             pendingHighlight = false;
             await UpdateTreeHighlightsAsync();
         }
+
+        if (pendingDragDropInit)
+        {
+            pendingDragDropInit = false;
+            await InitDragDropAsync();
+        }
+    }
+
+    private async Task InitDragDropAsync()
+    {
+        dotNetRef ??= DotNetObjectReference.Create(this);
+
+        var dragItems = new List<object>();
+        var dropTargets = new List<object>();
+
+        CollectDragDropNodes(treeNodes, dragItems, dropTargets);
+
+        if (dragItems.Count > 0)
+        {
+            await JS.InvokeVoidAsync("sigilInitDragDrop", dotNetRef, dragItems, dropTargets);
+        }
+    }
+
+    private static void CollectDragDropNodes(
+        List<CertificateChainNodeViewModel> nodes,
+        List<object> dragItems,
+        List<object> dropTargets)
+    {
+        foreach (var node in nodes)
+        {
+            if (node.EntityType == "IssuedCertificate" && node.Status == CertificateStatus.Stale)
+            {
+                dragItems.Add(new { thumbprint = node.Thumbprint, id = node.Id, entityType = node.EntityType });
+            }
+
+            if (node.EntityType == "CaCertificate" && node.KeyStorage != null && !node.IsSuperseded)
+            {
+                dropTargets.Add(new { thumbprint = node.Thumbprint, id = node.Id, name = node.Name });
+            }
+
+            CollectDragDropNodes(node.Children, dragItems, dropTargets);
+        }
+    }
+
+    [JSInvokable]
+    public async Task OnDragDropRenew(int certId, string entityType, int targetCaId, string targetCaName)
+    {
+        var node = FindNodeById(treeNodes, certId, entityType);
+        if (node == null) return;
+
+        await SelectNode(node);
+
+        renewalOriginalCdpUrls = ExtractExtensionUrls(selectedCert, "2.5.29.31");
+        renewalOriginalAiaUrls = ExtractExtensionUrls(selectedCert, "1.3.6.1.5.5.7.1.1");
+        urlChangeWarnings.Clear();
+
+        renewalSubjectDn = selectedCert?.Subject ?? string.Empty;
+        renewalSans.Clear();
+        foreach (var san in subjectAltNames)
+        {
+            var trimmed = san.Trim();
+            if (TryParseSan(trimmed, "URL=", SanType.Uri, out var entry) ||
+                TryParseSan(trimmed, "URI:", SanType.Uri, out entry) ||
+                TryParseSan(trimmed, "Uri:", SanType.Uri, out entry) ||
+                TryParseSan(trimmed, "DNS Name=", SanType.Dns, out entry) ||
+                TryParseSan(trimmed, "DNS:", SanType.Dns, out entry) ||
+                TryParseSan(trimmed, "Dns:", SanType.Dns, out entry) ||
+                TryParseSan(trimmed, "RFC822 Name=", SanType.Email, out entry) ||
+                TryParseSan(trimmed, "email:", SanType.Email, out entry) ||
+                TryParseSan(trimmed, "Email:", SanType.Email, out entry) ||
+                TryParseSan(trimmed, "IP Address=", SanType.IpAddress, out entry) ||
+                TryParseSan(trimmed, "IP:", SanType.IpAddress, out entry) ||
+                TryParseSan(trimmed, "IpAddress:", SanType.IpAddress, out entry))
+            {
+                renewalSans.Add(entry);
+            }
+        }
+
+        isRenewMode = true;
+        await ShowIssuanceDialog(targetCaId, targetCaName);
+        isRenewMode = true;
+
+        // Match template from original cert
+        await using var db = await DbFactory.CreateDbContextAsync();
+        var issued = await db.IssuedCertificates.FindAsync(certId);
+        if (issued?.TemplateId != null)
+        {
+            var match = availableTemplates.FirstOrDefault(t => t.Id == issued.TemplateId);
+            if (match != null)
+            {
+                selectedTemplate = match;
+                OnTemplateSelected(match);
+            }
+        }
+
+        if (selectedTemplate == null || selectedTemplate.CertificateType != CertificateType.EndEntityClient)
+        {
+            var match = availableTemplates.FirstOrDefault(t => t.CertificateType == CertificateType.EndEntityClient)
+                        ?? availableTemplates.FirstOrDefault();
+            if (match != null) selectedTemplate = match;
+        }
+
+        OnTemplateSelected(selectedTemplate);
+        issuanceCertName = node.Name + " (renewed)";
+        StateHasChanged();
+    }
+
+    private static CertificateChainNodeViewModel? FindNodeById(
+        List<CertificateChainNodeViewModel> nodes, int id, string entityType)
+    {
+        foreach (var node in nodes)
+        {
+            if (node.Id == id && node.EntityType == entityType) return node;
+            var found = FindNodeById(node.Children, id, entityType);
+            if (found != null) return found;
+        }
+        return null;
     }
 
     private async Task OnCommunitySelected(CommunityOption? option)
@@ -242,6 +361,7 @@ public partial class CertificateExplorer : IDisposable
         asn1Root = null;
         subjectAltNames.Clear();
         isLoadingTree = false;
+        pendingDragDropInit = true;
     }
 
 
@@ -599,11 +719,12 @@ public partial class CertificateExplorer : IDisposable
         CertificateStatus.Revoked => "#9c27b0",
         CertificateStatus.Untrusted => "#d32f2f",
         CertificateStatus.Expiring => "#ff9800",
+        CertificateStatus.Stale => "#2196f3",
         _ => ""
     };
 
     private static bool IsError(CertificateStatus status) =>
-        status is CertificateStatus.Expired or CertificateStatus.Revoked or CertificateStatus.Untrusted;
+        status is CertificateStatus.Expired or CertificateStatus.Revoked or CertificateStatus.Untrusted or CertificateStatus.Stale;
 
     private string GetPublicKeyInfo()
     {
@@ -2312,5 +2433,6 @@ public partial class CertificateExplorer : IDisposable
     public void Dispose()
     {
         TimeDisplay.OnChanged -= StateHasChanged;
+        dotNetRef?.Dispose();
     }
 }

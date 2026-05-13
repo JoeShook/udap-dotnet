@@ -20,6 +20,26 @@ public class IssuanceWarning
 
 public class IssuanceValidator
 {
+    public HashSet<int> FindSupersededCaIds(List<CaCertificate> allCas)
+    {
+        var superseded = new HashSet<int>();
+
+        var groups = allCas
+            .Where(ca => !ca.IsArchived && !ca.IsRevoked)
+            .GroupBy(ca => ca.Subject, StringComparer.OrdinalIgnoreCase);
+
+        foreach (var group in groups)
+        {
+            var sorted = group.OrderByDescending(ca => ca.NotBefore).ToList();
+            if (sorted.Count <= 1) continue;
+
+            for (var i = 1; i < sorted.Count; i++)
+                superseded.Add(sorted[i].Id);
+        }
+
+        return superseded;
+    }
+
     public List<IssuanceWarning> CompareTemplateUrls(
         List<string> originalCdpUrls,
         List<string> originalAiaUrls,

@@ -188,4 +188,104 @@ public class IssuanceValidatorTests
         result.Should().ContainSingle()
             .Which.Should().Contain("My-CA.crl");
     }
+
+    [Fact]
+    public void FindSupersededCaIds_SingleCa_ReturnsEmpty()
+    {
+        var cas = new List<CaCertificate>
+        {
+            new() { Id = 1, Subject = "CN=CA", NotBefore = DateTime.UtcNow }
+        };
+
+        var result = _validator.FindSupersededCaIds(cas);
+
+        result.Should().BeEmpty();
+    }
+
+    [Fact]
+    public void FindSupersededCaIds_TwoCasSameSubject_OlderIsSuperseded()
+    {
+        var cas = new List<CaCertificate>
+        {
+            new() { Id = 1, Subject = "CN=Intermediate CA", NotBefore = DateTime.UtcNow.AddDays(-365) },
+            new() { Id = 2, Subject = "CN=Intermediate CA", NotBefore = DateTime.UtcNow }
+        };
+
+        var result = _validator.FindSupersededCaIds(cas);
+
+        result.Should().ContainSingle().Which.Should().Be(1);
+    }
+
+    [Fact]
+    public void FindSupersededCaIds_DifferentSubjects_NoneSuperseded()
+    {
+        var cas = new List<CaCertificate>
+        {
+            new() { Id = 1, Subject = "CN=CA One", NotBefore = DateTime.UtcNow.AddDays(-365) },
+            new() { Id = 2, Subject = "CN=CA Two", NotBefore = DateTime.UtcNow }
+        };
+
+        var result = _validator.FindSupersededCaIds(cas);
+
+        result.Should().BeEmpty();
+    }
+
+    [Fact]
+    public void FindSupersededCaIds_ArchivedCa_Excluded()
+    {
+        var cas = new List<CaCertificate>
+        {
+            new() { Id = 1, Subject = "CN=CA", NotBefore = DateTime.UtcNow.AddDays(-365) },
+            new() { Id = 2, Subject = "CN=CA", NotBefore = DateTime.UtcNow, IsArchived = true }
+        };
+
+        var result = _validator.FindSupersededCaIds(cas);
+
+        result.Should().BeEmpty();
+    }
+
+    [Fact]
+    public void FindSupersededCaIds_RevokedCa_Excluded()
+    {
+        var cas = new List<CaCertificate>
+        {
+            new() { Id = 1, Subject = "CN=CA", NotBefore = DateTime.UtcNow.AddDays(-365) },
+            new() { Id = 2, Subject = "CN=CA", NotBefore = DateTime.UtcNow, IsRevoked = true }
+        };
+
+        var result = _validator.FindSupersededCaIds(cas);
+
+        result.Should().BeEmpty();
+    }
+
+    [Fact]
+    public void FindSupersededCaIds_ThreeVersions_TwoSuperseded()
+    {
+        var cas = new List<CaCertificate>
+        {
+            new() { Id = 1, Subject = "CN=CA", NotBefore = DateTime.UtcNow.AddDays(-730) },
+            new() { Id = 2, Subject = "CN=CA", NotBefore = DateTime.UtcNow.AddDays(-365) },
+            new() { Id = 3, Subject = "CN=CA", NotBefore = DateTime.UtcNow }
+        };
+
+        var result = _validator.FindSupersededCaIds(cas);
+
+        result.Should().HaveCount(2);
+        result.Should().Contain(1);
+        result.Should().Contain(2);
+    }
+
+    [Fact]
+    public void FindSupersededCaIds_CaseInsensitiveSubject()
+    {
+        var cas = new List<CaCertificate>
+        {
+            new() { Id = 1, Subject = "CN=intermediate CA", NotBefore = DateTime.UtcNow.AddDays(-365) },
+            new() { Id = 2, Subject = "CN=Intermediate CA", NotBefore = DateTime.UtcNow }
+        };
+
+        var result = _validator.FindSupersededCaIds(cas);
+
+        result.Should().ContainSingle().Which.Should().Be(1);
+    }
 }

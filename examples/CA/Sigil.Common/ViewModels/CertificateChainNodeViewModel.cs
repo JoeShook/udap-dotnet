@@ -34,5 +34,7 @@ public class CertificateChainNodeViewModel
     /// </summary>
     public string? KeyStorage { get; set; }
 
+    public bool IsSuperseded { get; set; }
+
     public List<CertificateChainNodeViewModel> Children { get; set; } = new();
 }

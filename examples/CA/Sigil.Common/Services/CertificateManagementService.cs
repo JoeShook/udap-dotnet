@@ -14,6 +14,7 @@ using Microsoft.Extensions.Logging;
 using Sigil.Common.Data;
 using Sigil.Common.Data.Entities;
 using Sigil.Common.Services.Jobs;
+using Sigil.Common.Validators;
 using Sigil.Common.ViewModels;
 
 namespace Sigil.Common.Services;
@@ -46,17 +47,20 @@ public class CertificateManagementService
     private readonly ILogger<CertificateManagementService> _logger;
     private readonly ChainValidationService _chainValidator;
     private readonly CrlGenerationService _crlGenService;
+    private readonly IssuanceValidator _validator;
 
     public CertificateManagementService(
         IDbContextFactory<SigilDbContext> dbFactory,
         ILogger<CertificateManagementService> logger,
         ChainValidationService chainValidator,
-        CrlGenerationService crlGenService)
+        CrlGenerationService crlGenService,
+        IssuanceValidator? validator = null)
     {
         _dbFactory = dbFactory;
         _logger = logger;
         _chainValidator = chainValidator;
         _crlGenService = crlGenService;
+        _validator = validator ?? new IssuanceValidator();
     }
 
     public async Task<CommunityTreeData> GetCommunityTreeAsync(int communityId, CancellationToken ct = default)
@@ -74,10 +78,11 @@ public class CertificateManagementService
             .ToListAsync(ct);
 
         var validations = await _chainValidator.ValidateCommunityAsync(communityId);
+        var supersededCaIds = _validator.FindSupersededCaIds(caCerts);
 
         var treeNodes = caCerts
             .Where(ca => ca.ParentId == null)
-            .Select(rootCa => BuildTreeNode(rootCa, caCerts, validations))
+            .Select(rootCa => BuildTreeNode(rootCa, caCerts, validations, supersededCaIds))
             .ToList();
 
         return new CommunityTreeData
@@ -441,9 +446,11 @@ public class CertificateManagementService
     private static CertificateChainNodeViewModel BuildTreeNode(
         CaCertificate ca,
         List<CaCertificate> allCas,
-        Dictionary<string, ChainValidationResult> validationResults)
+        Dictionary<string, ChainValidationResult> validationResults,
+        HashSet<int>? supersededCaIds = null)
     {
         var caStatus = DeriveStatus(ca.Thumbprint, ca.NotAfter, ca.IsRevoked, validationResults);
+        var isSuperseded = supersededCaIds?.Contains(ca.Id) == true;
 
         var node = new CertificateChainNodeViewModel
         {
@@ -455,6 +462,7 @@ public class CertificateManagementService
             CertificateRole = ca.ParentId == null ? "RootCA" : "IntermediateCA",
             EntityType = "CaCertificate",
             Status = caStatus,
+            IsSuperseded = isSuperseded,
             KeyStorage = !string.IsNullOrEmpty(ca.StoreProviderHint)
                     ? ca.StoreProviderHint[..ca.StoreProviderHint.IndexOf(':')]
                 : ca.EncryptedPfxBytes != null ? "local"
@@ -463,12 +471,14 @@ public class CertificateManagementService
 
         foreach (var child in ca.Children.OrderBy(c => c.Name))
         {
-            node.Children.Add(BuildTreeNode(child, allCas, validationResults));
+            node.Children.Add(BuildTreeNode(child, allCas, validationResults, supersededCaIds));
         }
 
         foreach (var issued in ca.IssuedCertificates.OrderBy(i => i.Name))
         {
             var issuedStatus = DeriveStatus(issued.Thumbprint, issued.NotAfter, issued.IsRevoked, validationResults);
+            if (isSuperseded && issuedStatus is CertificateStatus.Valid or CertificateStatus.Expiring)
+                issuedStatus = CertificateStatus.Stale;
 
             node.Children.Add(new CertificateChainNodeViewModel
             {
