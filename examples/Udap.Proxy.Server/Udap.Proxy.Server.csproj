@@ -12,7 +12,7 @@
   </PropertyGroup>
 
   <ItemGroup>
-	  <PackageReference Include="Duende.AspNetCore.Authentication.JwtBearer" Version="0.3.0" />
+	  <PackageReference Include="Duende.AspNetCore.Authentication.JwtBearer" Version="1.0.2" />
 	  <PackageReference Include="Firely.Fhir.Packages" Version="4.9.1" />
     <PackageReference Include="Firely.Fhir.Validation.R4B" Version="2.7.1" />
     <PackageReference Include="Google.Apis.Auth" Version="1.74.0" />
