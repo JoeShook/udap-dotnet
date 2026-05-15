@@ -19,10 +19,17 @@
         </FluentButton>
     </FluentStack>
 
-    <FluentDataGrid Items="@communities.AsQueryable()" Style="margin-top: 0.5rem;">
+    <FluentDataGrid Items="@communities.AsQueryable()" Style="margin-top: 0.5rem;" ResizableColumns="true" GridTemplateColumns="minmax(120px, 1fr) minmax(120px, 1.5fr) minmax(200px, 3fr) 80px 80px 80px auto">
         <PropertyColumn Property="@(c => c.Name)" Title="Name" Sortable="true" IsDefaultSortColumn="true" />
         <PropertyColumn Property="@(c => c.Description)" Title="Description" />
-        <PropertyColumn Property="@(c => c.BaseUrlsDisplay)" Title="Certificate Server Base URLs" />
+        <TemplateColumn Title="Certificate Server Base URLs">
+            <div style="white-space: normal; word-break: break-all; line-height: 1.4;">
+                @foreach (var url in context.BaseUrls)
+                {
+                    <div>@url.Url</div>
+                }
+            </div>
+        </TemplateColumn>
         <TemplateColumn Title="Enabled">
             @if (context.Enabled)
             {
@@ -36,24 +43,26 @@
         <PropertyColumn Property="@(c => c.RootCaCount)" Title="Root CAs" />
         <PropertyColumn Property="@(c => c.TotalCertCount)" Title="Total Certs" />
         <TemplateColumn Title="Actions">
-            <FluentButton Size="ButtonSize.Small"
-                          Appearance="Appearance.Outline"
-                          IconStart="@(new Icons.Regular.Size16.Certificate())"
-                          OnClick="@(() => NavigateToExplorer(context.Id))">
-                Explore
-            </FluentButton>
-            <FluentButton Size="ButtonSize.Small"
-                          Appearance="Appearance.Outline"
-                          IconStart="@(new Icons.Regular.Size16.Edit())"
-                          OnClick="@(() => ShowEditDialog(context))">
-                Edit
-            </FluentButton>
-            <FluentButton Size="ButtonSize.Small"
-                          Appearance="Appearance.Outline"
-                          IconStart="@(new Icons.Regular.Size16.Delete())"
-                          OnClick="@(() => DeleteCommunityAsync(context))">
-                Delete
-            </FluentButton>
+            <FluentStack Orientation="Orientation.Horizontal" Style="gap: 0.25rem;">
+                <FluentButton Size="ButtonSize.Small"
+                              Appearance="Appearance.Outline"
+                              IconStart="@(new Icons.Regular.Size16.Certificate())"
+                              OnClick="@(() => NavigateToExplorer(context.Id))">
+                    Explore
+                </FluentButton>
+                <FluentButton Size="ButtonSize.Small"
+                              Appearance="Appearance.Outline"
+                              IconStart="@(new Icons.Regular.Size16.Edit())"
+                              OnClick="@(() => ShowEditDialog(context))">
+                    Edit
+                </FluentButton>
+                <FluentButton Size="ButtonSize.Small"
+                              Appearance="Appearance.Outline"
+                              IconStart="@(new Icons.Regular.Size16.Delete())"
+                              OnClick="@(() => DeleteCommunityAsync(context))">
+                    Delete
+                </FluentButton>
+            </FluentStack>
         </TemplateColumn>
     </FluentDataGrid>
 </FluentCard>
