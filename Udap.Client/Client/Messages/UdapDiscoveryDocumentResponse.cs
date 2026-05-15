@@ -133,12 +133,7 @@ public class UdapDiscoveryDocumentResponse : ProtocolResponse
 
                 var isValidUri = Uri.TryCreate(endpoint, UriKind.Absolute, out Uri? uri);
 
-                if (uri == null)
-                {
-                    return $"{element.Name} endpoint is missing a value";
-                }
-
-                if (!isValidUri)
+                if (!isValidUri || uri == null)
                 {
                     return $"Malformed endpoint: {endpoint}";
                 }
