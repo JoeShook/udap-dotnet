@@ -25,7 +25,7 @@ using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using Microsoft.IdentityModel.Tokens;
 using NSubstitute;
-using Udap.Client.Client;
+using Udap.Client;
 using Udap.Client.Configuration;
 using Udap.Common;
 using Udap.Common.Certificates;
@@ -187,7 +187,7 @@ public class UdapControllerTests : IClassFixture<ApiTestFixture>
         
         Assert.False(disco.IsError, $"\nError: {disco.Error} \nError Type: {disco.ErrorType}\n{disco.Raw}");
         Assert.Equal(HttpStatusCode.OK, disco.HttpStatusCode);
-        Assert.NotNull(udapClient.UdapServerMetaData);
+        Assert.NotNull(udapClient.UdapServerMetadata);
     }
     
 

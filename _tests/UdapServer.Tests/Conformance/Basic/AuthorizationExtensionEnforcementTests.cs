@@ -16,8 +16,8 @@ using Microsoft.Extensions.DependencyInjection.Extensions;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using NSubstitute;
-using Udap.Client.Client;
-using Udap.Client.Client.Extensions;
+using Udap.Client;
+using Udap.Client.Extensions;
 using Udap.Client.Configuration;
 using Udap.Common.Models;
 using Udap.Model;
@@ -492,7 +492,7 @@ public class AuthorizationExtensionEnforcementTests
     {
         var udapClient = pipeline.Resolve<IUdapClient>();
 
-        udapClient.UdapServerMetaData = new UdapMetadata(Substitute.For<UdapMetadataOptions>())
+        udapClient.UdapServerMetadata = new UdapMetadata(Substitute.For<UdapMetadataOptions>())
         {
             RegistrationEndpoint = UdapAuthServerPipeline.RegistrationEndpoint
         };

@@ -13,7 +13,7 @@ using System.Text.Json;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
-using Udap.Client.Client;
+using Udap.Client;
 using Udap.Common.Certificates;
 using Udap.Common.Models;
 using Udap.Util.Extensions;
@@ -113,7 +113,7 @@ Other --community options to try against the https://fhirlabs.net/fhir/r4 baseUr
         }
         else
         {
-            logger.LogInformation(JsonSerializer.Serialize(udapClient.UdapServerMetaData, new JsonSerializerOptions{WriteIndented = true}));
+            logger.LogInformation(JsonSerializer.Serialize(udapClient.UdapServerMetadata, new JsonSerializerOptions{WriteIndented = true}));
         }
     }
 }

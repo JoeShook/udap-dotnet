@@ -7,7 +7,7 @@
 // */
 #endregion
 
-using Udap.Client.Client;
+using Udap.Client;
 
 namespace Udap.Common.Tests.Client;
 

@@ -9,8 +9,8 @@
 
 using System.Net;
 using System.Text;
-using Udap.Client.Client.Extensions;
-using Udap.Client.Client.Messages;
+using Udap.Client.Extensions;
+using Udap.Client.Messages;
 
 namespace Udap.Common.Tests.Client;
 

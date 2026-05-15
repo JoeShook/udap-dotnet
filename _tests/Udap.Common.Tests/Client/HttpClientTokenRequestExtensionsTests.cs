@@ -10,7 +10,7 @@
 using System.Net;
 using System.Text;
 using Duende.IdentityModel.Client;
-using Udap.Client.Client.Extensions;
+using Udap.Client.Extensions;
 using Udap.Model.Access;
 
 namespace Udap.Common.Tests.Client;

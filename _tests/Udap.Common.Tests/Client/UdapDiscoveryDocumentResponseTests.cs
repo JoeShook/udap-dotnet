@@ -10,8 +10,8 @@
 using System.Net;
 using System.Text;
 using Duende.IdentityModel.Client;
-using Udap.Client.Client.Messages;
-using DiscoveryPolicy = Udap.Client.Client.DiscoveryPolicy;
+using Udap.Client.Messages;
+using DiscoveryPolicy = Udap.Client.DiscoveryPolicy;
 
 namespace Udap.Common.Tests.Client;
 

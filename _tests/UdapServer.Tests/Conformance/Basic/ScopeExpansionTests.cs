@@ -21,7 +21,7 @@ using Microsoft.AspNetCore.WebUtilities;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Options;
 using Microsoft.IdentityModel.Tokens;
-using Udap.Client.Client.Extensions;
+using Udap.Client.Extensions;
 using Udap.Client.Configuration;
 using Udap.Common.Extensions;
 using Udap.Common.Models;

@@ -18,16 +18,16 @@ using System.IdentityModel.Tokens.Jwt;
 using System.Security.Cryptography.X509Certificates;
 using System.Text.Json;
 using System.Text.Json.Nodes;
-using Udap.Client.Client;
-using Udap.Client.Client.Extensions;
-using Udap.Client.Client.Messages;
+using Udap.Client;
+using Udap.Client.Extensions;
+using Udap.Client.Messages;
 using Udap.Client.Configuration;
 using Udap.Common;
 using Udap.Common.Certificates;
 using Udap.Model;
 using Udap.Util.Extensions;
 using Xunit.Abstractions;
-using DiscoveryPolicy = Udap.Client.Client.DiscoveryPolicy;
+using DiscoveryPolicy = Udap.Client.DiscoveryPolicy;
 
 namespace Udap.Client.System.Tests
 {
@@ -231,7 +231,7 @@ namespace Udap.Client.System.Tests
             var result = await udapClient.ValidateResource("https://dev-mtx-interop.meditech.com", "urn:oid:4.5.6");
             Assert.False(result.IsError, result.Error);
 
-            var metaData = udapClient.UdapServerMetaData;
+            var metaData = udapClient.UdapServerMetadata;
             Assert.NotNull(metaData);
         }
 

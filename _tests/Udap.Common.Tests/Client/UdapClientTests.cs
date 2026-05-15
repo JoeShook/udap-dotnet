@@ -19,7 +19,7 @@ using NSubstitute;
 using System.IdentityModel.Tokens.Jwt;
 using System.Net;
 using System.Text.Json;
-using Udap.Client.Client;
+using Udap.Client;
 using Udap.Client.Configuration;
 using Udap.Common.Certificates;
 using Udap.Common.Metadata;
@@ -82,7 +82,7 @@ public class UdapClientTests
 
         Assert.False(disco.IsError, $"\nError: {disco.Error} \nError Type: {disco.ErrorType}\n{disco.Raw}");
         Assert.Equal(HttpStatusCode.OK, disco.HttpStatusCode);
-        Assert.NotNull(udapClient.UdapServerMetaData);
+        Assert.NotNull(udapClient.UdapServerMetadata);
 
 
         //
@@ -205,7 +205,7 @@ public class UdapClientTests
 
         Assert.False(disco.IsError, $"\nError: {disco.Error} \nError Type: {disco.ErrorType}\n{disco.Raw}");
         Assert.Equal(HttpStatusCode.OK, disco.HttpStatusCode);
-        Assert.NotNull(udapClient.UdapServerMetaData);
+        Assert.NotNull(udapClient.UdapServerMetadata);
     }
 
     [Fact]
@@ -223,7 +223,7 @@ public class UdapClientTests
 
         Assert.False(disco.IsError, $"\nError: {disco.Error} \nError Type: {disco.ErrorType}\n{disco.Raw}");
         Assert.Equal(HttpStatusCode.OK, disco.HttpStatusCode);
-        Assert.NotNull(udapClient.UdapServerMetaData);
+        Assert.NotNull(udapClient.UdapServerMetadata);
     }
 
     private readonly FakeValidatorDiagnostics _diagnosticsValidator = new FakeValidatorDiagnostics();
@@ -267,7 +267,7 @@ public class UdapClientTests
         var disco = await udapClient.ValidateResource("https://fhirlabs.net/fhir/r4", trustAnchorStore, "udap://Iss.Mismatch.To.SubjAltName/");
 
         Assert.True(disco.IsError, disco.Raw);
-        Assert.NotNull(udapClient.UdapServerMetaData);
+        Assert.NotNull(udapClient.UdapServerMetadata);
         Assert.True(_diagnosticsValidator.TokenErrorCalled);
         Assert.Contains(_diagnosticsValidator.ActualErrorMessages, m => m.Contains("Failed JWT Validation"));
         // https://san.mismatch.fhirlabs.net/fhir/r4 is the subject alt used to sign software statement
@@ -289,7 +289,7 @@ public class UdapClientTests
         var disco = await udapClient.ValidateResource("https://fhirlabs.net/fhir/r4", trustAnchorStore, "udap://Iss.Mismatch.To.BaseUrl/");
 
         Assert.True(disco.IsError, disco.Raw);
-        Assert.NotNull(udapClient.UdapServerMetaData);
+        Assert.NotNull(udapClient.UdapServerMetadata);
         Assert.True(_diagnosticsValidator.TokenErrorCalled);
         Assert.Contains(_diagnosticsValidator.ActualErrorMessages, m => m.Contains("JWT iss does not match baseUrl."));
     }
@@ -895,7 +895,7 @@ public class UdapClientTests
         var disco = await udapClient.ValidateResource("https://fhirlabs.net/fhir/r4", trustAnchorStore);
         Assert.False(disco.IsError);
 
-        var metadata = udapClient.UdapServerMetaData!;
+        var metadata = udapClient.UdapServerMetadata!;
         metadata.RegistrationEndpointJwtSigningAlgValuesSupported = new List<string> { "ES384" };
         metadata.TokenEndpointAuthSigningAlgValuesSupported = new List<string> { "ES384" };
 

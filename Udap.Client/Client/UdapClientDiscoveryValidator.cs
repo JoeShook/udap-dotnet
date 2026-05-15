@@ -17,7 +17,7 @@ using Udap.Common.Models;
 using Udap.Model;
 using Udap.Util.Extensions;
 
-namespace Udap.Client.Client;
+namespace Udap.Client;
 
 /// <summary>
 /// Validator orchestrates JWT validation followed by x509 chain validation
@@ -63,8 +63,14 @@ public class UdapClientDiscoveryValidator : IUdapClientEvents
     /// <inheritdoc/>
     public event Action<string>? TokenError;
 
-    public UdapMetadata? UdapServerMetaData { get; set; }
+    public UdapMetadata? UdapServerMetadata { get; set; }
 
+    /// <summary>
+    /// Validates the signed JWT in the UDAP server metadata, verifying the signature, issuer, lifetime, and algorithm constraints.
+    /// </summary>
+    /// <param name="udapServerMetaData">The deserialized UDAP metadata containing the signed metadata JWT.</param>
+    /// <param name="baseUrl">The FHIR server base URL that must match the JWT issuer claim.</param>
+    /// <returns><c>true</c> if the JWT is valid; otherwise <c>false</c>.</returns>
     public virtual async Task<bool> ValidateJwtToken(UdapMetadata udapServerMetaData, string baseUrl)
     {
         var tokenHandler = new JsonWebTokenHandler();
@@ -202,11 +208,22 @@ public class UdapClientDiscoveryValidator : IUdapClientEvents
         }
     }
 
+    /// <summary>
+    /// Validates the X.509 trust chain of the server's signing certificate using the trust anchor store registered in DI.
+    /// </summary>
+    /// <param name="community">An optional UDAP community identifier used to select the appropriate trust anchors.</param>
+    /// <returns><c>true</c> if the certificate chains to a trusted anchor; otherwise <c>false</c>.</returns>
     public virtual Task<bool> ValidateTrustChain(string? community)
     {
         return ValidateTrustChain(community, null);
     }
 
+    /// <summary>
+    /// Validates the X.509 trust chain of the server's signing certificate, optionally using a client-supplied trust anchor store.
+    /// </summary>
+    /// <param name="community">An optional UDAP community identifier used to select the appropriate trust anchors.</param>
+    /// <param name="clientSuppliedTrustAnchorStore">An explicit trust anchor store; when null, falls back to the store registered in DI.</param>
+    /// <returns><c>true</c> if the certificate chains to a trusted anchor; otherwise <c>false</c>.</returns>
     public virtual async Task<bool> ValidateTrustChain(string? community, ITrustAnchorStore? clientSuppliedTrustAnchorStore)
     {
         if (_publicCertificate == null)

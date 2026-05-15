@@ -10,7 +10,7 @@
 using System.Security.Cryptography;
 using System.Text;
 using Microsoft.IdentityModel.Tokens;
-using Udap.Client.Client;
+using Udap.Client;
 
 namespace Udap.Common.Tests.Client;
 

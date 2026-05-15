@@ -13,7 +13,7 @@ using System.Text;
 using Microsoft.Extensions.Logging;
 using Microsoft.IdentityModel.Tokens;
 using NSubstitute;
-using Udap.Client.Client;
+using Udap.Client;
 using Udap.Common.Certificates;
 using Udap.Model;
 
@@ -112,7 +112,7 @@ public class UdapClientMessageHandlerTests
     }
 
     [Fact]
-    public async Task SendAsync_DiscoOk_SetsUdapServerMetaData()
+    public async Task SendAsync_DiscoOk_SetsUdapServerMetadata()
     {
         var validator = new TestableValidator(jwtResult: true, trustChainResult: true);
         var handler = new UdapClientMessageHandler(validator, _logger)
@@ -123,7 +123,7 @@ public class UdapClientMessageHandlerTests
         var client = new HttpClient(handler);
         await client.GetAsync("https://fhirlabs.net/fhir/r4/.well-known/udap");
 
-        Assert.NotNull(validator.UdapServerMetaData);
+        Assert.NotNull(validator.UdapServerMetadata);
     }
 
     [Fact]

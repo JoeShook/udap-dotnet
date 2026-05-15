@@ -21,7 +21,7 @@ using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 using Microsoft.IdentityModel.Tokens;
 using NSubstitute;
-using Udap.Client.Client.Extensions;
+using Udap.Client.Extensions;
 using Udap.Common.Certificates;
 using Udap.Model;
 using Udap.Model.Registration;

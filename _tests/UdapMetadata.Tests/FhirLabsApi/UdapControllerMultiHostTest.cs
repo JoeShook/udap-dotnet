@@ -17,7 +17,7 @@ using Microsoft.Extensions.DependencyInjection.Extensions;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using NSubstitute;
-using Udap.Client.Client;
+using Udap.Client;
 using Udap.Client.Configuration;
 using Udap.Common;
 using Udap.Common.Certificates;
@@ -102,7 +102,7 @@ public class UdapControllerMultiHostTest : IClassFixture<ApiForCommunityTestFixt
 
             Assert.False(disco.IsError,
                 $"Segment '{segment}': {disco.Error} | {disco.ErrorType} | {string.Join("; ", _diagnosticsValidator.ActualErrorMessages)}");
-            Assert.NotNull(udapClient.UdapServerMetaData);
+            Assert.NotNull(udapClient.UdapServerMetadata);
             Assert.False(_diagnosticsValidator.ProblemCalled,
                 $"Segment '{segment}': chain problem: {string.Join("; ", _diagnosticsValidator.ActualErrorMessages)}");
             Assert.False(_diagnosticsValidator.UntrustedCalled,

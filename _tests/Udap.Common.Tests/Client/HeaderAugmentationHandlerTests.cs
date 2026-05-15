@@ -9,7 +9,7 @@
 
 using System.Net;
 using Microsoft.Extensions.Options;
-using Udap.Client.Client;
+using Udap.Client;
 using Udap.Client.Configuration;
 
 namespace Udap.Common.Tests.Client;
