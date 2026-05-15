@@ -60,6 +60,6 @@ public class UdapClientStringExtensionsTests
     [Fact]
     public void AssertUri_RelativeUri_ThrowsUriFormatException()
     {
-        Assert.Throws<UriFormatException>(() => "/fhir/r4".AssertUri());
+        Assert.Throws<UriFormatException>(() => "fhir/r4".AssertUri());
     }
 }
