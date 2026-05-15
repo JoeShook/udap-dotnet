@@ -77,21 +77,21 @@ public class UdapClientDiscoveryValidator : IUdapClientEvents
         var jwt = tokenHandler.ReadJsonWebToken(udapServerMetaData.SignedMetadata);
         _publicCertificate = jwt?.GetPublicCertificate();
 
-        var subjectAltNames = _publicCertificate?
-            .GetSubjectAltNames(n =>
-                n.TagNo == (int)X509Extensions.GeneralNameType.URI) //URI only, by udap.org specification
-            .Select(n => new Uri(n.Item2).OriginalString)
-            .ToList();  
-
-        DenormalizeSubjectAltNames(subjectAltNames);
-
-        var validatedToken = await ValidateToken(udapServerMetaData, tokenHandler, subjectAltNames?.ToArray(), jwt);
-
         if (_publicCertificate == null)
         {
             NotifyTokenError("Software statement is missing the x5c header.");
             return false;
         }
+
+        var subjectAltNames = _publicCertificate
+            .GetSubjectAltNames(n =>
+                n.TagNo == (int)X509Extensions.GeneralNameType.URI) //URI only, by udap.org specification
+            .Select(n => new Uri(n.Item2).OriginalString)
+            .ToList();
+
+        DenormalizeSubjectAltNames(subjectAltNames);
+
+        var validatedToken = await ValidateToken(udapServerMetaData, tokenHandler, subjectAltNames.ToArray(), jwt);
 
         if (!validatedToken.IsValid)
         {

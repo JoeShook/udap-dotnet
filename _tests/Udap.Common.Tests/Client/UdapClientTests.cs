@@ -7,7 +7,10 @@
 // */
 #endregion
 
+using System.Security.Cryptography.X509Certificates;
 using MartinCostello.Logging.XUnit;
+using Microsoft.IdentityModel.JsonWebTokens;
+using Microsoft.IdentityModel.Tokens;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
@@ -396,6 +399,514 @@ public class UdapClientTests
         udapClientIOptions.CurrentValue.Returns(udapClientOptions);
 
         return (httpClientMock, udapClientDiscoveryValidator, udapClientIOptions, trustAnchorStore);
+    }
+
+    [Fact]
+    public async Task EventDelegation_AllEvents_CanSubscribeAndUnsubscribe()
+    {
+        var (httpClientMock, udapClientDiscoveryValidator, udapClientIOptions, _) = await BuildClientSupport();
+
+        var udapClient = new UdapClient(
+            httpClientMock,
+            udapClientDiscoveryValidator,
+            udapClientIOptions,
+            _serviceProvider.GetRequiredService<ILogger<UdapClient>>());
+
+        Action<X509Certificate2> untrustedListener = _ => { };
+        udapClient.Untrusted += untrustedListener;
+        udapClient.Untrusted -= untrustedListener;
+
+        Action<ChainElementInfo> problemListener = _ => { };
+        udapClient.Problem += problemListener;
+        udapClient.Problem -= problemListener;
+
+        Action<X509Certificate2, Exception> errorListener = (_, _) => { };
+        udapClient.Error += errorListener;
+        udapClient.Error -= errorListener;
+
+        Action<string> tokenErrorListener = _ => { };
+        udapClient.TokenError += tokenErrorListener;
+        udapClient.TokenError -= tokenErrorListener;
+    }
+
+    [Fact]
+    public async Task RegisterTieredClient_WithNullMetadata_Throws()
+    {
+        var (httpClientMock, udapClientDiscoveryValidator, udapClientIOptions, _) = await BuildClientSupport();
+        var udapClient = new UdapClient(
+            httpClientMock, udapClientDiscoveryValidator, udapClientIOptions,
+            _serviceProvider.GetRequiredService<ILogger<UdapClient>>());
+
+        await Assert.ThrowsAsync<Exception>(
+            () => udapClient.RegisterTieredClient("https://app.example.com/callback",
+                Array.Empty<X509Certificate2>(), "openid"));
+    }
+
+    [Fact]
+    public async Task RegisterTieredClient_AfterValidation_CallsRegistrationEndpoint()
+    {
+        var (httpClientMock, udapClientDiscoveryValidator, udapClientIOptions, trustAnchorStore) = await BuildClientSupport();
+
+        var regResponse = new HttpResponseMessage(HttpStatusCode.Created)
+        {
+            Content = new StringContent("""{"client_id":"new-client"}""",
+                System.Text.Encoding.UTF8, "application/json")
+        };
+
+        httpClientMock.SendAsync(Arg.Is<HttpRequestMessage>(r => r.Method == HttpMethod.Post), Arg.Any<CancellationToken>())
+            .Returns(Task.FromResult(regResponse));
+
+        var udapClientOptions = new UdapClientOptions
+        {
+            ClientName = "Test Client",
+            TieredOAuthClientLogo = "https://example.com/logo.png"
+        };
+        udapClientIOptions.CurrentValue.Returns(udapClientOptions);
+
+        var udapClient = new UdapClient(
+            httpClientMock, udapClientDiscoveryValidator, udapClientIOptions,
+            _serviceProvider.GetRequiredService<ILogger<UdapClient>>());
+
+        await udapClient.ValidateResource("https://fhirlabs.net/fhir/r4", trustAnchorStore);
+
+        var cert = new X509Certificate2("CertStore/issued/fhirlabs.net.client.pfx", "udap-test");
+        var result = await udapClient.RegisterTieredClient(
+            "https://app.example.com/callback",
+            new[] { cert }, "openid");
+
+        Assert.NotNull(result);
+    }
+
+    [Fact]
+    public async Task RegisterAuthCodeClient_AfterValidation_CallsRegistrationEndpoint()
+    {
+        var (httpClientMock, udapClientDiscoveryValidator, udapClientIOptions, trustAnchorStore) = await BuildClientSupport();
+
+        var regResponse = new HttpResponseMessage(HttpStatusCode.Created)
+        {
+            Content = new StringContent("""{"client_id":"auth-client"}""",
+                System.Text.Encoding.UTF8, "application/json")
+        };
+
+        httpClientMock.SendAsync(Arg.Is<HttpRequestMessage>(r => r.Method == HttpMethod.Post), Arg.Any<CancellationToken>())
+            .Returns(Task.FromResult(regResponse));
+
+        var udapClientOptions = new UdapClientOptions { ClientName = "Test Client" };
+        udapClientIOptions.CurrentValue.Returns(udapClientOptions);
+
+        var udapClient = new UdapClient(
+            httpClientMock, udapClientDiscoveryValidator, udapClientIOptions,
+            _serviceProvider.GetRequiredService<ILogger<UdapClient>>());
+
+        await udapClient.ValidateResource("https://fhirlabs.net/fhir/r4", trustAnchorStore);
+
+        var cert = new X509Certificate2("CertStore/issued/fhirlabs.net.client.pfx", "udap-test");
+        var result = await udapClient.RegisterAuthCodeClient(
+            cert, "openid", "https://example.com/logo.png",
+            new[] { "https://app.example.com/callback" }, null);
+
+        Assert.NotNull(result);
+    }
+
+    [Fact]
+    public async Task RegisterClientCredentialsClient_AfterValidation_CallsRegistrationEndpoint()
+    {
+        var (httpClientMock, udapClientDiscoveryValidator, udapClientIOptions, trustAnchorStore) = await BuildClientSupport();
+
+        var regResponse = new HttpResponseMessage(HttpStatusCode.Created)
+        {
+            Content = new StringContent("""{"client_id":"cc-client"}""",
+                System.Text.Encoding.UTF8, "application/json")
+        };
+
+        httpClientMock.SendAsync(Arg.Is<HttpRequestMessage>(r => r.Method == HttpMethod.Post), Arg.Any<CancellationToken>())
+            .Returns(Task.FromResult(regResponse));
+
+        var udapClientOptions = new UdapClientOptions { ClientName = "Test Client" };
+        udapClientIOptions.CurrentValue.Returns(udapClientOptions);
+
+        var udapClient = new UdapClient(
+            httpClientMock, udapClientDiscoveryValidator, udapClientIOptions,
+            _serviceProvider.GetRequiredService<ILogger<UdapClient>>());
+
+        await udapClient.ValidateResource("https://fhirlabs.net/fhir/r4", trustAnchorStore);
+
+        var cert = new X509Certificate2("CertStore/issued/fhirlabs.net.client.pfx", "udap-test");
+        var result = await udapClient.RegisterClientCredentialsClient(
+            cert, "system/*.read", null, null);
+
+        Assert.NotNull(result);
+    }
+
+    [Fact]
+    public async Task RegisterTieredClient_ErrorResponse_ReturnsDocumentWithError()
+    {
+        var (httpClientMock, udapClientDiscoveryValidator, udapClientIOptions, trustAnchorStore) = await BuildClientSupport();
+
+        var regResponse = new HttpResponseMessage(HttpStatusCode.BadRequest)
+        {
+            Content = new StringContent("""{"error":"invalid_client_metadata","error_description":"bad scope"}""",
+                System.Text.Encoding.UTF8, "application/json")
+        };
+
+        httpClientMock.SendAsync(Arg.Is<HttpRequestMessage>(r => r.Method == HttpMethod.Post), Arg.Any<CancellationToken>())
+            .Returns(Task.FromResult(regResponse));
+
+        var udapClientOptions = new UdapClientOptions
+        {
+            ClientName = "Test Client",
+            TieredOAuthClientLogo = "https://example.com/logo.png"
+        };
+        udapClientIOptions.CurrentValue.Returns(udapClientOptions);
+
+        var udapClient = new UdapClient(
+            httpClientMock, udapClientDiscoveryValidator, udapClientIOptions,
+            _serviceProvider.GetRequiredService<ILogger<UdapClient>>());
+
+        await udapClient.ValidateResource("https://fhirlabs.net/fhir/r4", trustAnchorStore);
+
+        var cert = new X509Certificate2("CertStore/issued/fhirlabs.net.client.pfx", "udap-test");
+        var result = await udapClient.RegisterTieredClient(
+            "https://app.example.com/callback", new[] { cert }, "openid");
+
+        Assert.NotNull(result.GetError());
+    }
+
+    [Fact]
+    public async Task RegisterTieredClient_PostThrows_CatchesAndRethrows()
+    {
+        var (httpClientMock, udapClientDiscoveryValidator, udapClientIOptions, trustAnchorStore) = await BuildClientSupport();
+
+        httpClientMock.SendAsync(Arg.Is<HttpRequestMessage>(r => r.Method == HttpMethod.Post), Arg.Any<CancellationToken>())
+            .Returns<Task<HttpResponseMessage>>(_ => throw new HttpRequestException("Connection refused"));
+
+        var udapClientOptions = new UdapClientOptions
+        {
+            ClientName = "Test Client",
+            TieredOAuthClientLogo = "https://example.com/logo.png"
+        };
+        udapClientIOptions.CurrentValue.Returns(udapClientOptions);
+
+        var udapClient = new UdapClient(
+            httpClientMock, udapClientDiscoveryValidator, udapClientIOptions,
+            _serviceProvider.GetRequiredService<ILogger<UdapClient>>());
+
+        await udapClient.ValidateResource("https://fhirlabs.net/fhir/r4", trustAnchorStore);
+
+        var cert = new X509Certificate2("CertStore/issued/fhirlabs.net.client.pfx", "udap-test");
+
+        await Assert.ThrowsAsync<HttpRequestException>(
+            () => udapClient.RegisterTieredClient(
+                "https://app.example.com/callback", new[] { cert }, "openid"));
+    }
+
+    [Fact]
+    public async Task RegisterAuthCodeClient_ErrorResponse_ReturnsDocumentWithError()
+    {
+        var (httpClientMock, udapClientDiscoveryValidator, udapClientIOptions, trustAnchorStore) = await BuildClientSupport();
+
+        var regResponse = new HttpResponseMessage(HttpStatusCode.BadRequest)
+        {
+            Content = new StringContent("""{"error":"invalid_client_metadata"}""",
+                System.Text.Encoding.UTF8, "application/json")
+        };
+
+        httpClientMock.SendAsync(Arg.Is<HttpRequestMessage>(r => r.Method == HttpMethod.Post), Arg.Any<CancellationToken>())
+            .Returns(Task.FromResult(regResponse));
+
+        var udapClientOptions = new UdapClientOptions { ClientName = "Test Client" };
+        udapClientIOptions.CurrentValue.Returns(udapClientOptions);
+
+        var udapClient = new UdapClient(
+            httpClientMock, udapClientDiscoveryValidator, udapClientIOptions,
+            _serviceProvider.GetRequiredService<ILogger<UdapClient>>());
+
+        await udapClient.ValidateResource("https://fhirlabs.net/fhir/r4", trustAnchorStore);
+
+        var cert = new X509Certificate2("CertStore/issued/fhirlabs.net.client.pfx", "udap-test");
+        var result = await udapClient.RegisterAuthCodeClient(
+            cert, "openid", "https://example.com/logo.png",
+            new[] { "https://app.example.com/callback" }, null);
+
+        Assert.NotNull(result.GetError());
+    }
+
+    [Fact]
+    public async Task RegisterAuthCodeClient_PostThrows_CatchesAndRethrows()
+    {
+        var (httpClientMock, udapClientDiscoveryValidator, udapClientIOptions, trustAnchorStore) = await BuildClientSupport();
+
+        httpClientMock.SendAsync(Arg.Is<HttpRequestMessage>(r => r.Method == HttpMethod.Post), Arg.Any<CancellationToken>())
+            .Returns<Task<HttpResponseMessage>>(_ => throw new HttpRequestException("Connection refused"));
+
+        var udapClientOptions = new UdapClientOptions { ClientName = "Test Client" };
+        udapClientIOptions.CurrentValue.Returns(udapClientOptions);
+
+        var udapClient = new UdapClient(
+            httpClientMock, udapClientDiscoveryValidator, udapClientIOptions,
+            _serviceProvider.GetRequiredService<ILogger<UdapClient>>());
+
+        await udapClient.ValidateResource("https://fhirlabs.net/fhir/r4", trustAnchorStore);
+
+        var cert = new X509Certificate2("CertStore/issued/fhirlabs.net.client.pfx", "udap-test");
+
+        await Assert.ThrowsAsync<HttpRequestException>(
+            () => udapClient.RegisterAuthCodeClient(
+                cert, "openid", "https://example.com/logo.png",
+                new[] { "https://app.example.com/callback" }, null));
+    }
+
+    [Fact]
+    public async Task RegisterClientCredentialsClient_ErrorResponse_ReturnsDocumentWithError()
+    {
+        var (httpClientMock, udapClientDiscoveryValidator, udapClientIOptions, trustAnchorStore) = await BuildClientSupport();
+
+        var regResponse = new HttpResponseMessage(HttpStatusCode.BadRequest)
+        {
+            Content = new StringContent("""{"error":"invalid_scope"}""",
+                System.Text.Encoding.UTF8, "application/json")
+        };
+
+        httpClientMock.SendAsync(Arg.Is<HttpRequestMessage>(r => r.Method == HttpMethod.Post), Arg.Any<CancellationToken>())
+            .Returns(Task.FromResult(regResponse));
+
+        var udapClientOptions = new UdapClientOptions { ClientName = "Test Client" };
+        udapClientIOptions.CurrentValue.Returns(udapClientOptions);
+
+        var udapClient = new UdapClient(
+            httpClientMock, udapClientDiscoveryValidator, udapClientIOptions,
+            _serviceProvider.GetRequiredService<ILogger<UdapClient>>());
+
+        await udapClient.ValidateResource("https://fhirlabs.net/fhir/r4", trustAnchorStore);
+
+        var cert = new X509Certificate2("CertStore/issued/fhirlabs.net.client.pfx", "udap-test");
+        var result = await udapClient.RegisterClientCredentialsClient(
+            cert, "system/*.read", null, null);
+
+        Assert.NotNull(result.GetError());
+    }
+
+    [Fact]
+    public async Task RegisterClientCredentialsClient_PostThrows_CatchesAndRethrows()
+    {
+        var (httpClientMock, udapClientDiscoveryValidator, udapClientIOptions, trustAnchorStore) = await BuildClientSupport();
+
+        httpClientMock.SendAsync(Arg.Is<HttpRequestMessage>(r => r.Method == HttpMethod.Post), Arg.Any<CancellationToken>())
+            .Returns<Task<HttpResponseMessage>>(_ => throw new HttpRequestException("Connection refused"));
+
+        var udapClientOptions = new UdapClientOptions { ClientName = "Test Client" };
+        udapClientIOptions.CurrentValue.Returns(udapClientOptions);
+
+        var udapClient = new UdapClient(
+            httpClientMock, udapClientDiscoveryValidator, udapClientIOptions,
+            _serviceProvider.GetRequiredService<ILogger<UdapClient>>());
+
+        await udapClient.ValidateResource("https://fhirlabs.net/fhir/r4", trustAnchorStore);
+
+        var cert = new X509Certificate2("CertStore/issued/fhirlabs.net.client.pfx", "udap-test");
+
+        await Assert.ThrowsAsync<HttpRequestException>(
+            () => udapClient.RegisterClientCredentialsClient(
+                cert, "system/*.read", null, null));
+    }
+
+    [Fact]
+    public async Task ValidateTrustChain_SingleParam_DelegatesToTwoParamOverload()
+    {
+        var (httpClientMock, udapClientDiscoveryValidator, udapClientIOptions, trustAnchorStore) = await BuildClientSupport();
+
+        var udapClient = new UdapClient(
+            httpClientMock, udapClientDiscoveryValidator, udapClientIOptions,
+            _serviceProvider.GetRequiredService<ILogger<UdapClient>>());
+
+        var disco = await udapClient.ValidateResource("https://fhirlabs.net/fhir/r4", trustAnchorStore);
+
+        Assert.False(disco.IsError);
+
+        var result = await udapClientDiscoveryValidator.ValidateTrustChain((string?)null);
+
+        Assert.True(result);
+    }
+
+    [Fact]
+    public async Task ValidateTrustChain_NullPublicCertificate_Throws()
+    {
+        var validator = new TrustChainValidator(
+            _problemFlags, false,
+            _serviceProvider.GetRequiredService<ILogger<TrustChainValidator>>());
+
+        var discoveryValidator = new UdapClientDiscoveryValidator(
+            validator,
+            _serviceProvider.GetRequiredService<ILogger<UdapClientDiscoveryValidator>>());
+
+        await Assert.ThrowsAsync<UnauthorizedAccessException>(
+            () => discoveryValidator.ValidateTrustChain(null, null));
+    }
+
+    [Fact]
+    public async Task ValidateTrustChain_NullStore_ReturnsFalse()
+    {
+        var (httpClientMock, udapClientDiscoveryValidator, udapClientIOptions, trustAnchorStore) = await BuildClientSupport();
+
+        var udapClient = new UdapClient(
+            httpClientMock, udapClientDiscoveryValidator, udapClientIOptions,
+            _serviceProvider.GetRequiredService<ILogger<UdapClient>>());
+
+        await udapClient.ValidateResource("https://fhirlabs.net/fhir/r4", trustAnchorStore);
+
+        var result = await udapClientDiscoveryValidator.ValidateTrustChain("non-existent-community", (ITrustAnchorStore?)null);
+
+        Assert.False(result);
+    }
+
+    [Fact]
+    public async Task ValidateTrustChain_EmptyAnchors_ReturnsFalse()
+    {
+        var (httpClientMock, udapClientDiscoveryValidator, udapClientIOptions, trustAnchorStore) = await BuildClientSupport();
+
+        var udapClient = new UdapClient(
+            httpClientMock, udapClientDiscoveryValidator, udapClientIOptions,
+            _serviceProvider.GetRequiredService<ILogger<UdapClient>>());
+
+        await udapClient.ValidateResource("https://fhirlabs.net/fhir/r4", trustAnchorStore);
+
+        var emptyStore = Substitute.For<ITrustAnchorStore>();
+        emptyStore.Resolve().Returns(Task.FromResult(emptyStore));
+        emptyStore.AnchorCertificates.Returns(new List<Udap.Common.Models.Anchor>());
+
+        var result = await udapClientDiscoveryValidator.ValidateTrustChain(null, emptyStore);
+
+        Assert.False(result);
+    }
+
+    [Fact]
+    public async Task ValidateTrustChain_ClientSuppliedStore_IsUsed()
+    {
+        var (httpClientMock, udapClientDiscoveryValidator, udapClientIOptions, trustAnchorStore) = await BuildClientSupport();
+
+        var udapClient = new UdapClient(
+            httpClientMock, udapClientDiscoveryValidator, udapClientIOptions,
+            _serviceProvider.GetRequiredService<ILogger<UdapClient>>());
+
+        await udapClient.ValidateResource("https://fhirlabs.net/fhir/r4", trustAnchorStore);
+
+        var result = await udapClientDiscoveryValidator.ValidateTrustChain(null, trustAnchorStore);
+
+        Assert.True(result);
+    }
+
+    [Fact]
+    public async Task ValidateJwtToken_MissingSignedMetadata_ReturnsFalse()
+    {
+        var validator = new TrustChainValidator(
+            _problemFlags, false,
+            _serviceProvider.GetRequiredService<ILogger<TrustChainValidator>>());
+
+        var discoveryValidator = new UdapClientDiscoveryValidator(
+            validator,
+            _serviceProvider.GetRequiredService<ILogger<UdapClientDiscoveryValidator>>());
+
+        string? capturedError = null;
+        discoveryValidator.TokenError += msg => capturedError = msg;
+
+        var metadata = new UdapMetadata { SignedMetadata = null };
+
+        await Assert.ThrowsAnyAsync<Exception>(
+            () => discoveryValidator.ValidateJwtToken(metadata, "https://fhirlabs.net/fhir/r4"));
+    }
+
+    [Fact]
+    public async Task ValidateJwtToken_NoX5cHeader_ReturnsFalse()
+    {
+        var validator = new TrustChainValidator(
+            _problemFlags, false,
+            _serviceProvider.GetRequiredService<ILogger<TrustChainValidator>>());
+
+        var discoveryValidator = new UdapClientDiscoveryValidator(
+            validator,
+            _serviceProvider.GetRequiredService<ILogger<UdapClientDiscoveryValidator>>());
+
+        string? capturedError = null;
+        discoveryValidator.TokenError += msg => capturedError = msg;
+
+        var handler = new JsonWebTokenHandler();
+        var jwtWithoutX5c = handler.CreateToken(new SecurityTokenDescriptor
+        {
+            Issuer = "https://fhirlabs.net/fhir/r4",
+            SigningCredentials = new SigningCredentials(
+                new SymmetricSecurityKey(new byte[32]), SecurityAlgorithms.HmacSha256)
+        });
+
+        var metadata = new UdapMetadata { SignedMetadata = jwtWithoutX5c };
+
+        var result = await discoveryValidator.ValidateJwtToken(metadata, "https://fhirlabs.net/fhir/r4");
+
+        Assert.False(result);
+        Assert.NotNull(capturedError);
+        Assert.Contains("x5c", capturedError);
+    }
+
+    [Fact]
+    public async Task ValidateJwtToken_InvalidSignature_ReturnsFalse()
+    {
+        var (_, udapClientDiscoveryValidator, _, trustAnchorStore) = await BuildClientSupport();
+
+        string? capturedError = null;
+        udapClientDiscoveryValidator.TokenError += msg => capturedError = msg;
+
+        var cert = new X509Certificate2("CertStore/issued/fhirlabs.net.client.pfx", "udap-test");
+        using var rsa = cert.GetRSAPrivateKey()!;
+
+        var handler = new JsonWebTokenHandler();
+        var jwt = handler.CreateToken(new SecurityTokenDescriptor
+        {
+            Issuer = "https://fhirlabs.net/fhir/r4",
+            Claims = new Dictionary<string, object> { ["sub"] = "https://fhirlabs.net/fhir/r4" },
+            SigningCredentials = new SigningCredentials(
+                new RsaSecurityKey(rsa), SecurityAlgorithms.RsaSha256)
+            {
+                CryptoProviderFactory = new CryptoProviderFactory { CacheSignatureProviders = false }
+            },
+            AdditionalHeaderClaims = new Dictionary<string, object>
+            {
+                ["x5c"] = new[] { Convert.ToBase64String(cert.RawData) }
+            }
+        });
+
+        var tamperedJwt = jwt.Substring(0, jwt.LastIndexOf('.')) + ".invalidsignature";
+
+        var metadata = new UdapMetadata { SignedMetadata = tamperedJwt };
+
+        var result = await udapClientDiscoveryValidator.ValidateJwtToken(metadata, "https://fhirlabs.net/fhir/r4");
+
+        Assert.False(result);
+        Assert.NotNull(capturedError);
+    }
+
+    [Fact]
+    public async Task ValidateJwtToken_AlgorithmMismatch_ReturnsFalse()
+    {
+        var (httpClientMock, udapClientDiscoveryValidator, udapClientIOptions, trustAnchorStore) = await BuildClientSupport();
+
+        var udapClient = new UdapClient(
+            httpClientMock, udapClientDiscoveryValidator, udapClientIOptions,
+            _serviceProvider.GetRequiredService<ILogger<UdapClient>>());
+
+        var disco = await udapClient.ValidateResource("https://fhirlabs.net/fhir/r4", trustAnchorStore);
+        Assert.False(disco.IsError);
+
+        var metadata = udapClient.UdapServerMetaData!;
+        metadata.RegistrationEndpointJwtSigningAlgValuesSupported = new List<string> { "ES384" };
+        metadata.TokenEndpointAuthSigningAlgValuesSupported = new List<string> { "ES384" };
+
+        string? capturedError = null;
+        udapClientDiscoveryValidator.TokenError += msg => capturedError = msg;
+
+        var result = await udapClientDiscoveryValidator.ValidateJwtToken(metadata, "https://fhirlabs.net/fhir/r4");
+
+        Assert.False(result);
+        Assert.NotNull(capturedError);
+        Assert.Contains("does not match", capturedError);
     }
 
     [Fact]
