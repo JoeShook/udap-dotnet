@@ -15,6 +15,7 @@ using Microsoft.IdentityModel.Tokens;
 using NSubstitute;
 using Udap.Client.Client;
 using Udap.Common.Certificates;
+using Udap.Model;
 
 namespace Udap.Common.Tests.Client;
 
@@ -22,20 +23,14 @@ public class UdapClientMessageHandlerTests
 {
     private readonly ILogger<UdapClient> _logger = Substitute.For<ILogger<UdapClient>>();
 
-    [Fact]
-    public async Task SendAsync_NullDiscoResponse_ThrowsSecurityTokenInvalidTypeException()
-    {
-        var validator = CreateValidator();
-        var handler = new UdapClientMessageHandler(validator, _logger)
+    private static readonly string ValidDiscoJson = """
         {
-            InnerHandler = new FakeInnerHandler("null")
-        };
+            "udap_versions_supported": ["1"],
+            "signed_metadata": "test-jwt"
+        }
+        """;
 
-        var client = new HttpClient(handler);
-
-        await Assert.ThrowsAsync<SecurityTokenInvalidTypeException>(
-            () => client.GetAsync("https://fhirlabs.net/fhir/r4/.well-known/udap"));
-    }
+    #region SendAsync — HTTP error (EnsureSuccessStatusCode)
 
     [Fact]
     public async Task SendAsync_InnerHandlerReturnsFailureStatusCode_Throws()
@@ -51,6 +46,145 @@ public class UdapClientMessageHandlerTests
         await Assert.ThrowsAsync<HttpRequestException>(
             () => client.GetAsync("https://fhirlabs.net/fhir/r4/.well-known/udap"));
     }
+
+    [Fact]
+    public async Task SendAsync_BadRequest_ThrowsBeforeDeserialization()
+    {
+        var validator = CreateValidator();
+        var handler = new UdapClientMessageHandler(validator, _logger)
+        {
+            InnerHandler = new FakeInnerHandler(HttpStatusCode.BadRequest, """{"error":"bad"}""")
+        };
+
+        var client = new HttpClient(handler);
+
+        await Assert.ThrowsAsync<HttpRequestException>(
+            () => client.GetAsync("https://fhirlabs.net/fhir/r4/.well-known/udap"));
+    }
+
+    #endregion
+
+    #region SendAsync — disco OK path (validation)
+
+    [Fact]
+    public async Task SendAsync_DiscoOk_BothValidatorsPass_ReturnsSuccessfully()
+    {
+        var validator = new TestableValidator(jwtResult: true, trustChainResult: true);
+        var handler = new UdapClientMessageHandler(validator, _logger)
+        {
+            InnerHandler = new FakeInnerHandler(ValidDiscoJson)
+        };
+
+        var client = new HttpClient(handler);
+        var response = await client.GetAsync("https://fhirlabs.net/fhir/r4/.well-known/udap");
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+    }
+
+    [Fact]
+    public async Task SendAsync_DiscoOk_JwtValidationFails_ThrowsSecurityTokenException()
+    {
+        var validator = new TestableValidator(jwtResult: false, trustChainResult: true);
+        var handler = new UdapClientMessageHandler(validator, _logger)
+        {
+            InnerHandler = new FakeInnerHandler(ValidDiscoJson)
+        };
+
+        var ex = await Assert.ThrowsAsync<SecurityTokenInvalidTypeException>(
+            () => new HttpClient(handler).GetAsync("https://fhirlabs.net/fhir/r4/.well-known/udap"));
+
+        Assert.Equal("Failed JWT Token Validation", ex.Message);
+    }
+
+    [Fact]
+    public async Task SendAsync_DiscoOk_TrustChainFails_ThrowsUnauthorizedAccess()
+    {
+        var validator = new TestableValidator(jwtResult: true, trustChainResult: false);
+        var handler = new UdapClientMessageHandler(validator, _logger)
+        {
+            InnerHandler = new FakeInnerHandler(ValidDiscoJson)
+        };
+
+        var ex = await Assert.ThrowsAsync<UnauthorizedAccessException>(
+            () => new HttpClient(handler).GetAsync("https://fhirlabs.net/fhir/r4/.well-known/udap"));
+
+        Assert.Equal("Failed Trust Chain Validation", ex.Message);
+    }
+
+    [Fact]
+    public async Task SendAsync_DiscoOk_SetsUdapServerMetaData()
+    {
+        var validator = new TestableValidator(jwtResult: true, trustChainResult: true);
+        var handler = new UdapClientMessageHandler(validator, _logger)
+        {
+            InnerHandler = new FakeInnerHandler(ValidDiscoJson)
+        };
+
+        var client = new HttpClient(handler);
+        await client.GetAsync("https://fhirlabs.net/fhir/r4/.well-known/udap");
+
+        Assert.NotNull(validator.UdapServerMetaData);
+    }
+
+    [Fact]
+    public async Task SendAsync_DiscoOk_ExtractsBaseUrl()
+    {
+        string? capturedBaseUrl = null;
+        var validator = new TestableValidator(jwtResult: true, trustChainResult: true,
+            onValidateJwt: (_, baseUrl) => capturedBaseUrl = baseUrl);
+        var handler = new UdapClientMessageHandler(validator, _logger)
+        {
+            InnerHandler = new FakeInnerHandler(ValidDiscoJson)
+        };
+
+        var client = new HttpClient(handler);
+        await client.GetAsync("https://fhirlabs.net/fhir/r4/.well-known/udap");
+
+        Assert.Equal("https://fhirlabs.net/fhir/r4", capturedBaseUrl);
+    }
+
+    #endregion
+
+    #region NotifyTokenError — error path only reachable if disco.IsError on a 200 response
+
+    [Fact]
+    public async Task SendAsync_DiscoOkButIsError_CallsNotifyTokenError()
+    {
+        var validator = new TestableValidator(jwtResult: true, trustChainResult: true);
+        var handler = new UdapClientMessageHandler(validator, _logger)
+        {
+            InnerHandler = new FakeInnerHandler(HttpStatusCode.OK, "not-valid-json{{{")
+        };
+
+        string? capturedError = null;
+        handler.TokenError += msg => capturedError = msg;
+
+        var client = new HttpClient(handler);
+        var response = await client.GetAsync("https://fhirlabs.net/fhir/r4/.well-known/udap");
+
+        Assert.NotNull(capturedError);
+    }
+
+    [Fact]
+    public async Task SendAsync_NotifyTokenError_SubscriberThrows_IsSwallowed()
+    {
+        var validator = new TestableValidator(jwtResult: true, trustChainResult: true);
+        var handler = new UdapClientMessageHandler(validator, _logger)
+        {
+            InnerHandler = new FakeInnerHandler(HttpStatusCode.OK, "not-valid-json{{{")
+        };
+
+        handler.TokenError += _ => throw new InvalidOperationException("subscriber boom");
+
+        var client = new HttpClient(handler);
+        var response = await client.GetAsync("https://fhirlabs.net/fhir/r4/.well-known/udap");
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+    }
+
+    #endregion
+
+    #region Event delegation
 
     [Fact]
     public void TokenError_EventDelegation_CanSubscribeAndUnsubscribe()
@@ -109,76 +243,9 @@ public class UdapClientMessageHandlerTests
         Assert.Null(handler.UdapDynamicClientRegistrationDocument);
     }
 
-    [Fact]
-    public async Task SendAsync_DiscoError_CallsNotifyTokenError_NoSubscriber()
-    {
-        var validator = CreateValidator();
-        var handler = new UdapClientMessageHandler(validator, _logger)
-        {
-            InnerHandler = new FakeInnerHandler("{}")
-        };
+    #endregion
 
-        var client = new HttpClient(handler);
-        var response = await client.GetAsync("https://fhirlabs.net/fhir/r4/.well-known/udap");
-
-        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
-    }
-
-    [Fact]
-    public async Task SendAsync_DiscoError_CallsNotifyTokenError_WithSubscriber()
-    {
-        var validator = CreateValidator();
-        var handler = new UdapClientMessageHandler(validator, _logger)
-        {
-            InnerHandler = new FakeInnerHandler("{}")
-        };
-
-        string? capturedError = null;
-        handler.TokenError += msg => capturedError = msg;
-
-        var client = new HttpClient(handler);
-        await client.GetAsync("https://fhirlabs.net/fhir/r4/.well-known/udap");
-
-        Assert.NotNull(capturedError);
-        Assert.Equal("Unknown Error", capturedError);
-    }
-
-    [Fact]
-    public async Task SendAsync_DiscoError_TokenErrorSubscriberThrows_IsSwallowed()
-    {
-        var validator = CreateValidator();
-        var handler = new UdapClientMessageHandler(validator, _logger)
-        {
-            InnerHandler = new FakeInnerHandler("{}")
-        };
-
-        handler.TokenError += _ => throw new InvalidOperationException("subscriber boom");
-
-        var client = new HttpClient(handler);
-        var response = await client.GetAsync("https://fhirlabs.net/fhir/r4/.well-known/udap");
-
-        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
-    }
-
-    [Fact]
-    public async Task SendAsync_DiscoOk_EntersValidationBranch()
-    {
-        var json = """{"HttpStatusCode": 200}""";
-
-        var validator = CreateValidator();
-        var handler = new UdapClientMessageHandler(validator, _logger)
-        {
-            InnerHandler = new FakeInnerHandler(json)
-        };
-
-        string? capturedError = null;
-        handler.TokenError += msg => capturedError = msg;
-
-        var client = new HttpClient(handler);
-        await client.GetAsync("https://fhirlabs.net/fhir/r4/.well-known/udap");
-
-        Assert.NotNull(capturedError);
-    }
+    #region Helpers
 
     private static UdapClientDiscoveryValidator CreateValidator()
     {
@@ -188,6 +255,41 @@ public class UdapClientMessageHandlerTests
         return new UdapClientDiscoveryValidator(
             trustChainValidator,
             Substitute.For<ILogger<UdapClientDiscoveryValidator>>());
+    }
+
+    private class TestableValidator : UdapClientDiscoveryValidator
+    {
+        private readonly bool _jwtResult;
+        private readonly bool _trustChainResult;
+        private readonly Action<UdapMetadata, string>? _onValidateJwt;
+        private readonly Action<string?>? _onValidateTrustChain;
+
+        public TestableValidator(
+            bool jwtResult,
+            bool trustChainResult,
+            Action<UdapMetadata, string>? onValidateJwt = null,
+            Action<string?>? onValidateTrustChain = null)
+            : base(
+                new TrustChainValidator(Substitute.For<ILogger<TrustChainValidator>>()),
+                Substitute.For<ILogger<UdapClientDiscoveryValidator>>())
+        {
+            _jwtResult = jwtResult;
+            _trustChainResult = trustChainResult;
+            _onValidateJwt = onValidateJwt;
+            _onValidateTrustChain = onValidateTrustChain;
+        }
+
+        public override Task<bool> ValidateJwtToken(UdapMetadata udapServerMetaData, string baseUrl)
+        {
+            _onValidateJwt?.Invoke(udapServerMetaData, baseUrl);
+            return Task.FromResult(_jwtResult);
+        }
+
+        public override Task<bool> ValidateTrustChain(string? community)
+        {
+            _onValidateTrustChain?.Invoke(community);
+            return Task.FromResult(_trustChainResult);
+        }
     }
 
     private class FakeInnerHandler : HttpMessageHandler
@@ -207,18 +309,21 @@ public class UdapClientMessageHandlerTests
             _statusCode = statusCode;
         }
 
+        public FakeInnerHandler(HttpStatusCode statusCode, string responseBody)
+        {
+            _responseBody = responseBody;
+            _statusCode = statusCode;
+        }
+
         protected override Task<HttpResponseMessage> SendAsync(
             HttpRequestMessage request, CancellationToken cancellationToken)
         {
-            if (_statusCode != HttpStatusCode.OK)
-            {
-                return Task.FromResult(new HttpResponseMessage(_statusCode));
-            }
-
-            return Task.FromResult(new HttpResponseMessage(HttpStatusCode.OK)
+            return Task.FromResult(new HttpResponseMessage(_statusCode)
             {
                 Content = new StringContent(_responseBody ?? "", Encoding.UTF8, "application/json")
             });
         }
     }
+
+    #endregion
 }

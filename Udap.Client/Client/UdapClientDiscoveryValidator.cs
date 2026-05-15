@@ -65,7 +65,7 @@ public class UdapClientDiscoveryValidator : IUdapClientEvents
 
     public UdapMetadata? UdapServerMetaData { get; set; }
 
-    public async Task<bool> ValidateJwtToken(UdapMetadata udapServerMetaData, string baseUrl)
+    public virtual async Task<bool> ValidateJwtToken(UdapMetadata udapServerMetaData, string baseUrl)
     {
         var tokenHandler = new JsonWebTokenHandler();
 
@@ -202,12 +202,12 @@ public class UdapClientDiscoveryValidator : IUdapClientEvents
         }
     }
 
-    public Task<bool> ValidateTrustChain(string? community)
+    public virtual Task<bool> ValidateTrustChain(string? community)
     {
         return ValidateTrustChain(community, null);
     }
 
-    public async Task<bool> ValidateTrustChain(string? community, ITrustAnchorStore? clientSuppliedTrustAnchorStore)
+    public virtual async Task<bool> ValidateTrustChain(string? community, ITrustAnchorStore? clientSuppliedTrustAnchorStore)
     {
         if (_publicCertificate == null)
         {

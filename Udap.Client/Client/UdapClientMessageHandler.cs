@@ -8,7 +8,6 @@
 #endregion
 
 using System.Net;
-using System.Net.Http.Json;
 using System.Security.Cryptography.X509Certificates;
 using System.Text.Json;
 using Duende.IdentityModel.Client;
@@ -97,12 +96,7 @@ public class UdapClientMessageHandler : DelegatingHandler, IUdapClientEvents
         var metadata = await base.SendAsync(request, cancellationToken);
         metadata.EnsureSuccessStatusCode();
 
-        var disco = await metadata.Content.ReadFromJsonAsync<DiscoveryDocumentResponse>(cancellationToken: cancellationToken);
-
-        if (disco == null)
-        {
-            throw new SecurityTokenInvalidTypeException("Failed to read UDAP Discovery Document");
-        }
+        var disco = await ProtocolResponse.FromHttpResponseAsync<ProtocolResponse>(metadata);
 
         if (disco.HttpStatusCode == HttpStatusCode.OK && !disco.IsError)
         {
