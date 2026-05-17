@@ -26,6 +26,7 @@ public class SigilDbContext : DbContext
     public DbSet<Crl> Crls => Set<Crl>();
     public DbSet<CertificateRevocation> CertificateRevocations => Set<CertificateRevocation>();
     public DbSet<CertificateTemplate> CertificateTemplates => Set<CertificateTemplate>();
+    public DbSet<SanList> SanLists => Set<SanList>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -145,6 +146,18 @@ public class SigilDbContext : DbContext
             entity.Property(e => e.CdpUrlTemplate).HasMaxLength(500);
             entity.Property(e => e.AiaUrlTemplate).HasMaxLength(500);
             entity.Property(e => e.SubjectAltNameTypes).HasMaxLength(100);
+
+            entity.HasMany(e => e.SanLists)
+                .WithMany(s => s.Templates)
+                .UsingEntity("CertificateTemplateSanList");
+        });
+
+        // SanList
+        modelBuilder.Entity<SanList>(entity =>
+        {
+            entity.HasKey(e => e.Id);
+            entity.Property(e => e.Name).HasMaxLength(200).IsRequired();
+            entity.HasIndex(e => e.Name).IsUnique();
         });
 
     }

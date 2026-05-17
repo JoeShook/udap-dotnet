@@ -372,6 +372,19 @@
 
             @* Subject Alternative Names *@
             <FluentLabel Typo="Typography.Subject" Style="margin-top: 0.25rem;">Subject Alternative Names</FluentLabel>
+            @if (templateSanLists.Count > 0)
+            {
+                <FluentStack Orientation="Orientation.Horizontal" Style="gap: 0.5rem; margin-bottom: 0.5rem; flex-wrap: wrap;">
+                    @foreach (var sl in templateSanLists)
+                    {
+                        <FluentButton Appearance="Appearance.Outline" Size="ButtonSize.Small"
+                                      IconStart="@(new Icons.Regular.Size16.ListBar())"
+                                      OnClick="@(() => ShowSanListPickerDialog(sl))">
+                            @sl.Name
+                        </FluentButton>
+                    }
+                </FluentStack>
+            }
             @foreach (var san in issuanceSans)
             {
                 <FluentStack Orientation="Orientation.Horizontal" Style="gap: 0.5rem; align-items: end;">
@@ -1244,3 +1257,35 @@ else if (CommunityId > 0 && !showDropZone)
         </FluentTreeItem>
     };
 }
+
+@* SAN List Picker Dialog *@
+<FluentDialog @bind-Hidden="@sanPickerDialogHidden" Modal="true" TrapFocus="true"
+              Style="min-width: 600px; max-height: 80vh; overflow: auto;">
+    <FluentDialogHeader>@(sanListForPicker?.Name ?? "Select SANs")</FluentDialogHeader>
+    <FluentDialogBody>
+        @if (sanListForPicker?.Description != null)
+        {
+            <FluentLabel Style="opacity: 0.7; margin-bottom: 0.5rem;">@sanListForPicker.Description</FluentLabel>
+        }
+        <FluentCheckbox Value="@sanPickerSelectAll"
+                        ValueChanged="ToggleSanPickerSelectAll"
+                        Label="Select All"
+                        Style="font-weight: bold; margin-bottom: 0.5rem;" />
+        <div style="border-top: 1px solid var(--neutral-stroke-rest); padding-top: 0.5rem; max-height: 400px; overflow-y: auto;">
+            @foreach (var item in sanPickerItems)
+            {
+                <FluentCheckbox @bind-Value="item.Selected"
+                                Label="@item.Value"
+                                Style="display: block; margin-bottom: 0.15rem; font-size: 0.85rem;" />
+            }
+        </div>
+    </FluentDialogBody>
+    <FluentDialogFooter>
+        <FluentButton Appearance="Appearance.Accent" OnClick="ApplySanListPicker">
+            Apply
+        </FluentButton>
+        <FluentButton Appearance="Appearance.Outline" OnClick="@(() => sanPickerDialogHidden = true)">
+            Cancel
+        </FluentButton>
+    </FluentDialogFooter>
+</FluentDialog>

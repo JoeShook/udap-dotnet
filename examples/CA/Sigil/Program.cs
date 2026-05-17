@@ -67,6 +67,7 @@ try
     builder.Services.AddScoped<CertificateManagementService>();
     builder.Services.AddScoped<CertificatePublishingService>();
     builder.Services.AddSingleton<IssuanceValidator>();
+    builder.Services.AddScoped<SanListService>();
     builder.Services.AddHttpClient("SigilCrl");
     builder.Services.AddHttpClient();
 

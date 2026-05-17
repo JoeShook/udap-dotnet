@@ -3,7 +3,8 @@
     "allow": [
       "Bash(grep -r \"TriggerJob\\\\|RecurringJob\\\\|IRecurringJobScheduler\" /c/Source/GitHub/JoeShook/udap-tools/udap-dotnet/examples/CA --include=\"*.cs\" --include=\"*.razor\" ! -path \"*/obj/*\")",
       "Bash(dotnet build *)",
-      "Bash(xargs grep -l -i \"dialog\")"
+      "Bash(xargs grep -l -i \"dialog\")",
+      "Bash(dotnet ef *)"
     ]
   }
 }

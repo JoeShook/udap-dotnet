@@ -58,6 +58,38 @@ public class TemplateService
         return entity;
     }
 
+    public async Task UpdateSanListsAsync(int templateId, HashSet<int> sanListIds, CancellationToken ct = default)
+    {
+        await using var db = await _dbFactory.CreateDbContextAsync(ct);
+        var template = await db.CertificateTemplates
+            .Include(t => t.SanLists)
+            .FirstOrDefaultAsync(t => t.Id == templateId, ct);
+        if (template == null) return;
+
+        template.SanLists.Clear();
+        if (sanListIds.Count > 0)
+        {
+            var sanLists = await db.SanLists
+                .Where(s => sanListIds.Contains(s.Id))
+                .ToListAsync(ct);
+            foreach (var sl in sanLists)
+                template.SanLists.Add(sl);
+        }
+
+        await db.SaveChangesAsync(ct);
+    }
+
+    public async Task<List<CertificateTemplate>> GetAllWithSanListsAsync(CancellationToken ct = default)
+    {
+        await using var db = await _dbFactory.CreateDbContextAsync(ct);
+        return await db.CertificateTemplates
+            .Include(t => t.SanLists)
+            .OrderByDescending(t => t.IsPreset)
+            .ThenBy(t => t.CertificateType)
+            .ThenBy(t => t.Name)
+            .ToListAsync(ct);
+    }
+
     public async Task DeleteAsync(int id, CancellationToken ct = default)
     {
         await using var db = await _dbFactory.CreateDbContextAsync(ct);

@@ -132,6 +132,11 @@ public partial class CertificateExplorer : IDisposable
     private List<IssuanceUrlEntry> issuanceCdpUrls = new();
     private List<IssuanceUrlEntry> issuanceAiaUrls = new();
     private List<IssuanceSanEntry> issuanceSans = new();
+    private List<SanList> templateSanLists = new();
+    private bool sanPickerDialogHidden = true;
+    private SanList? sanListForPicker;
+    private List<SanListPickerItem> sanPickerItems = new();
+    private bool sanPickerSelectAll;
     private string issuancePfxPassword = string.Empty;
     private string issuanceKeyStorage = "local"; // "local" or "vault-transit"
     private bool isRenewMode;
@@ -314,6 +319,8 @@ public partial class CertificateExplorer : IDisposable
         }
 
         OnTemplateSelected(selectedTemplate);
+        if (selectedTemplate != null)
+            await EnsureTemplateSanListsLoadedAsync(selectedTemplate);
         issuanceCertName = node.Name + " (renewed)";
         StateHasChanged();
     }
@@ -1731,6 +1738,7 @@ public partial class CertificateExplorer : IDisposable
         }
 
         var allTemplates = await db.CertificateTemplates
+            .Include(t => t.SanLists)
             .OrderBy(t => t.CertificateType)
             .ThenBy(t => t.Name)
             .ToListAsync();
@@ -1823,6 +1831,77 @@ public partial class CertificateExplorer : IDisposable
                 }
             }
         }
+
+        templateSanLists = template.SanLists?.Where(s => s != null).ToList() ?? new();
+    }
+
+    private async Task EnsureTemplateSanListsLoadedAsync(CertificateTemplate template)
+    {
+        if (template.SanLists != null && template.SanLists.Count > 0) return;
+
+        await using var db = await DbFactory.CreateDbContextAsync();
+        var loaded = await db.CertificateTemplates
+            .Include(t => t.SanLists)
+            .FirstOrDefaultAsync(t => t.Id == template.Id);
+
+        if (loaded?.SanLists != null)
+        {
+            template.SanLists = loaded.SanLists;
+            templateSanLists = loaded.SanLists.ToList();
+        }
+    }
+
+    private void ShowSanListPickerDialog(SanList list)
+    {
+        sanListForPicker = list;
+        sanPickerSelectAll = false;
+        sanPickerItems.Clear();
+
+        foreach (var part in list.Items.Split(';', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries))
+        {
+            var colonIdx = part.IndexOf(':');
+            if (colonIdx > 0)
+            {
+                var typeName = part[..colonIdx];
+                var value = part[(colonIdx + 1)..];
+                var sanType = typeName.ToUpperInvariant() switch
+                {
+                    "URI" => SanType.Uri,
+                    "DNS" => SanType.Dns,
+                    "EMAIL" => SanType.Email,
+                    "IP" => SanType.IpAddress,
+                    _ => SanType.Uri
+                };
+                var alreadyAdded = issuanceSans.Any(s => s.Type == sanType && s.Value == value);
+                sanPickerItems.Add(new SanListPickerItem { Type = sanType, Value = value, Selected = alreadyAdded });
+            }
+        }
+
+        sanPickerDialogHidden = false;
+    }
+
+    private void ToggleSanPickerSelectAll(bool selectAll)
+    {
+        sanPickerSelectAll = selectAll;
+        foreach (var item in sanPickerItems)
+            item.Selected = selectAll;
+    }
+
+    private void ApplySanListPicker()
+    {
+        foreach (var item in sanPickerItems)
+        {
+            var exists = issuanceSans.Any(s => s.Type == item.Type && s.Value == item.Value);
+            if (item.Selected && !exists)
+                issuanceSans.Add(new IssuanceSanEntry { Type = item.Type, Value = item.Value });
+            else if (!item.Selected && exists)
+            {
+                var match = issuanceSans.First(s => s.Type == item.Type && s.Value == item.Value);
+                issuanceSans.Remove(match);
+            }
+        }
+
+        sanPickerDialogHidden = true;
     }
 
     private void AddSanEntry()
@@ -2081,6 +2160,8 @@ public partial class CertificateExplorer : IDisposable
         }
 
         OnTemplateSelected(selectedTemplate);
+        if (selectedTemplate != null)
+            await EnsureTemplateSanListsLoadedAsync(selectedTemplate);
 
         issuanceCertName = selectedNode.Name;
 
@@ -2226,6 +2307,8 @@ public partial class CertificateExplorer : IDisposable
 
         // Always call OnTemplateSelected with isRenewMode=true to restore subject/SANs
         OnTemplateSelected(selectedTemplate);
+        if (selectedTemplate != null)
+            await EnsureTemplateSanListsLoadedAsync(selectedTemplate);
 
         issuanceCertName = selectedNode.Name + " (renewed)";
     }
@@ -2370,6 +2453,13 @@ public partial class CertificateExplorer : IDisposable
     public class IssuanceUrlEntry
     {
         public string Value { get; set; } = string.Empty;
+    }
+
+    public class SanListPickerItem
+    {
+        public SanType Type { get; set; }
+        public string Value { get; set; } = string.Empty;
+        public bool Selected { get; set; }
     }
 
     private void ShowRevokeDialog()

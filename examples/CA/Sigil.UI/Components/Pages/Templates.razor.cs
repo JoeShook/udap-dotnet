@@ -20,6 +20,7 @@ namespace Sigil.UI.Components.Pages;
 public partial class Templates
 {
     [Inject] private TemplateService TemplateService { get; set; } = null!;
+    [Inject] private SanListService SanListService { get; set; } = null!;
     [Inject] private IDialogService DialogService { get; set; } = null!;
     [Inject] private IToastService ToastService { get; set; } = null!;
 
@@ -55,6 +56,8 @@ public partial class Templates
     private bool editSanDns;
     private bool editSanEmail;
     private bool editSanIp;
+    private List<SanList> availableSanLists = new();
+    private HashSet<int> editSelectedSanListIds = new();
 
     // Options for selects
     private static readonly CertificateType[] certTypes = Enum.GetValues<CertificateType>();
@@ -95,22 +98,24 @@ public partial class Templates
 
     private async Task LoadTemplatesAsync()
     {
-        templates = await TemplateService.GetAllAsync();
+        templates = await TemplateService.GetAllWithSanListsAsync();
     }
 
-    private void ShowAddDialog()
+    private async Task ShowAddDialog()
     {
         isEditing = false;
         editingId = null;
         ResetForm();
+        availableSanLists = await SanListService.GetAllAsync();
         dialogHidden = false;
     }
 
-    private void ShowEditDialog(CertificateTemplate t)
+    private async Task ShowEditDialog(CertificateTemplate t)
     {
         isEditing = true;
         editingId = t.Id;
         PopulateForm(t);
+        availableSanLists = await SanListService.GetAllAsync();
         dialogHidden = false;
     }
 
@@ -142,6 +147,7 @@ public partial class Templates
         editSanDns = false;
         editSanEmail = false;
         editSanIp = false;
+        editSelectedSanListIds.Clear();
     }
 
     private void PopulateForm(CertificateTemplate t)
@@ -188,6 +194,8 @@ public partial class Templates
         editSanDns = sanTypes.Contains("DNS", StringComparer.OrdinalIgnoreCase);
         editSanEmail = sanTypes.Contains("Email", StringComparer.OrdinalIgnoreCase);
         editSanIp = sanTypes.Contains("IP", StringComparer.OrdinalIgnoreCase);
+
+        editSelectedSanListIds = new HashSet<int>(t.SanLists.Select(s => s.Id));
     }
 
     private CertificateTemplate BuildEntityFromForm(CertificateTemplate? existing = null)
@@ -235,12 +243,14 @@ public partial class Templates
             entity = BuildEntityFromForm();
             entity.Id = editingId.Value;
             await TemplateService.SaveAsync(entity);
+            await TemplateService.UpdateSanListsAsync(entity.Id, editSelectedSanListIds);
             ToastService.ShowCopyableSuccess($"Template '{entity.Name}' updated.");
         }
         else
         {
             entity = BuildEntityFromForm();
-            await TemplateService.SaveAsync(entity);
+            entity = await TemplateService.SaveAsync(entity);
+            await TemplateService.UpdateSanListsAsync(entity.Id, editSelectedSanListIds);
             ToastService.ShowCopyableSuccess($"Template '{entity.Name}' created.");
         }
 
@@ -379,4 +389,8 @@ public partial class Templates
         CertificateType.EndEntityServer => ("#f59e0b", "Server"),
         _ => ("#666", ct.ToString())
     };
+
+    private static int CountSanItems(string items) =>
+        string.IsNullOrWhiteSpace(items) ? 0 :
+        items.Split(';', StringSplitOptions.RemoveEmptyEntries).Length;
 }
