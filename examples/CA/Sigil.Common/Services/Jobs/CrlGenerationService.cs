@@ -69,7 +69,6 @@ public class CrlGenerationService
         TimeSpan? validity = null,
         CancellationToken ct = default)
     {
-        validity ??= TimeSpan.FromDays(7);
         await using var db = await _dbFactory.CreateDbContextAsync(ct);
 
         var ca = await db.CaCertificates
@@ -78,6 +77,12 @@ public class CrlGenerationService
 
         if (ca == null)
             return CrlGenerationResult.Failed($"CA certificate with ID {caCertificateId} not found.");
+
+        if (validity == null)
+        {
+            var community = await db.Communities.FindAsync([ca.CommunityId], ct);
+            validity = TimeSpan.FromDays(community?.CrlValidityDays ?? 7);
+        }
 
         // Collect revoked issued certificates for this CA
         var revokedCerts = await db.IssuedCertificates

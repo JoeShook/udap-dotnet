@@ -25,6 +25,7 @@ public partial class Communities
     private bool addDialogHidden = true;
     private string newCommunityName = string.Empty;
     private string newCommunityDescription = string.Empty;
+    private int newCommunityExpiry = 7;
     private List<BaseUrlEntry> newCommunityBaseUrls = new();
 
     // Edit dialog
@@ -32,6 +33,7 @@ public partial class Communities
     private int editCommunityId;
     private string editCommunityName = string.Empty;
     private string editCommunityDescription = string.Empty;
+    private int editCommunityExpiry = 7;
     private List<BaseUrlEntry> editCommunityBaseUrls = new();
 
     // Folder browser
@@ -69,6 +71,7 @@ public partial class Communities
     {
         newCommunityName = string.Empty;
         newCommunityDescription = string.Empty;
+        newCommunityExpiry = 7;
         newCommunityBaseUrls = new List<BaseUrlEntry>();
         addDialogHidden = false;
     }
@@ -82,7 +85,7 @@ public partial class Communities
             .Select(e => (e.Value, (string?)e.PublishingBasePath))
             .ToList();
 
-        await CommunityService.CreateAsync(newCommunityName, newCommunityDescription, baseUrls);
+        await CommunityService.CreateAsync(newCommunityName, newCommunityDescription, baseUrls, newCommunityExpiry);
         addDialogHidden = true;
         await LoadCommunitiesAsync();
     }
@@ -106,6 +109,7 @@ public partial class Communities
         editCommunityId = community.Id;
         editCommunityName = community.Name;
         editCommunityDescription = community.Description ?? string.Empty;
+        editCommunityExpiry = community.CrlValidityDays;
         editCommunityBaseUrls = community.BaseUrls
             .Select(u => new BaseUrlEntry { Value = u.Url, PublishingBasePath = u.PublishingBasePath ?? string.Empty })
             .ToList();
@@ -121,7 +125,7 @@ public partial class Communities
             .Select(e => (e.Value, (string?)e.PublishingBasePath))
             .ToList();
 
-        await CommunityService.UpdateAsync(editCommunityId, editCommunityName, editCommunityDescription, baseUrls);
+        await CommunityService.UpdateAsync(editCommunityId, editCommunityName, editCommunityDescription, baseUrls, editCommunityExpiry);
 
         editDialogHidden = true;
         await LoadCommunitiesAsync();

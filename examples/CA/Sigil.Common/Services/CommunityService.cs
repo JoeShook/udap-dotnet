@@ -42,6 +42,7 @@ public class CommunityService
                 BaseUrls = c.BaseUrls.OrderBy(bu => bu.SortOrder)
                     .Select(bu => new BaseUrlViewModel { Url = bu.Url, PublishingBasePath = bu.PublishingBasePath })
                     .ToList(),
+                CrlValidityDays = c.CrlValidityDays,
                 Enabled = c.Enabled,
                 CreatedAt = c.CreatedAt,
                 RootCaCount = c.CaCertificates.Count(ca => ca.ParentId == null),
@@ -56,6 +57,7 @@ public class CommunityService
         string name,
         string? description,
         List<(string Url, string? PublishingBasePath)> baseUrls,
+        int crlValidityDays = 7,
         CancellationToken ct = default)
     {
         await using var db = await _dbFactory.CreateDbContextAsync(ct);
@@ -64,6 +66,7 @@ public class CommunityService
         {
             Name = name.Trim(),
             Description = string.IsNullOrWhiteSpace(description) ? null : description.Trim(),
+            CrlValidityDays = crlValidityDays > 0 ? crlValidityDays : 7,
             Enabled = true
         };
 
@@ -91,6 +94,7 @@ public class CommunityService
         string name,
         string? description,
         List<(string Url, string? PublishingBasePath)> baseUrls,
+        int crlValidityDays = 7,
         CancellationToken ct = default)
     {
         await using var db = await _dbFactory.CreateDbContextAsync(ct);
@@ -102,6 +106,7 @@ public class CommunityService
 
         entity.Name = name.Trim();
         entity.Description = string.IsNullOrWhiteSpace(description) ? null : description.Trim();
+        entity.CrlValidityDays = crlValidityDays > 0 ? crlValidityDays : 7;
 
         entity.BaseUrls.Clear();
         var sortOrder = 0;

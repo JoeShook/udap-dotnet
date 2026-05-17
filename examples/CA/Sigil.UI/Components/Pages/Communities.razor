@@ -73,6 +73,8 @@
     <FluentDialogBody>
         <FluentTextField @bind-Value="newCommunityName" Label="Name" Style="width: 100%;" />
         <FluentTextField @bind-Value="newCommunityDescription" Label="Description" Style="width: 100%; margin-top: 0.5rem;" />
+        <FluentNumberField @bind-Value="newCommunityExpiry" Label="CRL Validity (Days)" Min="1" Max="365"
+                           Style="width: 100%; margin-top: 0.5rem;" />
         <FluentLabel Typo="Typography.Subject" Style="margin-top: 0.5rem;">Certificate Server Base URLs</FluentLabel>
         @foreach (var url in newCommunityBaseUrls)
         {
@@ -119,6 +121,8 @@
     <FluentDialogBody>
         <FluentTextField @bind-Value="editCommunityName" Label="Name" Style="width: 100%;" />
         <FluentTextField @bind-Value="editCommunityDescription" Label="Description" Style="width: 100%; margin-top: 0.5rem;" />
+        <FluentNumberField @bind-Value="editCommunityExpiry" Label="CRL Validity (Days)" Min="1" Max="365"
+                           Style="width: 100%; margin-top: 0.5rem;" />
         <FluentLabel Typo="Typography.Subject" Style="margin-top: 0.5rem;">Certificate Server Base URLs</FluentLabel>
         @foreach (var url in editCommunityBaseUrls)
         {

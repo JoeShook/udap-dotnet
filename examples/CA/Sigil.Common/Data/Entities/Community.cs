@@ -16,6 +16,8 @@ public class Community
     public string Name { get; set; } = string.Empty;
     public string? Description { get; set; }
 
+    public int CrlValidityDays { get; set; } = 7;
+
     public bool Enabled { get; set; } = true;
     public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
 

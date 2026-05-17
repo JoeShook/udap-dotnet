@@ -68,6 +68,8 @@ public partial class CertificateExplorer : IDisposable
     private bool selectedNodeAutoRenew = true;
     private bool isGeneratingCrl;
     private bool isPublishingAia;
+    private bool crlOverrideDialogHidden = true;
+    private DateTime? crlOverrideNextUpdate;
     private List<string> subjectAltNames = new();
     private FluentTreeItem? selectedTreeItem;
     private int treeVersion;
@@ -541,6 +543,58 @@ public partial class CertificateExplorer : IDisposable
             if (result.IsSuccess)
             {
                 ToastService.ShowSuccess($"CRL #{result.CrlNumber} generated ({result.RevokedCount} revoked certs)");
+                await LoadCommunityTreeAsync(CommunityId);
+            }
+            else
+            {
+                ToastService.ShowCopyableError($"CRL generation failed: {result.Error}");
+            }
+        }
+        catch (Exception ex)
+        {
+            ToastService.ShowCopyableError($"CRL generation failed: {ex.Message}");
+        }
+        finally
+        {
+            isGeneratingCrl = false;
+            StateHasChanged();
+        }
+    }
+
+    private async Task ShowPublishCrlDialog()
+    {
+        if (selectedNode == null) return;
+
+        await using var db = await DbFactory.CreateDbContextAsync();
+        var ca = await db.CaCertificates.FindAsync(selectedNode.Id);
+        var community = ca != null ? await db.Communities.FindAsync(ca.CommunityId) : null;
+        var days = community?.CrlValidityDays ?? 7;
+
+        crlOverrideNextUpdate = DateTime.UtcNow.AddDays(days);
+        crlOverrideDialogHidden = false;
+    }
+
+    private async Task GenerateCrlWithOverrideAsync()
+    {
+        if (selectedNode == null || crlOverrideNextUpdate == null) return;
+
+        crlOverrideDialogHidden = true;
+        var validity = crlOverrideNextUpdate.Value - DateTime.UtcNow;
+        if (validity <= TimeSpan.Zero)
+        {
+            ToastService.ShowCopyableError("NextUpdate must be in the future.");
+            return;
+        }
+
+        isGeneratingCrl = true;
+        StateHasChanged();
+
+        try
+        {
+            var result = await CrlGenService.GenerateCrlAsync(selectedNode.Id, validity);
+            if (result.IsSuccess)
+            {
+                ToastService.ShowSuccess($"CRL #{result.CrlNumber} generated (next update: {result.NextUpdate:yyyy-MM-dd HH:mm} UTC)");
                 await LoadCommunityTreeAsync(CommunityId);
             }
             else

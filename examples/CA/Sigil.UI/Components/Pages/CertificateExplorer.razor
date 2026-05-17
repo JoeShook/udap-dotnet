@@ -922,8 +922,15 @@ else if (treeNodes.Count > 0)
                                           IconStart="@(new Icons.Regular.Size16.ShieldKeyhole())"
                                           OnClick="GenerateCrlForSelectedAsync"
                                           Disabled="@isGeneratingCrl"
-                                          title="Regenerate and publish a new CRL for this CA">
+                                          title="Regenerate CRL using community validity setting">
                                 @(isGeneratingCrl ? "Generating..." : "Regen CRL")
+                            </FluentButton>
+                            <FluentButton Appearance="Appearance.Outline"
+                                          IconStart="@(new Icons.Regular.Size16.DocumentArrowRight())"
+                                          OnClick="ShowPublishCrlDialog"
+                                          Disabled="@isGeneratingCrl"
+                                          title="Generate and publish a new CRL">
+                                Publish CRL
                             </FluentButton>
                             <FluentButton Appearance="Appearance.Outline"
                                           IconStart="@(new Icons.Regular.Size16.Certificate())"
@@ -1285,6 +1292,24 @@ else if (CommunityId > 0 && !showDropZone)
             Apply
         </FluentButton>
         <FluentButton Appearance="Appearance.Outline" OnClick="@(() => sanPickerDialogHidden = true)">
+            Cancel
+        </FluentButton>
+    </FluentDialogFooter>
+</FluentDialog>
+
+@* Publish CRL Dialog *@
+<FluentDialog @bind-Hidden="@crlOverrideDialogHidden" Modal="true" TrapFocus="true"
+              Style="min-width: 400px;">
+    <FluentDialogHeader>Publish CRL</FluentDialogHeader>
+    <FluentDialogBody>
+        <FluentLabel Typo="Typography.Subject">Override Expiration</FluentLabel>
+        <FluentDatePicker @bind-Value="crlOverrideNextUpdate" Label="Next Update (UTC)" />
+    </FluentDialogBody>
+    <FluentDialogFooter>
+        <FluentButton Appearance="Appearance.Accent" OnClick="GenerateCrlWithOverrideAsync">
+            Publish
+        </FluentButton>
+        <FluentButton Appearance="Appearance.Outline" OnClick="@(() => crlOverrideDialogHidden = true)">
             Cancel
         </FluentButton>
     </FluentDialogFooter>
