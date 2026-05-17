@@ -76,6 +76,76 @@ app.MapRazorPages().RequireAuthorization();
 app.Run();
 ```
 
+## Community Validation Rules
+
+UDAP supports multiple trust communities, each with its own validation rules for token requests and client registration. The validation pipeline is pluggable via `ICommunityTokenValidator` and `ICommunityRegistrationValidator`.
+
+### Built-in profiles
+
+Two profile packages are available:
+
+| Package | Communities | POU codes | Max POU | Registration checks |
+|---------|-----------|-----------|---------|-------------------|
+| [`Udap.Ssraa.Server`](https://www.nuget.org/packages/Udap.Ssraa.Server) | SSRAA / standard UDAP | 62 HL7 v3 codes | unlimited | none |
+| [`Udap.Tefca.Server`](https://www.nuget.org/packages/Udap.Tefca.Server) | TEFCA | 12 XP codes | 1 | SAN URI XP code validation |
+
+### Registering community validators
+
+Add the profile packages and map communities to their validation pipelines:
+
+```csharp
+// SSRAA rules for standard UDAP communities
+builder.Services.AddUdapSsraaValidation(options =>
+{
+    options.Communities.Add("udap://fhirlabs.net");
+});
+
+// TEFCA rules (register model extensions first)
+builder.Services.AddUdapTefcaExtensions();
+builder.Services.AddUdapTefcaValidation(options =>
+{
+    options.Communities.Add("tefca://test-community");
+});
+```
+
+### How it works at runtime
+
+1. A client requests a token with authorization extensions (e.g., `hl7-b2b` with `purpose_of_use`)
+2. `DefaultUdapAuthorizationExtensionValidator` resolves the client's community from the registration store
+3. Iterates through registered `ICommunityTokenValidator` implementations until one matches via `AppliesToCommunity()`
+4. The matching validator returns `CommunityValidationRules` specifying required extensions, allowed POU codes, and max POU count
+5. The framework enforces those rules, then calls the validator's `ValidateAsync()` for any domain-specific checks
+
+### Custom community validators
+
+Implement `ICommunityTokenValidator` for custom rules:
+
+```csharp
+public class MyValidator : ICommunityTokenValidator
+{
+    public bool AppliesToCommunity(string communityName)
+        => communityName == "udap://my-community";
+
+    public CommunityValidationRules? GetValidationRules(string? grantType)
+        => new CommunityValidationRules
+        {
+            RequiredExtensions = grantType == "client_credentials"
+                ? new HashSet<string> { "hl7-b2b" } : null,
+            AllowedPurposeOfUse = new HashSet<string> { /* your codes */ },
+            MaxPurposeOfUseCount = 1
+        };
+
+    public Task<AuthorizationExtensionValidationResult> ValidateAsync(
+        UdapAuthorizationExtensionValidationContext context)
+        => Task.FromResult(AuthorizationExtensionValidationResult.Success());
+}
+
+// Register it
+builder.Services.AddSingleton<ICommunityTokenValidator, MyValidator>();
+```
+
+See the [`Udap.Ssraa.Server`](../../Udap.Ssraa.Server/docs/README.md) and [`Udap.Tefca.Server`](../../Udap.Tefca.Server/docs/README.md) READMEs for detailed documentation on each profile.
+
 ## Database Configuration
 
 EF Core migration projects are available for both database providers:
