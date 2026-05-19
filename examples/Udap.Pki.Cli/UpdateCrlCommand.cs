@@ -23,7 +23,7 @@ public class UpdateCrlCommand : AsyncCommand<UpdateCrlSettings>
     protected override async Task<int> ExecuteAsync(CommandContext context, UpdateCrlSettings settings, CancellationToken cancellationToken)
     {
         var password = ResolvePassword(settings);
-        return await UpdateCrl(settings.Type, password, settings.IsProduction, settings.Days);
+        return await UpdateCrl(settings.Type, password, settings.IsProduction, settings.Days, "PrivatePkiStore");
     }
 
     internal static string ResolvePassword(UpdateCrlSettings settings)
@@ -46,7 +46,7 @@ public class UpdateCrlCommand : AsyncCommand<UpdateCrlSettings>
             "No password provided. Use --password, set CA_P12_PASSWORD env var, or run interactively.");
     }
 
-    internal static async Task<int> UpdateCrl(CrlType type, string password, bool isProduction, int days)
+    internal static async Task<int> UpdateCrl(CrlType type, string password, bool isProduction, int days, string configSectionName = "PrivatePkiStore")
     {
         if (isProduction)
         {
@@ -57,14 +57,14 @@ public class UpdateCrlCommand : AsyncCommand<UpdateCrlSettings>
             AnsiConsole.MarkupLine("[bold yellow]Running in TEST mode (default)[/]");
         }
 
-        AnsiConsole.MarkupLine($"[green]Updating {type} CRL[/]");
+        AnsiConsole.MarkupLine($"[green]Updating {type} CRL ({configSectionName})[/]");
 
         // Load configuration
         var config = new ConfigurationBuilder()
             .SetBasePath(Directory.GetCurrentDirectory())
             .AddJsonFile("appsettings.json", optional: false)
             .Build();
-        var gcpPkiConfig = config.GetSection("PrivatePkiStore").Get<PrivatePkiStoreConfig>()!;
+        var gcpPkiConfig = config.GetSection(configSectionName).Get<PrivatePkiStoreConfig>()!;
         var publicCertStoreConfig = config.GetSection("PublicCertStore").Get<PublicCertStoreConfig>()!;
 
         // Select paths based on type
