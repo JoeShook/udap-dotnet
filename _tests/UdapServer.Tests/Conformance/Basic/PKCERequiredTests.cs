@@ -436,10 +436,10 @@ public class PKCERequiredTests
         Assert.Equal("invalid_grant", tokenResponse.Error);
 
         //
-        // a second valid code_verifier should just fail for invalid_client
+        // a second valid code_verifier should just fail for invalid_grant
         // because it was already attempted and the session was tossed out.
         //
-        
+
         tokenRequest.CodeVerifier = pkce.CodeVerifier;
         tokenResponse = await udapClient.ExchangeCodeForTokenResponse(tokenRequest);
         Assert.True(tokenResponse.IsError);
@@ -448,6 +448,6 @@ public class PKCERequiredTests
         Assert.Null(tokenResponse.IdentityToken);
         Assert.Null(tokenResponse.AccessToken);
 
-        Assert.Equal("invalid_client", tokenResponse.Error);
+        Assert.Equal("invalid_grant", tokenResponse.Error);
     }
 }
