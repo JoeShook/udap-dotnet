@@ -49,6 +49,33 @@ else
         }
     </FluentStack>
 
+    @* --- Quick Actions --- *@
+    <FluentCard Style="margin-top: 1.5rem;">
+        <FluentLabel Typo="Typography.Subject" Style="margin-bottom: 0.5rem;">Quick Actions</FluentLabel>
+        <FluentStack Orientation="Orientation.Horizontal" Wrap="true" Style="gap: 0.5rem;">
+            <FluentButton Appearance="Appearance.Accent"
+                          IconStart="@(new Icons.Regular.Size16.Organization())"
+                          OnClick="@(() => Navigation.NavigateTo("/communities?action=new"))">
+                Create Community
+            </FluentButton>
+            <FluentButton Appearance="Appearance.Outline"
+                          IconStart="@(new Icons.Regular.Size16.ArrowImport())"
+                          OnClick="@(() => Navigation.NavigateTo("/explorer"))">
+                Import Certificate
+            </FluentButton>
+            <FluentButton Appearance="Appearance.Outline"
+                          IconStart="@(new Icons.Regular.Size16.ShieldKeyhole())"
+                          OnClick="@(() => Navigation.NavigateTo("/explorer"))">
+                New Root CA
+            </FluentButton>
+            <FluentButton Appearance="Appearance.Outline"
+                          IconStart="@(new Icons.Regular.Size16.DocumentBulletList())"
+                          OnClick="@(() => Navigation.NavigateTo("/templates?action=new"))">
+                New Template
+            </FluentButton>
+        </FluentStack>
+    </FluentCard>
+
     @* --- Community Health --- *@
     @if (communitySummaries.Count > 0)
     {

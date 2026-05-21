@@ -21,6 +21,8 @@ public partial class Communities
     [Inject] private NavigationManager Navigation { get; set; } = null!;
     [Inject] private IDialogService DialogService { get; set; } = null!;
 
+    [SupplyParameterFromQuery] public string? Action { get; set; }
+
     private List<CommunityViewModel> communities = new();
     private bool addDialogHidden = true;
     private string newCommunityName = string.Empty;
@@ -60,6 +62,8 @@ public partial class Communities
     protected override async Task OnInitializedAsync()
     {
         await LoadCommunitiesAsync();
+        if (Action == "new")
+            ShowAddDialog();
     }
 
     private async Task LoadCommunitiesAsync()

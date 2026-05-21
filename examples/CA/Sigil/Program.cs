@@ -97,6 +97,20 @@ try
     builder.Services.AddScoped<CrlAutoRenewalJob>();
     builder.Services.AddScoped<Sigil.UI.Services.TimeDisplayService>();
 
+    // System status — populate from existing options sections
+    builder.Services.AddOptions<SystemStatusOptions>().Configure<
+        IOptions<SigningProviderOptions>,
+        IOptions<VaultTransitOptions>,
+        IOptions<GcpKmsOptions>>((status, signing, vault, gcp) =>
+    {
+        status.DefaultProvider = signing.Value.Provider;
+        status.AvailableProviders = signing.Value.AvailableProviders;
+        status.VaultAddress = vault.Value.Address;
+        status.VaultToken = vault.Value.Token;
+        status.GcpProjectId = gcp.Value.ProjectId;
+    });
+    builder.Services.AddSingleton<SystemStatusService>();
+
     // Hangfire
     builder.Services.AddHangfire(config => config
         .SetDataCompatibilityLevel(CompatibilityLevel.Version_180)

@@ -59,6 +59,27 @@ public partial class CertificateExplorer : IDisposable
     private CommunityOption? selectedCommunity;
     private string selectedCommunityName = string.Empty;
     private List<CertificateChainNodeViewModel> treeNodes = new();
+
+    // Tree filter
+    private bool treeFilterExpanded;
+    private string treeFilterText = string.Empty;
+    private TreeStatusFilterOption selectedTreeStatusFilter = new("All", null);
+    private static readonly List<TreeStatusFilterOption> treeStatusFilterOptions = new()
+    {
+        new("All", null),
+        new("Valid", CertificateStatus.Valid),
+        new("Expiring", CertificateStatus.Expiring),
+        new("Expired", CertificateStatus.Expired),
+        new("Revoked", CertificateStatus.Revoked),
+        new("Untrusted", CertificateStatus.Untrusted),
+        new("Superseded CA", CertificateStatus.Stale),
+    };
+    private HashSet<CertificateChainNodeViewModel> visibleNodes = new();
+    private int visibleNodeCount;
+    private int totalNodeCount;
+    private bool IsTreeFilterActive =>
+        !string.IsNullOrWhiteSpace(treeFilterText) || selectedTreeStatusFilter.Value != null;
+
     private CertificateChainNodeViewModel? selectedNode;
     private X509Certificate2? selectedCert;
     private Asn1Node? asn1Root;
@@ -365,6 +386,7 @@ public partial class CertificateExplorer : IDisposable
         selectedCommunityName = treeData.CommunityName;
         communityValidations = treeData.Validations;
         treeNodes = treeData.TreeNodes;
+        RecomputeVisibleNodes();
 
         treeVersion++;
         selectedTreeItem = null;
@@ -2579,6 +2601,88 @@ public partial class CertificateExplorer : IDisposable
     }
 
     public record RevokeReasonOption(int Code, string Label);
+
+    public record TreeStatusFilterOption(string Label, CertificateStatus? Value);
+
+    private IEnumerable<CertificateChainNodeViewModel> VisibleRoots() =>
+        treeNodes.Where(IsNodeVisible);
+
+    private bool IsNodeVisible(CertificateChainNodeViewModel node) =>
+        !IsTreeFilterActive || visibleNodes.Contains(node);
+
+    private void OnTreeFilterChanged()
+    {
+        RecomputeVisibleNodes();
+        treeVersion++;
+    }
+
+    private void OnTreeStatusFilterChanged(TreeStatusFilterOption? option)
+    {
+        selectedTreeStatusFilter = option ?? treeStatusFilterOptions[0];
+        RecomputeVisibleNodes();
+        treeVersion++;
+    }
+
+    private void ClearTreeFilter()
+    {
+        treeFilterText = string.Empty;
+        selectedTreeStatusFilter = treeStatusFilterOptions[0];
+        RecomputeVisibleNodes();
+        treeVersion++;
+    }
+
+    private void RecomputeVisibleNodes()
+    {
+        visibleNodes = new HashSet<CertificateChainNodeViewModel>();
+        totalNodeCount = 0;
+        visibleNodeCount = 0;
+
+        foreach (var root in treeNodes)
+            ComputeVisibility(root);
+    }
+
+    private bool ComputeVisibility(CertificateChainNodeViewModel node)
+    {
+        if (node.CertificateRole != "CRL")
+            totalNodeCount++;
+
+        var selfMatches = MatchesFilter(node);
+        var anyChildMatches = false;
+        foreach (var child in node.Children)
+        {
+            if (ComputeVisibility(child))
+                anyChildMatches = true;
+        }
+
+        var visible = selfMatches || anyChildMatches;
+        if (visible)
+        {
+            visibleNodes.Add(node);
+            if (node.CertificateRole != "CRL" && selfMatches)
+                visibleNodeCount++;
+        }
+        return visible;
+    }
+
+    private bool MatchesFilter(CertificateChainNodeViewModel node)
+    {
+        // Status filter: only applies to non-CRL nodes
+        if (selectedTreeStatusFilter.Value != null)
+        {
+            if (node.CertificateRole == "CRL") return false;
+            if (node.Status != selectedTreeStatusFilter.Value) return false;
+        }
+
+        if (!string.IsNullOrWhiteSpace(treeFilterText))
+        {
+            var needle = treeFilterText.Trim();
+            return node.Name.Contains(needle, StringComparison.OrdinalIgnoreCase)
+                || node.Subject.Contains(needle, StringComparison.OrdinalIgnoreCase)
+                || node.Thumbprint.StartsWith(needle, StringComparison.OrdinalIgnoreCase);
+        }
+
+        return true;
+    }
 
     public void Dispose()
     {

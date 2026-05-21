@@ -24,6 +24,8 @@ public partial class Templates
     [Inject] private IDialogService DialogService { get; set; } = null!;
     [Inject] private IToastService ToastService { get; set; } = null!;
 
+    [SupplyParameterFromQuery] public string? Action { get; set; }
+
     private List<CertificateTemplate> templates = new();
     private bool dialogHidden = true;
     private bool isEditing;
@@ -94,6 +96,8 @@ public partial class Templates
     protected override async Task OnInitializedAsync()
     {
         await LoadTemplatesAsync();
+        if (Action == "new")
+            await ShowAddDialog();
     }
 
     private async Task LoadTemplatesAsync()

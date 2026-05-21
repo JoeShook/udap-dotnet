@@ -578,13 +578,51 @@ else if (treeNodes.Count > 0)
                     Style="margin-top: 1rem; height: calc(100vh - 200px);">
         <Panel1>
             <FluentCard Style="height: 100%; overflow-y: auto;">
-                <FluentLabel Typo="Typography.Subject" Style="margin-bottom: 0.5rem;">
-                    @selectedCommunityName
-                </FluentLabel>
+                <div style="display: flex; align-items: center; gap: 0.5rem; margin-bottom: 0.5rem;">
+                    <FluentLabel Typo="Typography.Subject" Style="flex: 1; min-width: 0;">
+                        @selectedCommunityName
+                    </FluentLabel>
+                    <FluentButton Appearance="@(IsTreeFilterActive ? Appearance.Accent : Appearance.Stealth)"
+                                  Size="ButtonSize.Small"
+                                  OnClick="@(() => treeFilterExpanded = !treeFilterExpanded)"
+                                  Title="Filter certificates"
+                                  IconStart="@(new Icons.Regular.Size16.Filter())" />
+                </div>
+                @if (treeFilterExpanded)
+                {
+                    <div style="display: flex; flex-direction: column; gap: 0.35rem; margin-bottom: 0.5rem;">
+                        <FluentSearch @bind-Value="treeFilterText"
+                                      @bind-Value:after="OnTreeFilterChanged"
+                                      Immediate="true"
+                                      ImmediateDelay="150"
+                                      Placeholder="Filter by CN, subject, thumbprint..."
+                                      Style="width: 100%;" />
+                        <div style="display: flex; gap: 0.35rem; align-items: end;">
+                            <FluentSelect TOption="TreeStatusFilterOption"
+                                          Items="@treeStatusFilterOptions"
+                                          OptionText="@(o => o.Label)"
+                                          SelectedOption="@selectedTreeStatusFilter"
+                                          SelectedOptionChanged="OnTreeStatusFilterChanged"
+                                          Style="flex: 1; min-width: 0;" />
+                            <FluentButton Appearance="Appearance.Stealth"
+                                          Size="ButtonSize.Small"
+                                          OnClick="ClearTreeFilter"
+                                          Disabled="@(!IsTreeFilterActive)"
+                                          Title="Clear filter"
+                                          IconStart="@(new Icons.Regular.Size16.FilterDismiss())" />
+                        </div>
+                    </div>
+                }
+                @if (IsTreeFilterActive)
+                {
+                    <div style="font-size: 0.75rem; opacity: 0.7; margin-bottom: 0.25rem;">
+                        Showing @visibleNodeCount of @totalNodeCount certificates
+                    </div>
+                }
                 <FluentTreeView @key="@treeVersion"
                                 CurrentSelected="@selectedTreeItem"
                                 CurrentSelectedChanged="OnTreeItemSelected">
-                    @foreach (var root in treeNodes)
+                    @foreach (var root in VisibleRoots())
                     {
                         <FluentTreeItem Text="@root.Name"
                                         @key="@($"ca-{root.Id}")"
@@ -601,7 +639,7 @@ else if (treeNodes.Count > 0)
                             {
                                 <span slot="end" title="Vault Transit"><FluentIcon Value="@(new Icons.Regular.Size16.LockShield())" Color="Color.Custom" CustomColor="#1565c0" /></span>
                             }
-                            @foreach (var intermediate in root.Children.Where(c => c.CertificateRole == "IntermediateCA"))
+                            @foreach (var intermediate in root.Children.Where(c => c.CertificateRole == "IntermediateCA" && IsNodeVisible(c)))
                             {
                                 <FluentTreeItem Text="@intermediate.Name"
                                                 @key="@($"ca-{intermediate.Id}")"
@@ -618,11 +656,11 @@ else if (treeNodes.Count > 0)
                                     {
                                         <span slot="end" title="Vault Transit"><FluentIcon Value="@(new Icons.Regular.Size16.LockShield())" Color="Color.Custom" CustomColor="#1565c0" /></span>
                                     }
-                                    @foreach (var subCa in intermediate.Children.Where(c => c.CertificateRole == "IntermediateCA"))
+                                    @foreach (var subCa in intermediate.Children.Where(c => c.CertificateRole == "IntermediateCA" && IsNodeVisible(c)))
                                     {
                                         @RenderCaTreeItem(subCa)
                                     }
-                                    @foreach (var child in intermediate.Children.Where(c => c.CertificateRole == "EndEntity"))
+                                    @foreach (var child in intermediate.Children.Where(c => c.CertificateRole == "EndEntity" && IsNodeVisible(c)))
                                     {
                                         <FluentTreeItem Text="@child.Name"
                                                         @key="@($"ee-{child.Id}")"
@@ -641,7 +679,7 @@ else if (treeNodes.Count > 0)
                                             }
                                         </FluentTreeItem>
                                     }
-                                    @foreach (var crl in intermediate.Children.Where(c => c.CertificateRole == "CRL"))
+                                    @foreach (var crl in intermediate.Children.Where(c => c.CertificateRole == "CRL" && IsNodeVisible(c)))
                                     {
                                         <FluentTreeItem Text="@crl.Name"
                                                         @key="@($"crl-{crl.Id}")"
@@ -657,7 +695,7 @@ else if (treeNodes.Count > 0)
                                     }
                                 </FluentTreeItem>
                             }
-                            @foreach (var issued in root.Children.Where(c => c.CertificateRole == "EndEntity"))
+                            @foreach (var issued in root.Children.Where(c => c.CertificateRole == "EndEntity" && IsNodeVisible(c)))
                             {
                                 <FluentTreeItem Text="@issued.Name"
                                                 @key="@($"ee-{issued.Id}")"
@@ -676,7 +714,7 @@ else if (treeNodes.Count > 0)
                                     }
                                 </FluentTreeItem>
                             }
-                            @foreach (var crl in root.Children.Where(c => c.CertificateRole == "CRL"))
+                            @foreach (var crl in root.Children.Where(c => c.CertificateRole == "CRL" && IsNodeVisible(c)))
                             {
                                 <FluentTreeItem Text="@crl.Name"
                                                 @key="@($"crl-{crl.Id}")"
@@ -1222,12 +1260,12 @@ else if (CommunityId > 0 && !showDropZone)
                 <span slot="end" title="Vault Transit"><FluentIcon Value="@(new Icons.Regular.Size16.LockShield())" Color="Color.Custom" CustomColor="#1565c0" /></span>
             }
             @* Recursive: sub-CA nodes *@
-            @foreach (var subCa in caNode.Children.Where(c => c.CertificateRole is "IntermediateCA" or "RootCA"))
+            @foreach (var subCa in caNode.Children.Where(c => c.CertificateRole is "IntermediateCA" or "RootCA" && IsNodeVisible(c)))
             {
                 @RenderCaTreeItem(subCa)
             }
             @* End-entity certs *@
-            @foreach (var issued in caNode.Children.Where(c => c.CertificateRole == "EndEntity"))
+            @foreach (var issued in caNode.Children.Where(c => c.CertificateRole == "EndEntity" && IsNodeVisible(c)))
             {
                 <FluentTreeItem Text="@issued.Name"
                                 @key="@($"ee-{issued.Id}")"
@@ -1247,7 +1285,7 @@ else if (CommunityId > 0 && !showDropZone)
                 </FluentTreeItem>
             }
             @* CRL nodes *@
-            @foreach (var crl in caNode.Children.Where(c => c.CertificateRole == "CRL"))
+            @foreach (var crl in caNode.Children.Where(c => c.CertificateRole == "CRL" && IsNodeVisible(c)))
             {
                 <FluentTreeItem Text="@crl.Name"
                                 @key="@($"crl-{crl.Id}")"
