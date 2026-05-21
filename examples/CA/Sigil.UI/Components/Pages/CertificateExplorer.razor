@@ -407,11 +407,11 @@
             </FluentButton>
 
             @* Key Storage *@
-            @if (SigningProvider.ProviderName != "local")
+            @if (availableKeyStorageProviders.Count > 1)
             {
                 <FluentSelect TOption="string"
-                              Items="@(new[] { "local", "vault-transit" })"
-                              OptionText="@(s => s == "local" ? "Local (PFX)" : "Vault Transit (remote signing)")"
+                              Items="@availableKeyStorageProviders"
+                              OptionText="@(s => s switch { "vault-transit" => "Vault Transit (remote signing)", "gcp-kms" => "GCP Cloud KMS (remote signing)", _ => "Local (PFX)" })"
                               @bind-SelectedOption="issuanceKeyStorage"
                               Label="Key Storage"
                               Style="width: 100%;" />

@@ -12,6 +12,7 @@ using System.Security.Cryptography.X509Certificates;
 using Microsoft.AspNetCore.Components;
 using Microsoft.AspNetCore.Components.Forms;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Options;
 using Microsoft.FluentUI.AspNetCore.Components;
 using Microsoft.JSInterop;
 using Sigil.Common.Data;
@@ -46,6 +47,7 @@ public partial class CertificateExplorer : IDisposable
     [Inject] private ISigningProvider SigningProvider { get; set; } = null!;
     [Inject] private VaultTransitSigningProvider VaultTransitProvider { get; set; } = null!;
     [Inject] private GcpKmsSigningProvider GcpKmsProvider { get; set; } = null!;
+    [Inject] private IOptions<SigningProviderOptions> SigningOptions { get; set; } = null!;
     [Inject] private IHttpClientFactory HttpClientFactory { get; set; } = null!;
     [Inject] private IJSRuntime JS { get; set; } = null!;
     [Inject] private NavigationManager Navigation { get; set; } = null!;
@@ -140,7 +142,8 @@ public partial class CertificateExplorer : IDisposable
     private List<SanListPickerItem> sanPickerItems = new();
     private bool sanPickerSelectAll;
     private string issuancePfxPassword = string.Empty;
-    private string issuanceKeyStorage = "local"; // "local" or "vault-transit"
+    private string issuanceKeyStorage = "local";
+    private List<string> availableKeyStorageProviders = new() { "local" };
     private bool isRenewMode;
     private List<IssuanceSanEntry> renewalSans = new();
     private string renewalSubjectDn = string.Empty;
@@ -175,6 +178,9 @@ public partial class CertificateExplorer : IDisposable
     protected override async Task OnInitializedAsync()
     {
         TimeDisplay.OnChanged += StateHasChanged;
+
+        availableKeyStorageProviders = SigningOptions.Value.AvailableProviders;
+
         await using var db = await DbFactory.CreateDbContextAsync();
 
         communityList = await db.Communities

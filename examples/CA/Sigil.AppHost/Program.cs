@@ -61,7 +61,9 @@ switch (hostMode)
             .WithEnvironment("ConnectionStrings__SigilDb", "Host=host.docker.internal;Database=sigil;Username=sigil;Password=sigil_pass;Search Path=sigil")
             .WithEnvironment("Vault__Address", vault.Resource.PrimaryEndpoint)
             .WithEnvironment("Vault__Token", "root-token")
-            .WithEnvironment("Signing__Provider", signingProvider);
+            .WithEnvironment("Signing__Provider", signingProvider)
+            .WithEnvironment("Signing__AvailableProviders__0", "local")
+            .WithEnvironment("Signing__AvailableProviders__1", "vault-transit");
 
         if (hostMode == "docker-gcp")
             dockerResource.WithVolume("sigil-gcloud-config", "/root/.config/gcloud");
@@ -88,7 +90,9 @@ switch (hostMode)
             .WithReference(vault)
             .WithEnvironment("Vault__Address", vault.Resource.PrimaryEndpoint)
             .WithEnvironment("Vault__Token", "root-token")
-            .WithEnvironment("Signing__Provider", signingProvider);
+            .WithEnvironment("Signing__Provider", signingProvider)
+            .WithEnvironment("Signing__AvailableProviders__0", "local")
+            .WithEnvironment("Signing__AvailableProviders__1", "vault-transit");
 
         // GCP KMS configuration for project mode
         if (signingProvider == "gcp-kms")
