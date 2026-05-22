@@ -10,7 +10,7 @@
 
 namespace Sigil.Common.ViewModels;
 
-public class CommunityViewModel
+public class TrustDomainViewModel
 {
     public int Id { get; set; }
     public string Name { get; set; } = string.Empty;

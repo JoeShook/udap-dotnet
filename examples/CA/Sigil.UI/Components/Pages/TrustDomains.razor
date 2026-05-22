@@ -3,23 +3,23 @@
                             Joseph.Shook@Surescripts.com
    See LICENSE in the project root for license information. *@
 
-@page "/communities"
+@page "/trust-domains"
 
-<PageTitle>Sigil - Communities</PageTitle>
+<PageTitle>Sigil - Trust Domains</PageTitle>
 
-<FluentLabel Typo="Typography.PageTitle">Communities</FluentLabel>
+<FluentLabel Typo="Typography.PageTitle">Trust Domains</FluentLabel>
 
 <FluentCard Style="margin-top: 1rem;">
     <FluentStack Orientation="Orientation.Horizontal" Style="align-items: center; gap: 0.5rem;">
-        <FluentLabel Typo="Typography.Subject">PKI Communities</FluentLabel>
+        <FluentLabel Typo="Typography.Subject">PKI Trust Domains</FluentLabel>
         <FluentSpacer />
         <FluentButton Appearance="Appearance.Accent" OnClick="ShowAddDialog"
                       IconStart="@(new Icons.Regular.Size16.Add())">
-            Add Community
+            Add Trust Domain
         </FluentButton>
     </FluentStack>
 
-    <FluentDataGrid Items="@communities.AsQueryable()" Style="margin-top: 0.5rem;" ResizableColumns="true" GridTemplateColumns="minmax(120px, 1fr) minmax(120px, 1.5fr) minmax(200px, 3fr) 80px 80px 80px auto">
+    <FluentDataGrid Items="@trustDomains.AsQueryable()" Style="margin-top: 0.5rem;" ResizableColumns="true" GridTemplateColumns="minmax(120px, 1fr) minmax(120px, 1.5fr) minmax(200px, 3fr) 80px 80px 80px auto">
         <PropertyColumn Property="@(c => c.Name)" Title="Name" Sortable="true" IsDefaultSortColumn="true" />
         <PropertyColumn Property="@(c => c.Description)" Title="Description" />
         <TemplateColumn Title="Certificate Server Base URLs">
@@ -59,7 +59,7 @@
                 <FluentButton Size="ButtonSize.Small"
                               Appearance="Appearance.Outline"
                               IconStart="@(new Icons.Regular.Size16.Delete())"
-                              OnClick="@(() => DeleteCommunityAsync(context))">
+                              OnClick="@(() => DeleteTrustDomainAsync(context))">
                     Delete
                 </FluentButton>
             </FluentStack>
@@ -69,14 +69,14 @@
 
 <FluentDialog @bind-Hidden="@addDialogHidden" Modal="true" TrapFocus="true"
               Style="min-width: 600px;">
-    <FluentDialogHeader>Add Community</FluentDialogHeader>
+    <FluentDialogHeader>Add Trust Domain</FluentDialogHeader>
     <FluentDialogBody>
-        <FluentTextField @bind-Value="newCommunityName" Label="Name" Style="width: 100%;" />
-        <FluentTextField @bind-Value="newCommunityDescription" Label="Description" Style="width: 100%; margin-top: 0.5rem;" />
-        <FluentNumberField @bind-Value="newCommunityExpiry" Label="CRL Validity (Days)" Min="1" Max="365"
+        <FluentTextField @bind-Value="newTrustDomainName" Label="Name" Style="width: 100%;" />
+        <FluentTextField @bind-Value="newTrustDomainDescription" Label="Description" Style="width: 100%; margin-top: 0.5rem;" />
+        <FluentNumberField @bind-Value="newTrustDomainExpiry" Label="CRL Validity (Days)" Min="1" Max="365"
                            Style="width: 100%; margin-top: 0.5rem;" />
         <FluentLabel Typo="Typography.Subject" Style="margin-top: 0.5rem;">Certificate Server Base URLs</FluentLabel>
-        @foreach (var url in newCommunityBaseUrls)
+        @foreach (var url in newTrustDomainBaseUrls)
         {
             <FluentStack Orientation="Orientation.Vertical" Style="gap: 0.25rem; margin-top: 0.25rem; padding: 0.5rem; border: 1px solid var(--neutral-stroke-rest); border-radius: 4px;">
                 <FluentStack Orientation="Orientation.Horizontal" Style="gap: 0.5rem; align-items: end;">
@@ -84,7 +84,7 @@
                                      Placeholder="http://host.docker.internal:5033" />
                     <FluentButton Appearance="Appearance.Outline" Size="ButtonSize.Small"
                                   IconStart="@(new Icons.Regular.Size16.Delete())"
-                                  OnClick="@(() => newCommunityBaseUrls.Remove(url))" />
+                                  OnClick="@(() => newTrustDomainBaseUrls.Remove(url))" />
                 </FluentStack>
                 <FluentStack Orientation="Orientation.Horizontal" Style="gap: 0.5rem; align-items: end;">
                     <FluentTextField @bind-Value="url.PublishingBasePath" Label="Publishing Path"
@@ -99,14 +99,14 @@
         }
         <FluentButton Appearance="Appearance.Outline" Size="ButtonSize.Small"
                       IconStart="@(new Icons.Regular.Size16.Add())"
-                      OnClick="@(() => newCommunityBaseUrls.Add(new BaseUrlEntry()))"
+                      OnClick="@(() => newTrustDomainBaseUrls.Add(new BaseUrlEntry()))"
                       Style="margin-top: 0.25rem;">
             Add Base URL
         </FluentButton>
     </FluentDialogBody>
     <FluentDialogFooter>
-        <FluentButton Appearance="Appearance.Accent" OnClick="AddCommunityAsync"
-                      Disabled="@(string.IsNullOrWhiteSpace(newCommunityName))">
+        <FluentButton Appearance="Appearance.Accent" OnClick="AddTrustDomainAsync"
+                      Disabled="@(string.IsNullOrWhiteSpace(newTrustDomainName))">
             Create
         </FluentButton>
         <FluentButton Appearance="Appearance.Outline" OnClick="@(() => addDialogHidden = true)">
@@ -117,14 +117,14 @@
 
 <FluentDialog @bind-Hidden="@editDialogHidden" Modal="true" TrapFocus="true"
               Style="min-width: 600px;">
-    <FluentDialogHeader>Edit Community</FluentDialogHeader>
+    <FluentDialogHeader>Edit Trust Domain</FluentDialogHeader>
     <FluentDialogBody>
-        <FluentTextField @bind-Value="editCommunityName" Label="Name" Style="width: 100%;" />
-        <FluentTextField @bind-Value="editCommunityDescription" Label="Description" Style="width: 100%; margin-top: 0.5rem;" />
-        <FluentNumberField @bind-Value="editCommunityExpiry" Label="CRL Validity (Days)" Min="1" Max="365"
+        <FluentTextField @bind-Value="editTrustDomainName" Label="Name" Style="width: 100%;" />
+        <FluentTextField @bind-Value="editTrustDomainDescription" Label="Description" Style="width: 100%; margin-top: 0.5rem;" />
+        <FluentNumberField @bind-Value="editTrustDomainExpiry" Label="CRL Validity (Days)" Min="1" Max="365"
                            Style="width: 100%; margin-top: 0.5rem;" />
         <FluentLabel Typo="Typography.Subject" Style="margin-top: 0.5rem;">Certificate Server Base URLs</FluentLabel>
-        @foreach (var url in editCommunityBaseUrls)
+        @foreach (var url in editTrustDomainBaseUrls)
         {
             <FluentStack Orientation="Orientation.Vertical" Style="gap: 0.25rem; margin-top: 0.25rem; padding: 0.5rem; border: 1px solid var(--neutral-stroke-rest); border-radius: 4px;">
                 <FluentStack Orientation="Orientation.Horizontal" Style="gap: 0.5rem; align-items: end;">
@@ -132,7 +132,7 @@
                                      Placeholder="http://host.docker.internal:5033" />
                     <FluentButton Appearance="Appearance.Outline" Size="ButtonSize.Small"
                                   IconStart="@(new Icons.Regular.Size16.Delete())"
-                                  OnClick="@(() => editCommunityBaseUrls.Remove(url))" />
+                                  OnClick="@(() => editTrustDomainBaseUrls.Remove(url))" />
                 </FluentStack>
                 <FluentStack Orientation="Orientation.Horizontal" Style="gap: 0.5rem; align-items: end;">
                     <FluentTextField @bind-Value="url.PublishingBasePath" Label="Publishing Path"
@@ -147,14 +147,14 @@
         }
         <FluentButton Appearance="Appearance.Outline" Size="ButtonSize.Small"
                       IconStart="@(new Icons.Regular.Size16.Add())"
-                      OnClick="@(() => editCommunityBaseUrls.Add(new BaseUrlEntry()))"
+                      OnClick="@(() => editTrustDomainBaseUrls.Add(new BaseUrlEntry()))"
                       Style="margin-top: 0.25rem;">
             Add Base URL
         </FluentButton>
     </FluentDialogBody>
     <FluentDialogFooter>
         <FluentButton Appearance="Appearance.Accent" OnClick="SaveEditAsync"
-                      Disabled="@(string.IsNullOrWhiteSpace(editCommunityName))">
+                      Disabled="@(string.IsNullOrWhiteSpace(editTrustDomainName))">
             Save
         </FluentButton>
         <FluentButton Appearance="Appearance.Outline" OnClick="@(() => editDialogHidden = true)">

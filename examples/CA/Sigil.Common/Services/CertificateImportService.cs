@@ -54,7 +54,7 @@ public class CertificateImportService
     /// </summary>
     public async Task<SingleImportResult> ImportParsedCertificateAsync(
         ParsedCertificate parsed,
-        int communityId,
+        int trustDomainId,
         string? name = null,
         string? password = null,
         int? issuingCaId = null,
@@ -69,7 +69,7 @@ public class CertificateImportService
 
         // --- Dedup: check existing by thumbprint ---
         var existingCa = await db.CaCertificates
-            .FirstOrDefaultAsync(c => c.Thumbprint == thumbprint && c.CommunityId == communityId, ct);
+            .FirstOrDefaultAsync(c => c.Thumbprint == thumbprint && c.TrustDomainId == trustDomainId, ct);
         if (existingCa != null)
         {
             if (parsed.HasPrivateKey && existingCa.EncryptedPfxBytes == null)
@@ -84,7 +84,7 @@ public class CertificateImportService
         var existingIssued = await db.IssuedCertificates
             .Include(i => i.IssuingCaCertificate)
             .FirstOrDefaultAsync(c => c.Thumbprint == thumbprint
-                && c.IssuingCaCertificate.CommunityId == communityId, ct);
+                && c.IssuingCaCertificate.TrustDomainId == trustDomainId, ct);
         if (existingIssued != null)
         {
             if (parsed.HasPrivateKey && existingIssued.EncryptedPfxBytes == null)
@@ -105,14 +105,14 @@ public class CertificateImportService
                 parentId = issuingCaId;
                 if (parentId == null && parsed.AuthorityKeyIdentifier != null)
                     parentId = await CertificateManagementService.FindCaBySkiInternalAsync(
-                        db, communityId, parsed.AuthorityKeyIdentifier, ct);
+                        db, trustDomainId, parsed.AuthorityKeyIdentifier, ct);
                 parentId ??= await CertificateManagementService.FindCaByDnAndSignatureInternalAsync(
-                    db, communityId, cert, ct);
+                    db, trustDomainId, cert, ct);
             }
 
             db.CaCertificates.Add(new CaCertificate
             {
-                CommunityId = communityId,
+                TrustDomainId = trustDomainId,
                 ParentId = parentId,
                 Name = certName.Trim(),
                 Subject = cert.Subject,
@@ -135,9 +135,9 @@ public class CertificateImportService
             var resolvedCaId = issuingCaId;
             if (resolvedCaId == null && parsed.AuthorityKeyIdentifier != null)
                 resolvedCaId = await CertificateManagementService.FindCaBySkiInternalAsync(
-                    db, communityId, parsed.AuthorityKeyIdentifier, ct);
+                    db, trustDomainId, parsed.AuthorityKeyIdentifier, ct);
             resolvedCaId ??= await CertificateManagementService.FindCaByDnAndSignatureInternalAsync(
-                db, communityId, cert, ct);
+                db, trustDomainId, cert, ct);
 
             if (resolvedCaId == null)
                 return SingleImportResult.NoCaFound();
@@ -176,23 +176,23 @@ public class CertificateImportService
         {
             results.Add(new ImportPreviewViewModel
             {
-                CommunityName = "(error)",
+                TrustDomainName = "(error)",
                 Errors = { $"Directory not found: {certstoresPath}" }
             });
             return results;
         }
 
-        foreach (var communityDir in Directory.GetDirectories(certstoresPath))
+        foreach (var trustDomainDir in Directory.GetDirectories(certstoresPath))
         {
-            var communityName = Path.GetFileName(communityDir);
+            var trustDomainName = Path.GetFileName(trustDomainDir);
             var preview = new ImportPreviewViewModel
             {
-                CommunityName = communityName,
-                DirectoryPath = communityDir
+                TrustDomainName = trustDomainName,
+                DirectoryPath = trustDomainDir
             };
 
             // Count root CA pfx files at top level
-            var rootPfxFiles = Directory.GetFiles(communityDir, "*.pfx", SearchOption.TopDirectoryOnly);
+            var rootPfxFiles = Directory.GetFiles(trustDomainDir, "*.pfx", SearchOption.TopDirectoryOnly);
             preview.RootCaCount = rootPfxFiles.Length;
 
             // Validate root CA files can be loaded
@@ -210,21 +210,21 @@ public class CertificateImportService
             }
 
             // Count intermediates
-            var intermediatesDir = Path.Combine(communityDir, "intermediates");
+            var intermediatesDir = Path.Combine(trustDomainDir, "intermediates");
             if (Directory.Exists(intermediatesDir))
             {
                 preview.IntermediateCount = Directory.GetFiles(intermediatesDir, "*.pfx").Length;
             }
 
             // Count issued certs
-            var issuedDir = Path.Combine(communityDir, "issued");
+            var issuedDir = Path.Combine(trustDomainDir, "issued");
             if (Directory.Exists(issuedDir))
             {
                 preview.IssuedCertCount = Directory.GetFiles(issuedDir, "*.pfx").Length;
             }
 
             // Count CRL files
-            var crlDir = Path.Combine(communityDir, "crl");
+            var crlDir = Path.Combine(trustDomainDir, "crl");
             if (Directory.Exists(crlDir))
             {
                 preview.CrlCount = Directory.GetFiles(crlDir, "*.crl").Length;
@@ -237,47 +237,47 @@ public class CertificateImportService
     }
 
     /// <summary>
-    /// Imports all certificates from a community directory into the database.
+    /// Imports all certificates from a trustDomain directory into the database.
     /// </summary>
-    public async Task<(int imported, List<string> errors)> ImportCommunityAsync(
-        string communityDir,
+    public async Task<(int imported, List<string> errors)> ImportTrustDomainAsync(
+        string trustDomainDir,
         string pfxPassword = "udap-test",
         CancellationToken ct = default)
     {
-        var communityName = Path.GetFileName(communityDir);
+        var trustDomainName = Path.GetFileName(trustDomainDir);
         var errors = new List<string>();
         int imported = 0;
 
         await using var db = await _dbFactory.CreateDbContextAsync(ct);
 
-        // Check if community already exists
-        var existingCommunity = await db.Communities
-            .FirstOrDefaultAsync(c => c.Name == communityName, ct);
+        // Check if trustDomain already exists
+        var existingTrustDomain = await db.TrustDomains
+            .FirstOrDefaultAsync(c => c.Name == trustDomainName, ct);
 
-        if (existingCommunity != null)
+        if (existingTrustDomain != null)
         {
-            errors.Add($"Community '{communityName}' already exists. Delete it first to re-import.");
+            errors.Add($"Trust domain '{trustDomainName}' already exists. Delete it first to re-import.");
             return (0, errors);
         }
 
-        var community = new Community
+        var trustDomain = new TrustDomain
         {
-            Name = communityName,
-            Description = $"Imported from {communityDir}",
+            Name = trustDomainName,
+            Description = $"Imported from {trustDomainDir}",
             Enabled = true
         };
-        db.Communities.Add(community);
+        db.TrustDomains.Add(trustDomain);
         await db.SaveChangesAsync(ct);
 
         // Import root CAs
         var rootCas = new Dictionary<string, CaCertificate>(); // SKI -> entity
-        var rootPfxFiles = Directory.GetFiles(communityDir, "*.pfx", SearchOption.TopDirectoryOnly);
+        var rootPfxFiles = Directory.GetFiles(trustDomainDir, "*.pfx", SearchOption.TopDirectoryOnly);
 
         foreach (var pfxFile in rootPfxFiles)
         {
             try
             {
-                var (entity, ski) = await ImportCaCertificateAsync(db, pfxFile, pfxPassword, community.Id, null, ct);
+                var (entity, ski) = await ImportCaCertificateAsync(db, pfxFile, pfxPassword, trustDomain.Id, null, ct);
                 if (ski != null)
                 {
                     rootCas[ski] = entity;
@@ -293,7 +293,7 @@ public class CertificateImportService
         }
 
         // Import intermediates
-        var intermediatesDir = Path.Combine(communityDir, "intermediates");
+        var intermediatesDir = Path.Combine(trustDomainDir, "intermediates");
         var intermediates = new Dictionary<string, CaCertificate>(); // SKI -> entity
 
         if (Directory.Exists(intermediatesDir))
@@ -318,7 +318,7 @@ public class CertificateImportService
                         parentId = rootCas.Values.First().Id;
                     }
 
-                    var (entity, ski) = await ImportCaCertificateAsync(db, pfxFile, pfxPassword, community.Id, parentId, ct);
+                    var (entity, ski) = await ImportCaCertificateAsync(db, pfxFile, pfxPassword, trustDomain.Id, parentId, ct);
                     if (ski != null)
                     {
                         intermediates[ski] = entity;
@@ -335,7 +335,7 @@ public class CertificateImportService
         }
 
         // Import issued certs
-        var issuedDir = Path.Combine(communityDir, "issued");
+        var issuedDir = Path.Combine(trustDomainDir, "issued");
         if (Directory.Exists(issuedDir))
         {
             var issuedPfxFiles = Directory.GetFiles(issuedDir, "*.pfx");
@@ -394,7 +394,7 @@ public class CertificateImportService
         }
 
         // Import CRLs
-        var crlDir = Path.Combine(communityDir, "crl");
+        var crlDir = Path.Combine(trustDomainDir, "crl");
         if (Directory.Exists(crlDir))
         {
             var crlFiles = Directory.GetFiles(crlDir, "*.crl");
@@ -420,7 +420,7 @@ public class CertificateImportService
         SigilDbContext db,
         string pfxFile,
         string pfxPassword,
-        int communityId,
+        int trustDomainId,
         int? parentId,
         CancellationToken ct)
     {
@@ -434,7 +434,7 @@ public class CertificateImportService
 
         var entity = new CaCertificate
         {
-            CommunityId = communityId,
+            TrustDomainId = trustDomainId,
             ParentId = parentId,
             Name = Path.GetFileNameWithoutExtension(pfxFile),
             Subject = cert.Subject,

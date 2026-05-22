@@ -175,28 +175,28 @@ public class CertificateManagementServiceTests
     }
 
     [Fact]
-    public async Task MoveAsync_CaCertificate_ChangesCommunity()
+    public async Task MoveAsync_CaCertificate_ChangesTrustDomain()
     {
         var caId = await SeedCaCertificateAsync("Mobile CA");
-        int targetCommunityId;
+        int targetTrustDomainId;
 
         await using (var db = _dbFactory.CreateDbContext())
         {
-            var target = new Community { Name = "Target", Enabled = true };
-            db.Communities.Add(target);
+            var target = new TrustDomain { Name = "Target", Enabled = true };
+            db.TrustDomains.Add(target);
             await db.SaveChangesAsync();
-            targetCommunityId = target.Id;
+            targetTrustDomainId = target.Id;
         }
 
         var service = CreateService();
 
-        var result = await service.MoveAsync(caId, "CaCertificate", targetCommunityId);
+        var result = await service.MoveAsync(caId, "CaCertificate", targetTrustDomainId);
 
         result.Success.ShouldBeTrue();
 
         await using var db2 = _dbFactory.CreateDbContext();
         var ca = await db2.CaCertificates.FindAsync(caId);
-        ca!.CommunityId.ShouldBe(targetCommunityId);
+        ca!.TrustDomainId.ShouldBe(targetTrustDomainId);
         ca.ParentId.ShouldBeNull();
     }
 
@@ -231,7 +231,7 @@ public class CertificateManagementServiceTests
     }
 
     [Fact]
-    public async Task GetCommunityTreeAsync_BuildsTree()
+    public async Task GetTrustDomainTreeAsync_BuildsTree()
     {
         var (caId, _) = await SeedCaAndIssuedAsync();
         var service = CreateService();
@@ -239,9 +239,9 @@ public class CertificateManagementServiceTests
         await using var db = _dbFactory.CreateDbContext();
         var ca = await db.CaCertificates.FindAsync(caId);
 
-        var treeData = await service.GetCommunityTreeAsync(ca!.CommunityId);
+        var treeData = await service.GetTrustDomainTreeAsync(ca!.TrustDomainId);
 
-        treeData.CommunityName.ShouldBe("Test Community");
+        treeData.TrustDomainName.ShouldBe("Test TrustDomain");
         treeData.TreeNodes.ShouldHaveSingleItem();
         treeData.TreeNodes[0].EntityType.ShouldBe("CaCertificate");
         treeData.TreeNodes[0].Children.Where(c => c.EntityType == "IssuedCertificate").ShouldHaveSingleItem();
@@ -293,17 +293,17 @@ public class CertificateManagementServiceTests
 
         await using var db = _dbFactory.CreateDbContext();
 
-        var community = await db.Communities.FirstOrDefaultAsync();
-        if (community == null)
+        var trustDomain = await db.TrustDomains.FirstOrDefaultAsync();
+        if (trustDomain == null)
         {
-            community = new Community { Name = "Test Community", Enabled = true };
-            db.Communities.Add(community);
+            trustDomain = new TrustDomain { Name = "Test TrustDomain", Enabled = true };
+            db.TrustDomains.Add(trustDomain);
             await db.SaveChangesAsync();
         }
 
         var ca = new CaCertificate
         {
-            CommunityId = community.Id,
+            TrustDomainId = trustDomain.Id,
             Name = name,
             Subject = $"CN={name}",
             X509CertificatePem = cert.ExportCertificatePem(),
@@ -334,13 +334,13 @@ public class CertificateManagementServiceTests
 
         await using var db = _dbFactory.CreateDbContext();
 
-        var community = new Community { Name = "Test Community", Enabled = true };
-        db.Communities.Add(community);
+        var trustDomain = new TrustDomain { Name = "Test TrustDomain", Enabled = true };
+        db.TrustDomains.Add(trustDomain);
         await db.SaveChangesAsync();
 
         var ca = new CaCertificate
         {
-            CommunityId = community.Id,
+            TrustDomainId = trustDomain.Id,
             Name = "Test CA",
             Subject = "CN=Test CA",
             X509CertificatePem = caCert.ExportCertificatePem(),

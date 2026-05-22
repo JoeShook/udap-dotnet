@@ -30,7 +30,7 @@ namespace Sigil.UI.Components.Pages;
 
 public partial class CertificateExplorer : IDisposable
 {
-    [Parameter] public int CommunityId { get; set; }
+    [Parameter] public int TrustDomainId { get; set; }
     [SupplyParameterFromQuery(Name = "thumbprint")] public string? SelectedThumbprint { get; set; }
 
     [Inject] private IDbContextFactory<SigilDbContext> DbFactory { get; set; } = null!;
@@ -57,9 +57,9 @@ public partial class CertificateExplorer : IDisposable
     [Inject] private IssuancePasswordCache PasswordCache { get; set; } = null!;
 
     // Tree state
-    private List<CommunityOption> communityList = new();
-    private CommunityOption? selectedCommunity;
-    private string selectedCommunityName = string.Empty;
+    private List<TrustDomainOption> trustDomainList = new();
+    private TrustDomainOption? selectedTrustDomain;
+    private string selectedTrustDomainName = string.Empty;
     private List<CertificateChainNodeViewModel> treeNodes = new();
 
     // Tree filter
@@ -105,7 +105,7 @@ public partial class CertificateExplorer : IDisposable
     private bool isRevalidating;
     private bool isValidatingOnline;
     private bool pendingHighlight;
-    private Dictionary<string, ChainValidationResult> communityValidations = new();
+    private Dictionary<string, ChainValidationResult> trustDomainValidations = new();
 
     // Rename state
     private bool isRenaming;
@@ -131,7 +131,7 @@ public partial class CertificateExplorer : IDisposable
 
     // Move dialog
     private bool moveDialogHidden = true;
-    private CommunityOption? moveTargetCommunity;
+    private TrustDomainOption? moveTargetTrustDomain;
 
     // Confirm dialog
     private bool confirmDialogHidden = true;
@@ -227,9 +227,9 @@ public partial class CertificateExplorer : IDisposable
 
         await using var db = await DbFactory.CreateDbContextAsync();
 
-        communityList = await db.Communities
+        trustDomainList = await db.TrustDomains
             .OrderBy(c => c.Name)
-            .Select(c => new CommunityOption
+            .Select(c => new TrustDomainOption
             {
                 Id = c.Id,
                 Name = c.Name,
@@ -239,10 +239,10 @@ public partial class CertificateExplorer : IDisposable
             })
             .ToListAsync();
 
-        if (CommunityId > 0)
+        if (TrustDomainId > 0)
         {
-            selectedCommunity = communityList.FirstOrDefault(c => c.Id == CommunityId);
-            await LoadCommunityTreeAsync(CommunityId);
+            selectedTrustDomain = trustDomainList.FirstOrDefault(c => c.Id == TrustDomainId);
+            await LoadTrustDomainTreeAsync(TrustDomainId);
 
             // Auto-select cert if thumbprint was provided via query string
             if (!string.IsNullOrEmpty(SelectedThumbprint))
@@ -256,7 +256,7 @@ public partial class CertificateExplorer : IDisposable
 
                 // Clear the query string so it doesn't linger as the user navigates
                 SelectedThumbprint = null;
-                Navigation.NavigateTo($"/explorer/{CommunityId}", replace: true);
+                Navigation.NavigateTo($"/explorer/{TrustDomainId}", replace: true);
             }
         }
     }
@@ -422,25 +422,25 @@ public partial class CertificateExplorer : IDisposable
         return null;
     }
 
-    private async Task OnCommunitySelected(CommunityOption? option)
+    private async Task OnTrustDomainSelected(TrustDomainOption? option)
     {
         if (option != null)
         {
-            selectedCommunity = option;
-            CommunityId = option.Id;
-            await LoadCommunityTreeAsync(option.Id);
+            selectedTrustDomain = option;
+            TrustDomainId = option.Id;
+            await LoadTrustDomainTreeAsync(option.Id);
         }
     }
 
-    private async Task LoadCommunityTreeAsync(int communityId)
+    private async Task LoadTrustDomainTreeAsync(int trustDomainId)
     {
         isLoadingTree = true;
         StateHasChanged();
 
-        var treeData = await ManagementService.GetCommunityTreeAsync(communityId);
+        var treeData = await ManagementService.GetTrustDomainTreeAsync(trustDomainId);
 
-        selectedCommunityName = treeData.CommunityName;
-        communityValidations = treeData.Validations;
+        selectedTrustDomainName = treeData.TrustDomainName;
+        trustDomainValidations = treeData.Validations;
         treeNodes = treeData.TreeNodes;
         RecomputeVisibleNodes();
 
@@ -545,7 +545,7 @@ public partial class CertificateExplorer : IDisposable
                 asn1Root = Asn1Parser.ParsePem(details.Pem);
 
                 if (!string.IsNullOrEmpty(node.Thumbprint)
-                    && communityValidations.TryGetValue(node.Thumbprint, out var cached))
+                    && trustDomainValidations.TryGetValue(node.Thumbprint, out var cached))
                 {
                     chainValidation = cached;
                 }
@@ -628,9 +628,9 @@ public partial class CertificateExplorer : IDisposable
 
             if (!string.IsNullOrEmpty(selectedNode.Thumbprint) && chainValidation != null)
             {
-                communityValidations[selectedNode.Thumbprint] = chainValidation;
+                trustDomainValidations[selectedNode.Thumbprint] = chainValidation;
                 selectedNode.Status = CertificateManagementService.DeriveStatus(
-                    selectedNode.Thumbprint, selectedNode.NotAfter, false, communityValidations);
+                    selectedNode.Thumbprint, selectedNode.NotAfter, false, trustDomainValidations);
             }
         }
         catch (Exception ex)
@@ -658,7 +658,7 @@ public partial class CertificateExplorer : IDisposable
             if (result.IsSuccess)
             {
                 ToastService.ShowSuccess($"CRL #{result.CrlNumber} generated ({result.RevokedCount} revoked certs)");
-                await LoadCommunityTreeAsync(CommunityId);
+                await LoadTrustDomainTreeAsync(TrustDomainId);
             }
             else
             {
@@ -682,8 +682,8 @@ public partial class CertificateExplorer : IDisposable
 
         await using var db = await DbFactory.CreateDbContextAsync();
         var ca = await db.CaCertificates.FindAsync(selectedNode.Id);
-        var community = ca != null ? await db.Communities.FindAsync(ca.CommunityId) : null;
-        var days = community?.CrlValidityDays ?? 0;
+        var trustDomain = ca != null ? await db.TrustDomains.FindAsync(ca.TrustDomainId) : null;
+        var days = trustDomain?.CrlValidityDays ?? 0;
         if (days <= 0) days = 7;
 
         crlOverrideNextUpdate = DateTime.UtcNow.AddDays(days);
@@ -711,7 +711,7 @@ public partial class CertificateExplorer : IDisposable
             if (result.IsSuccess)
             {
                 ToastService.ShowSuccess($"CRL #{result.CrlNumber} generated (next update: {result.NextUpdate:yyyy-MM-dd HH:mm} UTC)");
-                await LoadCommunityTreeAsync(CommunityId);
+                await LoadTrustDomainTreeAsync(TrustDomainId);
             }
             else
             {
@@ -785,9 +785,9 @@ public partial class CertificateExplorer : IDisposable
 
             if (!string.IsNullOrEmpty(selectedNode.Thumbprint) && chainValidation != null)
             {
-                communityValidations[selectedNode.Thumbprint] = chainValidation;
+                trustDomainValidations[selectedNode.Thumbprint] = chainValidation;
                 selectedNode.Status = CertificateManagementService.DeriveStatus(
-                    selectedNode.Thumbprint, selectedNode.NotAfter, false, communityValidations);
+                    selectedNode.Thumbprint, selectedNode.NotAfter, false, trustDomainValidations);
             }
         }
         catch (Exception ex)
@@ -1047,7 +1047,7 @@ public partial class CertificateExplorer : IDisposable
 
                 if (ext == ".crl")
                 {
-                    var result = await CrlImporter.ImportCrlAsync(fileBytes, fileName, CommunityId);
+                    var result = await CrlImporter.ImportCrlAsync(fileBytes, fileName, TrustDomainId);
                     if (result.IsSuccess)
                         successCount++;
                     else
@@ -1096,7 +1096,7 @@ public partial class CertificateExplorer : IDisposable
         if (successCount > 0)
         {
             ToastService.ShowCopyableSuccess($"Imported {successCount} of {files.Count} files.");
-            await LoadCommunityTreeAsync(CommunityId);
+            await LoadTrustDomainTreeAsync(TrustDomainId);
         }
 
         if (importErrors.Count > 0 && successCount == 0
@@ -1148,7 +1148,7 @@ public partial class CertificateExplorer : IDisposable
         try
         {
             var result = await ImportService.ImportParsedCertificateAsync(
-                parsed, CommunityId, password: usedPassword, rawFileOverride: fileBytes);
+                parsed, TrustDomainId, password: usedPassword, rawFileOverride: fileBytes);
             parsed.Certificate.Dispose();
 
             if (result.NeedsCaSelection)
@@ -1316,32 +1316,32 @@ public partial class CertificateExplorer : IDisposable
         asn1Root = null;
         CloseIssuerDetails();
 
-        await LoadCommunityTreeAsync(CommunityId);
+        await LoadTrustDomainTreeAsync(TrustDomainId);
     }
 
     private void ShowMoveDialog()
     {
-        moveTargetCommunity = null;
+        moveTargetTrustDomain = null;
         moveDialogHidden = false;
     }
 
     private async Task MoveSelectedAsync()
     {
-        if (selectedNode == null || moveTargetCommunity == null) return;
+        if (selectedNode == null || moveTargetTrustDomain == null) return;
 
         var moveResult = await ManagementService.MoveAsync(
-            selectedNode.Id, selectedNode.EntityType, moveTargetCommunity.Id);
+            selectedNode.Id, selectedNode.EntityType, moveTargetTrustDomain.Id);
 
         moveDialogHidden = true;
 
         if (moveResult.Success)
         {
-            ToastService.ShowCopyableSuccess($"Moved '{selectedNode.Name}' to '{moveTargetCommunity.Name}'");
+            ToastService.ShowCopyableSuccess($"Moved '{selectedNode.Name}' to '{moveTargetTrustDomain.Name}'");
             selectedNode = null;
             selectedCert?.Dispose();
             selectedCert = null;
             chainValidation = null;
-            await LoadCommunityTreeAsync(CommunityId);
+            await LoadTrustDomainTreeAsync(TrustDomainId);
         }
         else
         {
@@ -1431,7 +1431,7 @@ public partial class CertificateExplorer : IDisposable
             if (pendingPasswordQueue.Count > 0)
             {
                 await TryAutoImportCertWithParsed(parsed, pendingFileName, pfxPassword);
-                await LoadCommunityTreeAsync(CommunityId);
+                await LoadTrustDomainTreeAsync(TrustDomainId);
                 ProcessNextPendingPassword();
             }
             else
@@ -1469,7 +1469,7 @@ public partial class CertificateExplorer : IDisposable
         try
         {
             var result = await ImportService.ImportParsedCertificateAsync(
-                parsed, CommunityId, password: password);
+                parsed, TrustDomainId, password: password);
 
             if (result.NeedsCaSelection)
             {
@@ -1501,7 +1501,7 @@ public partial class CertificateExplorer : IDisposable
             await using var db = await DbFactory.CreateDbContextAsync();
 
             var matchingCa = await db.CaCertificates
-                .Where(ca => ca.CommunityId == CommunityId)
+                .Where(ca => ca.TrustDomainId == TrustDomainId)
                 .ToListAsync();
 
             foreach (var ca in matchingCa)
@@ -1528,7 +1528,7 @@ public partial class CertificateExplorer : IDisposable
 
             if (matchedParentCaId == null)
             {
-                chainMatchDescription = "No matching issuer found in this community. Will be added as a root.";
+                chainMatchDescription = "No matching issuer found in this trustDomain. Will be added as a root.";
             }
         }
 
@@ -1543,7 +1543,7 @@ public partial class CertificateExplorer : IDisposable
         try
         {
             var result = await ImportService.ImportParsedCertificateAsync(
-                parsedCert, CommunityId,
+                parsedCert, TrustDomainId,
                 name: importName,
                 password: pfxPassword,
                 issuingCaId: matchedParentCaId);
@@ -1569,7 +1569,7 @@ public partial class CertificateExplorer : IDisposable
             if (result.Success)
             {
                 ToastService.ShowCopyableSuccess($"Certificate '{importName}' imported successfully.");
-                await LoadCommunityTreeAsync(CommunityId);
+                await LoadTrustDomainTreeAsync(TrustDomainId);
             }
             else
             {
@@ -1585,7 +1585,7 @@ public partial class CertificateExplorer : IDisposable
 
     private async Task ImportCrlAsync(byte[] crlBytes, string fileName)
     {
-        var result = await CrlImporter.ImportCrlAsync(crlBytes, fileName, CommunityId);
+        var result = await CrlImporter.ImportCrlAsync(crlBytes, fileName, TrustDomainId);
 
         if (!result.IsSuccess)
         {
@@ -1621,7 +1621,7 @@ public partial class CertificateExplorer : IDisposable
     {
         await using var db = await DbFactory.CreateDbContextAsync();
         availableCas = await db.CaCertificates
-            .Where(ca => ca.CommunityId == CommunityId)
+            .Where(ca => ca.TrustDomainId == TrustDomainId)
             .OrderBy(ca => ca.ParentId == null ? 0 : 1) // Roots first
             .ThenBy(ca => ca.Name)
             .Select(ca => new CaSelectOption
@@ -1640,7 +1640,7 @@ public partial class CertificateExplorer : IDisposable
 
         if (availableCas.Count == 0)
         {
-            importErrors.Add($"{fileName}: No CAs exist in this community to assign under");
+            importErrors.Add($"{fileName}: No CAs exist in this trustDomain to assign under");
             return;
         }
 
@@ -1704,14 +1704,14 @@ public partial class CertificateExplorer : IDisposable
         }
         else
         {
-            await LoadCommunityTreeAsync(CommunityId);
+            await LoadTrustDomainTreeAsync(TrustDomainId);
         }
     }
 
     private async Task SaveWithCaAssignmentAsync(ParsedCertificate parsed)
     {
         var result = await ImportService.ImportParsedCertificateAsync(
-            parsed, CommunityId,
+            parsed, TrustDomainId,
             name: Path.GetFileNameWithoutExtension(pendingFileName),
             password: pfxPassword,
             issuingCaId: selectedCaForAssignment!.Id,
@@ -1824,7 +1824,7 @@ public partial class CertificateExplorer : IDisposable
         {
             // Find CA whose SKI matches our AKI
             var cas = await db.CaCertificates
-                .Where(ca => ca.CommunityId == CommunityId)
+                .Where(ca => ca.TrustDomainId == TrustDomainId)
                 .ToListAsync();
 
             foreach (var ca in cas)
@@ -1851,7 +1851,7 @@ public partial class CertificateExplorer : IDisposable
         {
             // Fallback: match by issuer DN
             var cas = await db.CaCertificates
-                .Where(ca => ca.CommunityId == CommunityId && ca.Subject == cert.Issuer)
+                .Where(ca => ca.TrustDomainId == TrustDomainId && ca.Subject == cert.Issuer)
                 .ToListAsync();
 
             issuerEntity = cas.FirstOrDefault();
@@ -2001,10 +2001,10 @@ public partial class CertificateExplorer : IDisposable
     private static string PasswordCacheKey(int? issuingCaId) =>
         issuingCaId.HasValue ? $"ca-{issuingCaId.Value}" : "root-ca";
 
-    private async Task OpenCommunityEditAsync()
+    private async Task OpenTrustDomainEditAsync()
     {
-        if (CommunityId <= 0) return;
-        await JS.InvokeVoidAsync("open", $"/communities?edit={CommunityId}", "_blank");
+        if (TrustDomainId <= 0) return;
+        await JS.InvokeVoidAsync("open", $"/trust-domains?edit={TrustDomainId}", "_blank");
     }
 
     private async Task CheckRemoteKeysAsync(List<CertificateChainNodeViewModel> roots)
@@ -2054,7 +2054,7 @@ public partial class CertificateExplorer : IDisposable
             desiredNotAfter = issuingCaNotAfter.Value;
         issuanceNotAfterNullable = desiredNotAfter;
 
-        var baseUrls = (selectedCommunity?.BaseUrls ?? new())
+        var baseUrls = (selectedTrustDomain?.BaseUrls ?? new())
             .Select(bu => bu.Url).ToList();
         var validator = IssuanceService.Validator;
         var newCdpUrls = validator.ExpandCdpTemplates(template, baseUrls, issuingCaNameForIssuance);
@@ -2063,7 +2063,7 @@ public partial class CertificateExplorer : IDisposable
         urlChangeWarnings.Clear();
 
         // Detect unsubstituted {BaseUrl} placeholders in any final URL — this catches the
-        // case where the community has no base URLs, an empty base URL string, etc.
+        // case where the trustDomain has no base URLs, an empty base URL string, etc.
         noBaseUrlsWarning = newCdpUrls.Any(u => u.Contains("{BaseUrl}", StringComparison.OrdinalIgnoreCase))
             || newAiaUrls.Any(u => u.Contains("{BaseUrl}", StringComparison.OrdinalIgnoreCase));
 
@@ -2244,7 +2244,7 @@ public partial class CertificateExplorer : IDisposable
             {
                 IssuingCaCertificateId = issuingCaIdForIssuance,
                 TemplateId = selectedTemplate.Id,
-                CommunityId = CommunityId,
+                TrustDomainId = TrustDomainId,
                 SubjectDn = issuanceSubjectDn,
                 CertificateName = issuanceCertName,
                 SubjectAltNames = issuanceSans
@@ -2283,7 +2283,7 @@ public partial class CertificateExplorer : IDisposable
 
                 issuanceDialogHidden = true;
                 ToastService.ShowCopyableSuccess($"Certificate issued: {result.Thumbprint}");
-                await LoadCommunityTreeAsync(CommunityId);
+                await LoadTrustDomainTreeAsync(TrustDomainId);
             }
             else
             {
@@ -2626,7 +2626,7 @@ public partial class CertificateExplorer : IDisposable
             {
                 resignDialogHidden = true;
                 ToastService.ShowCopyableSuccess($"Certificate re-signed (same key): {result.Thumbprint}");
-                await LoadCommunityTreeAsync(CommunityId);
+                await LoadTrustDomainTreeAsync(TrustDomainId);
             }
             else
             {
@@ -2686,7 +2686,7 @@ public partial class CertificateExplorer : IDisposable
         _ => ct.ToString()
     };
 
-    public class CommunityOption
+    public class TrustDomainOption
     {
         public int Id { get; set; }
         public string Name { get; set; } = string.Empty;
@@ -2766,7 +2766,7 @@ public partial class CertificateExplorer : IDisposable
                 ToastService.ShowCopyableError(revokeResult.Error ?? "Revocation failed.");
             }
 
-            await LoadCommunityTreeAsync(CommunityId);
+            await LoadTrustDomainTreeAsync(TrustDomainId);
         }
         catch (Exception ex)
         {

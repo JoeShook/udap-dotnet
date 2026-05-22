@@ -4,7 +4,7 @@
    See LICENSE in the project root for license information. *@
 
 @page "/explorer"
-@page "/explorer/{CommunityId:int}"
+@page "/explorer/{TrustDomainId:int}"
 @using Sigil.Common.ViewModels
 @using Sigil.Common.Services
 @using Sigil.UI.Components.Shared
@@ -14,20 +14,20 @@
 
 <FluentStack Orientation="Orientation.Horizontal" Style="align-items: center; gap: 0.75rem;">
     <FluentLabel Typo="Typography.PageTitle">Certificate Explorer</FluentLabel>
-    @if (communityList.Count > 0)
+    @if (trustDomainList.Count > 0)
     {
-        <FluentSelect TOption="CommunityOption"
-                      Items="@communityList"
+        <FluentSelect TOption="TrustDomainOption"
+                      Items="@trustDomainList"
                       OptionValue="@(o => o.Id.ToString())"
                       OptionText="@(o => o.Name)"
-                      SelectedOptionChanged="OnCommunitySelected"
-                      SelectedOption="@selectedCommunity"
+                      SelectedOptionChanged="OnTrustDomainSelected"
+                      SelectedOption="@selectedTrustDomain"
                       Position="SelectPosition.Below"
-                      Placeholder="Select a community..."
+                      Placeholder="Select a trustDomain..."
                       Style="min-width: 250px;" />
     }
     <FluentSpacer />
-    @if (CommunityId > 0)
+    @if (TrustDomainId > 0)
     {
         <FluentButton Appearance="Appearance.Accent"
                       IconStart="@(new Icons.Regular.Size16.ArrowImport())"
@@ -43,7 +43,7 @@
 </FluentStack>
 
 @* Drop zone for importing certificates *@
-@if (showDropZone && CommunityId > 0)
+@if (showDropZone && TrustDomainId > 0)
 {
     <FluentCard Style="margin-top: 1rem;">
         <FluentStack Orientation="Orientation.Horizontal" Style="align-items: center;">
@@ -203,23 +203,23 @@
     </FluentDialogFooter>
 </FluentDialog>
 
-@* Move to community dialog *@
+@* Move to trust domain dialog *@
 <FluentDialog @bind-Hidden="@moveDialogHidden" Modal="true" TrapFocus="true"
               Style="min-width: 400px; overflow: visible;">
-    <FluentDialogHeader>Move to Community</FluentDialogHeader>
+    <FluentDialogHeader>Move to Trust Domain</FluentDialogHeader>
     <FluentDialogBody Style="overflow: visible;">
         <p style="font-size: 0.9rem;">Move <code>@selectedNode?.Name</code> to:</p>
-        <FluentSelect TOption="CommunityOption"
-                      Items="@communityList.Where(c => c.Id != CommunityId).ToList()"
+        <FluentSelect TOption="TrustDomainOption"
+                      Items="@trustDomainList.Where(c => c.Id != TrustDomainId).ToList()"
                       OptionValue="@(o => o.Id.ToString())"
                       OptionText="@(o => o.Name)"
-                      @bind-SelectedOption="moveTargetCommunity"
+                      @bind-SelectedOption="moveTargetTrustDomain"
                       Position="SelectPosition.Below"
                       Style="width: 100%; margin-top: 0.5rem;" />
     </FluentDialogBody>
     <FluentDialogFooter>
         <FluentButton Appearance="Appearance.Accent" OnClick="MoveSelectedAsync"
-                      Disabled="@(moveTargetCommunity == null)">
+                      Disabled="@(moveTargetTrustDomain == null)">
             Move
         </FluentButton>
         <FluentButton Appearance="Appearance.Outline" OnClick="@(() => moveDialogHidden = true)">Cancel</FluentButton>
@@ -287,17 +287,17 @@
         <div style="max-width: 100%; min-width: 0; overflow-x: hidden;">
         @if (noBaseUrlsWarning)
         {
-            <FluentMessageBar Title="Community has no Base URLs"
+            <FluentMessageBar Title="Trust Domain has no Base URLs"
                               Intent="@MessageIntent.Error"
                               Style="margin-bottom: 0.5rem;">
                 <p style="margin: 0.25rem 0;">
-                    The template uses <code>{BaseUrl}</code> in CDP/AIA URLs but this community has no Base URLs configured.
+                    The template uses <code>{BaseUrl}</code> in CDP/AIA URLs but this trustDomain has no Base URLs configured.
                     Add one and reopen this dialog, or enter absolute URLs manually in the Extensions section.
                 </p>
                 <FluentButton Appearance="Appearance.Accent" Size="ButtonSize.Small"
                               IconStart="@(new Icons.Regular.Size16.Open())"
-                              OnClick="OpenCommunityEditAsync">
-                    Edit Community (new tab)
+                              OnClick="OpenTrustDomainEditAsync">
+                    Edit TrustDomain (new tab)
                 </FluentButton>
             </FluentMessageBar>
         }
@@ -638,7 +638,7 @@ else if (treeNodes.Count > 0)
             <FluentCard Style="height: 100%; display: flex; flex-direction: column;">
                 <div style="display: flex; align-items: center; gap: 0.5rem; margin-bottom: 0.5rem;">
                     <FluentLabel Typo="Typography.Subject" Style="flex: 1; min-width: 0;">
-                        @selectedCommunityName
+                        @selectedTrustDomainName
                     </FluentLabel>
                     <FluentButton Appearance="@(IsTreeFilterActive ? Appearance.Accent : Appearance.Stealth)"
                                   Size="ButtonSize.Small"
@@ -952,7 +952,7 @@ else if (treeNodes.Count > 0)
                         <FluentButton Appearance="Appearance.Outline"
                                       IconStart="@(new Icons.Regular.Size16.ArrowForward())"
                                       OnClick="ShowMoveDialog"
-                                      title="Move to another community">
+                                      title="Move to another trustDomain">
                             Move
                         </FluentButton>
                         @if (selectedNode?.Status != CertificateStatus.Revoked)
@@ -1012,7 +1012,7 @@ else if (treeNodes.Count > 0)
                                           IconStart="@(new Icons.Regular.Size16.ShieldKeyhole())"
                                           OnClick="GenerateCrlForSelectedAsync"
                                           Disabled="@isGeneratingCrl"
-                                          title="Regenerate CRL using community validity setting">
+                                          title="Regenerate CRL using trustDomain validity setting">
                                 @(isGeneratingCrl ? "Generating..." : "Regen CRL")
                             </FluentButton>
                             <FluentButton Appearance="Appearance.Outline"
@@ -1276,10 +1276,10 @@ else if (treeNodes.Count > 0)
         </Panel2>
     </FluentSplitter>
 }
-else if (CommunityId > 0 && !showDropZone)
+else if (TrustDomainId > 0 && !showDropZone)
 {
     <FluentCard Style="margin-top: 1rem;">
-        <p>No certificates found in this community.
+        <p>No certificates found in this trustDomain.
             <FluentAnchor Href="javascript:void(0)" OnClick="@(() => showDropZone = true)">Import a certificate</FluentAnchor> to get started.
         </p>
     </FluentCard>

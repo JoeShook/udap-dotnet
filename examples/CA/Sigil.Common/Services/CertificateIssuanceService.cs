@@ -67,10 +67,10 @@ public class CertificateIssuanceService
         if (template == null)
             return CertificateIssuanceResult.Failure("Template not found.");
 
-        // Validate community exists
-        var community = await db.Communities.FindAsync(request.CommunityId);
-        if (community == null)
-            return CertificateIssuanceResult.Failure("Community not found.");
+        // Validate trustDomain exists
+        var trustDomain = await db.TrustDomains.FindAsync(request.TrustDomainId);
+        if (trustDomain == null)
+            return CertificateIssuanceResult.Failure("Trust domain not found.");
 
         if (string.IsNullOrWhiteSpace(request.SubjectDn))
             return CertificateIssuanceResult.Failure("Subject DN is required.");
@@ -239,7 +239,7 @@ public class CertificateIssuanceService
                 {
                     var caEntity = new CaCertificate
                     {
-                        CommunityId = request.CommunityId,
+                        TrustDomainId = request.TrustDomainId,
                         ParentId = isSelfSigned ? null : request.IssuingCaCertificateId,
                         Name = certName,
                         Subject = cert.Subject,
@@ -259,7 +259,7 @@ public class CertificateIssuanceService
                     db.CaCertificates.Add(caEntity);
                     await db.SaveChangesAsync();
 
-                    await PublishCaCertAndCrlAsync(request.CommunityId, certName, cert.RawData);
+                    await PublishCaCertAndCrlAsync(request.TrustDomainId, certName, cert.RawData);
 
                     return new CertificateIssuanceResult
                     {
@@ -584,7 +584,7 @@ public class CertificateIssuanceService
                 {
                     var caEntity = new CaCertificate
                     {
-                        CommunityId = request.CommunityId,
+                        TrustDomainId = request.TrustDomainId,
                         ParentId = isSelfSigned ? null : request.IssuingCaCertificateId,
                         Name = certName,
                         Subject = cert.Subject,
@@ -606,7 +606,7 @@ public class CertificateIssuanceService
                     db.CaCertificates.Add(caEntity);
                     await db.SaveChangesAsync();
 
-                    await PublishCaCertAndCrlAsync(request.CommunityId, certName, cert.RawData);
+                    await PublishCaCertAndCrlAsync(request.TrustDomainId, certName, cert.RawData);
 
                     return new CertificateIssuanceResult
                     {
@@ -744,7 +744,7 @@ public class CertificateIssuanceService
                 {
                     var caEntity = new CaCertificate
                     {
-                        CommunityId = request.CommunityId,
+                        TrustDomainId = request.TrustDomainId,
                         ParentId = request.IssuingCaCertificateId,
                         Name = certName,
                         Subject = certWithKey.Subject,
@@ -765,7 +765,7 @@ public class CertificateIssuanceService
                     db.CaCertificates.Add(caEntity);
                     await db.SaveChangesAsync();
 
-                    await PublishCaCertAndCrlAsync(request.CommunityId, certName, certWithKey.RawData);
+                    await PublishCaCertAndCrlAsync(request.TrustDomainId, certName, certWithKey.RawData);
 
                     return new CertificateIssuanceResult
                     {
@@ -1094,11 +1094,11 @@ public class CertificateIssuanceService
     }
 
     private async Task PublishCaCertAndCrlAsync(
-        int communityId, string certName, byte[] certDerBytes)
+        int trustDomainId, string certName, byte[] certDerBytes)
     {
         await using var db = await _dbFactory.CreateDbContextAsync();
-        var baseUrls = await db.CommunityBaseUrls
-            .Where(bu => bu.CommunityId == communityId && bu.PublishingBasePath != null)
+        var baseUrls = await db.TrustDomainBaseUrls
+            .Where(bu => bu.TrustDomainId == trustDomainId && bu.PublishingBasePath != null)
             .ToListAsync();
 
         if (baseUrls.Count == 0) return;

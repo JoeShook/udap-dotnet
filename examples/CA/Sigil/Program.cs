@@ -63,7 +63,7 @@ try
     builder.Services.AddScoped<CertificateExportService>();
     builder.Services.AddScoped<DashboardService>();
     builder.Services.AddScoped<TemplateService>();
-    builder.Services.AddScoped<CommunityService>();
+    builder.Services.AddScoped<TrustDomainService>();
     builder.Services.AddScoped<CertificateManagementService>();
     builder.Services.AddScoped<CertificatePublishingService>();
     builder.Services.AddSingleton<IssuanceValidator>();

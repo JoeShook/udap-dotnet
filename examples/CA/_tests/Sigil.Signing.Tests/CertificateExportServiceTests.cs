@@ -218,7 +218,7 @@ public class CertificateExportServiceTests : IDisposable
             NotBefore = cert.NotBefore,
             NotAfter = cert.NotAfter,
             CertSecurityLevel = securityLevel,
-            CommunityId = 1
+            TrustDomainId = 1
         };
 
         db.CaCertificates.Add(ca);
@@ -278,7 +278,7 @@ public class CertificateExportServiceTests : IDisposable
             KeySize = 2048,
             NotBefore = cert.NotBefore,
             NotAfter = cert.NotAfter,
-            CommunityId = 1
+            TrustDomainId = 1
         };
 
         db.CaCertificates.Add(ca);

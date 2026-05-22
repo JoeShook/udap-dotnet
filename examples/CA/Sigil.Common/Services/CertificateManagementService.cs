@@ -34,9 +34,9 @@ public class CertificateNodeDetails
     public string? SubjectAltNames { get; set; }
 }
 
-public class CommunityTreeData
+public class TrustDomainTreeData
 {
-    public string CommunityName { get; set; } = string.Empty;
+    public string TrustDomainName { get; set; } = string.Empty;
     public List<CertificateChainNodeViewModel> TreeNodes { get; set; } = new();
     public Dictionary<string, ChainValidationResult> Validations { get; set; } = new();
 }
@@ -63,21 +63,21 @@ public class CertificateManagementService
         _validator = validator ?? new IssuanceValidator();
     }
 
-    public async Task<CommunityTreeData> GetCommunityTreeAsync(int communityId, CancellationToken ct = default)
+    public async Task<TrustDomainTreeData> GetTrustDomainTreeAsync(int trustDomainId, CancellationToken ct = default)
     {
         await using var db = await _dbFactory.CreateDbContextAsync(ct);
 
-        var community = await db.Communities.FindAsync([communityId], ct);
-        var communityName = community?.Name ?? "Unknown";
+        var trustDomain = await db.TrustDomains.FindAsync([trustDomainId], ct);
+        var trustDomainName = trustDomain?.Name ?? "Unknown";
 
         var caCerts = await db.CaCertificates
-            .Where(ca => ca.CommunityId == communityId && !ca.IsArchived)
+            .Where(ca => ca.TrustDomainId == trustDomainId && !ca.IsArchived)
             .Include(ca => ca.IssuedCertificates.Where(i => !i.IsArchived))
             .Include(ca => ca.Crls.Where(c => !c.IsArchived))
             .OrderBy(ca => ca.Name)
             .ToListAsync(ct);
 
-        var validations = await _chainValidator.ValidateCommunityAsync(communityId);
+        var validations = await _chainValidator.ValidateTrustDomainAsync(trustDomainId);
         var supersededCaIds = _validator.FindSupersededCaIds(caCerts);
 
         var treeNodes = caCerts
@@ -85,9 +85,9 @@ public class CertificateManagementService
             .Select(rootCa => BuildTreeNode(rootCa, caCerts, validations, supersededCaIds))
             .ToList();
 
-        return new CommunityTreeData
+        return new TrustDomainTreeData
         {
-            CommunityName = communityName,
+            TrustDomainName = trustDomainName,
             TreeNodes = treeNodes,
             Validations = validations
         };
@@ -263,7 +263,7 @@ public class CertificateManagementService
     }
 
     public async Task<MoveResult> MoveAsync(
-        int id, string entityType, int targetCommunityId, CancellationToken ct = default)
+        int id, string entityType, int targetTrustDomainId, CancellationToken ct = default)
     {
         await using var db = await _dbFactory.CreateDbContextAsync(ct);
 
@@ -272,7 +272,7 @@ public class CertificateManagementService
             case "CaCertificate":
                 var ca = await db.CaCertificates.FindAsync([id], ct);
                 if (ca == null) return new MoveResult(false, "Certificate not found.");
-                ca.CommunityId = targetCommunityId;
+                ca.TrustDomainId = targetTrustDomainId;
                 ca.ParentId = null;
                 break;
             case "IssuedCertificate":
@@ -281,19 +281,19 @@ public class CertificateManagementService
                     .FirstOrDefaultAsync(i => i.Id == id, ct);
                 if (issued == null) return new MoveResult(false, "Certificate not found.");
 
-                var newIssuingCaId = await FindMatchingCaInCommunityAsync(db, issued.X509CertificatePem, targetCommunityId, ct);
+                var newIssuingCaId = await FindMatchingCaInTrustDomainAsync(db, issued.X509CertificatePem, targetTrustDomainId, ct);
 
                 if (newIssuingCaId == null)
                 {
                     var fallbackCa = await db.CaCertificates
-                        .Where(c => c.CommunityId == targetCommunityId)
+                        .Where(c => c.TrustDomainId == targetTrustDomainId)
                         .OrderByDescending(c => c.ParentId)
                         .FirstOrDefaultAsync(ct);
                     newIssuingCaId = fallbackCa?.Id;
                 }
 
                 if (newIssuingCaId == null)
-                    return new MoveResult(false, "Target community has no CA certificates.");
+                    return new MoveResult(false, "Target trust domain has no CA certificates.");
 
                 issued.IssuingCaCertificateId = newIssuingCaId.Value;
                 break;
@@ -345,23 +345,23 @@ public class CertificateManagementService
         return new RevokeResult(true);
     }
 
-    public async Task<int?> FindCaBySkiAsync(int communityId, string authorityKeyIdentifier, CancellationToken ct = default)
+    public async Task<int?> FindCaBySkiAsync(int trustDomainId, string authorityKeyIdentifier, CancellationToken ct = default)
     {
         await using var db = await _dbFactory.CreateDbContextAsync(ct);
-        return await FindCaBySkiInternalAsync(db, communityId, authorityKeyIdentifier, ct);
+        return await FindCaBySkiInternalAsync(db, trustDomainId, authorityKeyIdentifier, ct);
     }
 
-    public async Task<int?> FindCaByDnAndSignatureAsync(int communityId, X509Certificate2 cert, CancellationToken ct = default)
+    public async Task<int?> FindCaByDnAndSignatureAsync(int trustDomainId, X509Certificate2 cert, CancellationToken ct = default)
     {
         await using var db = await _dbFactory.CreateDbContextAsync(ct);
-        return await FindCaByDnAndSignatureInternalAsync(db, communityId, cert, ct);
+        return await FindCaByDnAndSignatureInternalAsync(db, trustDomainId, cert, ct);
     }
 
     public static async Task<int?> FindCaBySkiInternalAsync(
-        SigilDbContext db, int communityId, string authorityKeyIdentifier, CancellationToken ct = default)
+        SigilDbContext db, int trustDomainId, string authorityKeyIdentifier, CancellationToken ct = default)
     {
         var cas = await db.CaCertificates
-            .Where(ca => ca.CommunityId == communityId)
+            .Where(ca => ca.TrustDomainId == trustDomainId)
             .ToListAsync(ct);
 
         foreach (var ca in cas)
@@ -384,10 +384,10 @@ public class CertificateManagementService
     }
 
     public static async Task<int?> FindCaByDnAndSignatureInternalAsync(
-        SigilDbContext db, int communityId, X509Certificate2 cert, CancellationToken ct = default)
+        SigilDbContext db, int trustDomainId, X509Certificate2 cert, CancellationToken ct = default)
     {
         var cas = await db.CaCertificates
-            .Where(ca => ca.CommunityId == communityId)
+            .Where(ca => ca.TrustDomainId == trustDomainId)
             .ToListAsync(ct);
 
         var bcParser = new Org.BouncyCastle.X509.X509CertificateParser();
@@ -412,8 +412,8 @@ public class CertificateManagementService
         return null;
     }
 
-    private static async Task<int?> FindMatchingCaInCommunityAsync(
-        SigilDbContext db, string? certPem, int targetCommunityId, CancellationToken ct)
+    private static async Task<int?> FindMatchingCaInTrustDomainAsync(
+        SigilDbContext db, string? certPem, int targetTrustDomainId, CancellationToken ct)
     {
         if (string.IsNullOrEmpty(certPem)) return null;
 
@@ -431,11 +431,11 @@ public class CertificateManagementService
                     Array.Copy(data, 4, keyId, 0, len);
                     var aki = Convert.ToHexString(keyId);
 
-                    return await FindCaBySkiInternalAsync(db, targetCommunityId, aki, ct);
+                    return await FindCaBySkiInternalAsync(db, targetTrustDomainId, aki, ct);
                 }
             }
 
-            return await FindCaByDnAndSignatureInternalAsync(db, targetCommunityId, cert, ct);
+            return await FindCaByDnAndSignatureInternalAsync(db, targetTrustDomainId, cert, ct);
         }
         catch
         {

@@ -10,7 +10,7 @@
 
 namespace Sigil.Common.Data.Entities;
 
-public class Community
+public class TrustDomain
 {
     public int Id { get; set; }
     public string Name { get; set; } = string.Empty;
@@ -21,6 +21,6 @@ public class Community
     public bool Enabled { get; set; } = true;
     public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
 
-    public ICollection<CommunityBaseUrl> BaseUrls { get; set; } = new List<CommunityBaseUrl>();
+    public ICollection<TrustDomainBaseUrl> BaseUrls { get; set; } = new List<TrustDomainBaseUrl>();
     public ICollection<CaCertificate> CaCertificates { get; set; } = new List<CaCertificate>();
 }

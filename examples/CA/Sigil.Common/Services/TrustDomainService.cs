@@ -16,25 +16,25 @@ using Sigil.Common.ViewModels;
 
 namespace Sigil.Common.Services;
 
-public class CommunityService
+public class TrustDomainService
 {
     private readonly IDbContextFactory<SigilDbContext> _dbFactory;
-    private readonly ILogger<CommunityService> _logger;
+    private readonly ILogger<TrustDomainService> _logger;
 
-    public CommunityService(
+    public TrustDomainService(
         IDbContextFactory<SigilDbContext> dbFactory,
-        ILogger<CommunityService> logger)
+        ILogger<TrustDomainService> logger)
     {
         _dbFactory = dbFactory;
         _logger = logger;
     }
 
-    public async Task<List<CommunityViewModel>> GetAllAsync(CancellationToken ct = default)
+    public async Task<List<TrustDomainViewModel>> GetAllAsync(CancellationToken ct = default)
     {
         await using var db = await _dbFactory.CreateDbContextAsync(ct);
 
-        return await db.Communities
-            .Select(c => new CommunityViewModel
+        return await db.TrustDomains
+            .Select(c => new TrustDomainViewModel
             {
                 Id = c.Id,
                 Name = c.Name,
@@ -53,7 +53,7 @@ public class CommunityService
             .ToListAsync(ct);
     }
 
-    public async Task<Community> CreateAsync(
+    public async Task<TrustDomain> CreateAsync(
         string name,
         string? description,
         List<(string Url, string? PublishingBasePath)> baseUrls,
@@ -62,7 +62,7 @@ public class CommunityService
     {
         await using var db = await _dbFactory.CreateDbContextAsync(ct);
 
-        var community = new Community
+        var trustDomain = new TrustDomain
         {
             Name = name.Trim(),
             Description = string.IsNullOrWhiteSpace(description) ? null : description.Trim(),
@@ -75,7 +75,7 @@ public class CommunityService
         {
             if (!string.IsNullOrWhiteSpace(url))
             {
-                community.BaseUrls.Add(new CommunityBaseUrl
+                trustDomain.BaseUrls.Add(new TrustDomainBaseUrl
                 {
                     Url = url.Trim().TrimEnd('/'),
                     SortOrder = sortOrder++,
@@ -84,9 +84,9 @@ public class CommunityService
             }
         }
 
-        db.Communities.Add(community);
+        db.TrustDomains.Add(trustDomain);
         await db.SaveChangesAsync(ct);
-        return community;
+        return trustDomain;
     }
 
     public async Task UpdateAsync(
@@ -98,7 +98,7 @@ public class CommunityService
         CancellationToken ct = default)
     {
         await using var db = await _dbFactory.CreateDbContextAsync(ct);
-        var entity = await db.Communities
+        var entity = await db.TrustDomains
             .Include(c => c.BaseUrls)
             .FirstOrDefaultAsync(c => c.Id == id, ct);
 
@@ -114,7 +114,7 @@ public class CommunityService
         {
             if (!string.IsNullOrWhiteSpace(url))
             {
-                entity.BaseUrls.Add(new CommunityBaseUrl
+                entity.BaseUrls.Add(new TrustDomainBaseUrl
                 {
                     Url = url.Trim().TrimEnd('/'),
                     SortOrder = sortOrder++,
@@ -129,30 +129,30 @@ public class CommunityService
     public async Task DeleteAsync(int id, CancellationToken ct = default)
     {
         await using var db = await _dbFactory.CreateDbContextAsync(ct);
-        var entity = await db.Communities.FindAsync([id], ct);
+        var entity = await db.TrustDomains.FindAsync([id], ct);
         if (entity != null)
         {
-            db.Communities.Remove(entity);
+            db.TrustDomains.Remove(entity);
             await db.SaveChangesAsync(ct);
         }
     }
 
-    public async Task<List<ImpactItem>> GetDeletionImpactAsync(int communityId, CancellationToken ct = default)
+    public async Task<List<ImpactItem>> GetDeletionImpactAsync(int trustDomainId, CancellationToken ct = default)
     {
         await using var db = await _dbFactory.CreateDbContextAsync(ct);
         var impacts = new List<ImpactItem>();
 
-        var caCount = await db.CaCertificates.CountAsync(c => c.CommunityId == communityId, ct);
+        var caCount = await db.CaCertificates.CountAsync(c => c.TrustDomainId == trustDomainId, ct);
         if (caCount > 0)
             impacts.Add(new ImpactItem(caCount, "CA certificate(s)", ImpactSeverity.Critical));
 
         var issuedCount = await db.IssuedCertificates
-            .CountAsync(i => i.IssuingCaCertificate.CommunityId == communityId, ct);
+            .CountAsync(i => i.IssuingCaCertificate.TrustDomainId == trustDomainId, ct);
         if (issuedCount > 0)
             impacts.Add(new ImpactItem(issuedCount, "issued certificate(s)", ImpactSeverity.Critical));
 
         var crlCount = await db.Crls
-            .CountAsync(c => c.CaCertificate.CommunityId == communityId && !c.IsArchived, ct);
+            .CountAsync(c => c.CaCertificate.TrustDomainId == trustDomainId && !c.IsArchived, ct);
         if (crlCount > 0)
             impacts.Add(new ImpactItem(crlCount, "CRL(s)", ImpactSeverity.Warning));
 

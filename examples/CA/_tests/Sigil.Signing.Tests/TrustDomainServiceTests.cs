@@ -16,12 +16,12 @@ using Sigil.Common.Services;
 
 namespace Sigil.Signing.Tests;
 
-public class CommunityServiceTests
+public class TrustDomainServiceTests
 {
     private readonly IDbContextFactory<SigilDbContext> _dbFactory = new TestDbContextFactory();
 
-    private CommunityService CreateService() =>
-        new(_dbFactory, NullLogger<CommunityService>.Instance);
+    private TrustDomainService CreateService() =>
+        new(_dbFactory, NullLogger<TrustDomainService>.Instance);
 
     [Fact]
     public async Task GetAll_EmptyDb_ReturnsEmpty()
@@ -34,19 +34,19 @@ public class CommunityServiceTests
     }
 
     [Fact]
-    public async Task CreateAsync_BasicCommunity_Persists()
+    public async Task CreateAsync_BasicTrustDomain_Persists()
     {
         var service = CreateService();
 
-        var community = await service.CreateAsync("My Community", "A test community", []);
+        var trustDomain = await service.CreateAsync("My TrustDomain", "A test trustDomain", []);
 
-        community.Id.ShouldBeGreaterThan(0);
-        community.Name.ShouldBe("My Community");
+        trustDomain.Id.ShouldBeGreaterThan(0);
+        trustDomain.Name.ShouldBe("My TrustDomain");
 
         var all = await service.GetAllAsync();
         all.ShouldHaveSingleItem();
-        all[0].Name.ShouldBe("My Community");
-        all[0].Description.ShouldBe("A test community");
+        all[0].Name.ShouldBe("My TrustDomain");
+        all[0].Description.ShouldBe("A test trustDomain");
     }
 
     [Fact]
@@ -60,7 +60,7 @@ public class CommunityServiceTests
             ("https://other.com/fhir", null)
         };
 
-        await service.CreateAsync("URL Community", null, urls);
+        await service.CreateAsync("URL TrustDomain", null, urls);
 
         var all = await service.GetAllAsync();
         all.ShouldHaveSingleItem();
@@ -86,9 +86,9 @@ public class CommunityServiceTests
     public async Task UpdateAsync_ChangesNameAndUrls()
     {
         var service = CreateService();
-        var community = await service.CreateAsync("Original", null, [("https://old.com", null)]);
+        var trustDomain = await service.CreateAsync("Original", null, [("https://old.com", null)]);
 
-        await service.UpdateAsync(community.Id, "Renamed", "New desc",
+        await service.UpdateAsync(trustDomain.Id, "Renamed", "New desc",
             [("https://new.com", "/new/path")]);
 
         var all = await service.GetAllAsync();
@@ -100,12 +100,12 @@ public class CommunityServiceTests
     }
 
     [Fact]
-    public async Task DeleteAsync_RemovesCommunity()
+    public async Task DeleteAsync_RemovesTrustDomain()
     {
         var service = CreateService();
-        var community = await service.CreateAsync("To Delete", null, []);
+        var trustDomain = await service.CreateAsync("To Delete", null, []);
 
-        await service.DeleteAsync(community.Id);
+        await service.DeleteAsync(trustDomain.Id);
 
         var all = await service.GetAllAsync();
         all.ShouldBeEmpty();

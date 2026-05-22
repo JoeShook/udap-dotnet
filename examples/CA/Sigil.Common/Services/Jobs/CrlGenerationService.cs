@@ -80,8 +80,8 @@ public class CrlGenerationService
 
         if (validity == null)
         {
-            var community = await db.Communities.FindAsync([ca.CommunityId], ct);
-            var days = community?.CrlValidityDays ?? 0;
+            var trustDomain = await db.TrustDomains.FindAsync([ca.TrustDomainId], ct);
+            var days = trustDomain?.CrlValidityDays ?? 0;
             if (days <= 0) days = 7;
             validity = TimeSpan.FromDays(days);
         }
@@ -243,8 +243,8 @@ public class CrlGenerationService
     private async Task PublishCrlToFileSystemAsync(
         SigilDbContext db, CaCertificate ca, byte[] crlBytes, CancellationToken ct)
     {
-        var baseUrls = await db.CommunityBaseUrls
-            .Where(bu => bu.CommunityId == ca.CommunityId && bu.PublishingBasePath != null)
+        var baseUrls = await db.TrustDomainBaseUrls
+            .Where(bu => bu.TrustDomainId == ca.TrustDomainId && bu.PublishingBasePath != null)
             .ToListAsync(ct);
 
         foreach (var baseUrl in baseUrls)
@@ -408,9 +408,9 @@ public class CrlGenerationService
         var cas = await db.CaCertificates
             .Where(ca => !ca.IsArchived &&
                 (ca.EncryptedPfxBytes != null || ca.StoreProviderHint != null))
-            .Include(ca => ca.Community)
+            .Include(ca => ca.TrustDomain)
             .Include(ca => ca.Crls.Where(c => !c.IsArchived))
-            .OrderBy(ca => ca.Community.Name)
+            .OrderBy(ca => ca.TrustDomain.Name)
             .ThenBy(ca => ca.Name)
             .ToListAsync(ct);
 
@@ -424,7 +424,7 @@ public class CrlGenerationService
             {
                 CaId = ca.Id,
                 CaName = ca.Name,
-                CommunityName = ca.Community.Name,
+                TrustDomainName = ca.TrustDomain.Name,
                 LatestCrlNumber = latestCrl?.CrlNumber,
                 NextUpdate = latestCrl?.NextUpdate ?? DateTime.MinValue,
                 HasCrl = latestCrl != null,
@@ -445,7 +445,7 @@ public class CrlStatusSummary
 {
     public int CaId { get; init; }
     public string CaName { get; init; } = string.Empty;
-    public string CommunityName { get; init; } = string.Empty;
+    public string TrustDomainName { get; init; } = string.Empty;
     public long? LatestCrlNumber { get; init; }
     public DateTime NextUpdate { get; init; }
     public bool HasCrl { get; init; }

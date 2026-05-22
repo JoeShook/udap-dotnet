@@ -68,7 +68,7 @@ public class IssuanceValidator
 
     public List<string> ExpandUrlTemplates(
         CertificateTemplate template,
-        List<string> communityBaseUrls,
+        List<string> trustDomainBaseUrls,
         string? issuingCaName)
     {
         var cdpTemplate = template.CdpUrlTemplate;
@@ -80,14 +80,14 @@ public class IssuanceValidator
             aiaTemplate = "{BaseUrl}/certs/{CAName}.cer";
 
         var result = new List<string>();
-        result.AddRange(ExpandTemplate(cdpTemplate, communityBaseUrls, issuingCaName));
-        result.AddRange(ExpandTemplate(aiaTemplate, communityBaseUrls, issuingCaName));
+        result.AddRange(ExpandTemplate(cdpTemplate, trustDomainBaseUrls, issuingCaName));
+        result.AddRange(ExpandTemplate(aiaTemplate, trustDomainBaseUrls, issuingCaName));
         return result;
     }
 
     public List<string> ExpandCdpTemplates(
         CertificateTemplate template,
-        List<string> communityBaseUrls,
+        List<string> trustDomainBaseUrls,
         string? issuingCaName)
     {
         if (!template.IncludeCdp) return new();
@@ -96,12 +96,12 @@ public class IssuanceValidator
         if (string.IsNullOrWhiteSpace(cdpTemplate))
             cdpTemplate = "{BaseUrl}/crls/{CAName}.crl";
 
-        return ExpandTemplate(cdpTemplate, communityBaseUrls, issuingCaName);
+        return ExpandTemplate(cdpTemplate, trustDomainBaseUrls, issuingCaName);
     }
 
     public List<string> ExpandAiaTemplates(
         CertificateTemplate template,
-        List<string> communityBaseUrls,
+        List<string> trustDomainBaseUrls,
         string? issuingCaName)
     {
         if (!template.IncludeAia) return new();
@@ -110,7 +110,7 @@ public class IssuanceValidator
         if (string.IsNullOrWhiteSpace(aiaTemplate))
             aiaTemplate = "{BaseUrl}/certs/{CAName}.cer";
 
-        return ExpandTemplate(aiaTemplate, communityBaseUrls, issuingCaName);
+        return ExpandTemplate(aiaTemplate, trustDomainBaseUrls, issuingCaName);
     }
 
     private static List<string> ExpandTemplate(
