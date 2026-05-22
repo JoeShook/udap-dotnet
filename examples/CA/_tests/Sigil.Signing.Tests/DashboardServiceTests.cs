@@ -10,7 +10,7 @@
 
 using System.Security.Cryptography;
 using System.Security.Cryptography.X509Certificates;
-using FluentAssertions;
+using Shouldly;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging.Abstractions;
 using Sigil.Common.Data;
@@ -33,79 +33,79 @@ public class DashboardServiceTests
 
         var data = await service.GetDashboardAsync();
 
-        data.CommunityCount.Should().Be(0);
-        data.CaCertCount.Should().Be(0);
-        data.IssuedCertCount.Should().Be(0);
-        data.TemplateCount.Should().Be(0);
-        data.RevokedCertCount.Should().Be(0);
-        data.CommunitySummaries.Should().BeEmpty();
-        data.ExpiringCerts.Should().BeEmpty();
-        data.ExpiredCerts.Should().BeEmpty();
-        data.OverdueCrls.Should().BeEmpty();
+        data.TrustDomainCount.ShouldBe(0);
+        data.CaCertCount.ShouldBe(0);
+        data.IssuedCertCount.ShouldBe(0);
+        data.TemplateCount.ShouldBe(0);
+        data.RevokedCertCount.ShouldBe(0);
+        data.TrustDomainSummaries.ShouldBeEmpty();
+        data.ExpiringCerts.ShouldBeEmpty();
+        data.ExpiredCerts.ShouldBeEmpty();
+        data.OverdueCrls.ShouldBeEmpty();
     }
 
     [Fact]
     public async Task GetDashboard_WithData_ReturnsCounts()
     {
-        await SeedCommunityWithCertsAsync();
+        await SeedTrustDomainWithCertsAsync();
         var service = CreateService();
 
         var data = await service.GetDashboardAsync();
 
-        data.CommunityCount.Should().Be(1);
-        data.CaCertCount.Should().Be(1);
-        data.IssuedCertCount.Should().Be(1);
+        data.TrustDomainCount.ShouldBe(1);
+        data.CaCertCount.ShouldBe(1);
+        data.IssuedCertCount.ShouldBe(1);
     }
 
     [Fact]
     public async Task GetDashboard_ExpiredCert_AppearsInExpiredList()
     {
-        await SeedCommunityWithCertsAsync(caNotAfter: DateTime.UtcNow.AddDays(-1));
+        await SeedTrustDomainWithCertsAsync(caNotAfter: DateTime.UtcNow.AddDays(-1));
         var service = CreateService();
 
         var data = await service.GetDashboardAsync();
 
-        data.ExpiredCerts.Should().ContainSingle(c => c.CertType == "CA");
+        data.ExpiredCerts.Where(c => c.CertType == "CA").ShouldHaveSingleItem();
     }
 
     [Fact]
     public async Task GetDashboard_ExpiringCert_AppearsInExpiringList()
     {
-        await SeedCommunityWithCertsAsync(caNotAfter: DateTime.UtcNow.AddDays(30));
+        await SeedTrustDomainWithCertsAsync(caNotAfter: DateTime.UtcNow.AddDays(30));
         var service = CreateService();
 
         var data = await service.GetDashboardAsync();
 
-        data.ExpiringCerts.Should().ContainSingle(c => c.CertType == "CA");
+        data.ExpiringCerts.Where(c => c.CertType == "CA").ShouldHaveSingleItem();
     }
 
     [Fact]
-    public async Task GetDashboard_CommunitySummary_AggregatesCorrectly()
+    public async Task GetDashboard_TrustDomainSummary_AggregatesCorrectly()
     {
-        await SeedCommunityWithCertsAsync();
+        await SeedTrustDomainWithCertsAsync();
         var service = CreateService();
 
         var data = await service.GetDashboardAsync();
 
-        data.CommunitySummaries.Should().ContainSingle();
-        var summary = data.CommunitySummaries[0];
-        summary.CaCount.Should().Be(1);
-        summary.IssuedCount.Should().Be(1);
-        summary.Name.Should().Be("Test Community");
+        data.TrustDomainSummaries.ShouldHaveSingleItem();
+        var summary = data.TrustDomainSummaries[0];
+        summary.CaCount.ShouldBe(1);
+        summary.IssuedCount.ShouldBe(1);
+        summary.Name.ShouldBe("Test TrustDomain");
     }
 
     [Fact]
     public async Task GetDashboard_RevokedCert_CountedCorrectly()
     {
-        await SeedCommunityWithCertsAsync(issuedRevoked: true);
+        await SeedTrustDomainWithCertsAsync(issuedRevoked: true);
         var service = CreateService();
 
         var data = await service.GetDashboardAsync();
 
-        data.RevokedCertCount.Should().Be(1);
+        data.RevokedCertCount.ShouldBe(1);
     }
 
-    private async Task SeedCommunityWithCertsAsync(
+    private async Task SeedTrustDomainWithCertsAsync(
         DateTime? caNotAfter = null,
         bool issuedRevoked = false)
     {
@@ -115,13 +115,13 @@ public class DashboardServiceTests
 
         await using var db = _dbFactory.CreateDbContext();
 
-        var community = new Community { Name = "Test Community", Enabled = true };
-        db.Communities.Add(community);
+        var trustDomain = new TrustDomain { Name = "Test TrustDomain", Enabled = true };
+        db.TrustDomains.Add(trustDomain);
         await db.SaveChangesAsync();
 
         var ca = new CaCertificate
         {
-            CommunityId = community.Id,
+            TrustDomainId = trustDomain.Id,
             Name = "Test-CA",
             Subject = "CN=Test CA",
             X509CertificatePem = cert.ExportCertificatePem(),

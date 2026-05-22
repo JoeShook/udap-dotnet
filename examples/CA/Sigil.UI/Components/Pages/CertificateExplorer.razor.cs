@@ -11,7 +11,9 @@
 using System.Security.Cryptography.X509Certificates;
 using Microsoft.AspNetCore.Components;
 using Microsoft.AspNetCore.Components.Forms;
+using Microsoft.AspNetCore.Components.Web;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Options;
 using Microsoft.FluentUI.AspNetCore.Components;
 using Microsoft.JSInterop;
 using Sigil.Common.Data;
@@ -28,7 +30,7 @@ namespace Sigil.UI.Components.Pages;
 
 public partial class CertificateExplorer : IDisposable
 {
-    [Parameter] public int CommunityId { get; set; }
+    [Parameter] public int TrustDomainId { get; set; }
     [SupplyParameterFromQuery(Name = "thumbprint")] public string? SelectedThumbprint { get; set; }
 
     [Inject] private IDbContextFactory<SigilDbContext> DbFactory { get; set; } = null!;
@@ -46,17 +48,43 @@ public partial class CertificateExplorer : IDisposable
     [Inject] private ISigningProvider SigningProvider { get; set; } = null!;
     [Inject] private VaultTransitSigningProvider VaultTransitProvider { get; set; } = null!;
     [Inject] private GcpKmsSigningProvider GcpKmsProvider { get; set; } = null!;
+    [Inject] private IOptions<SigningProviderOptions> SigningOptions { get; set; } = null!;
     [Inject] private IHttpClientFactory HttpClientFactory { get; set; } = null!;
     [Inject] private IJSRuntime JS { get; set; } = null!;
     [Inject] private NavigationManager Navigation { get; set; } = null!;
     [Inject] private CrlGenerationService CrlGenService { get; set; } = null!;
     [Inject] private TimeDisplayService TimeDisplay { get; set; } = null!;
+    [Inject] private IssuancePasswordCache PasswordCache { get; set; } = null!;
 
     // Tree state
-    private List<CommunityOption> communityList = new();
-    private CommunityOption? selectedCommunity;
-    private string selectedCommunityName = string.Empty;
+    private List<TrustDomainOption> trustDomainList = new();
+    private TrustDomainOption? selectedTrustDomain;
+    private string selectedTrustDomainName = string.Empty;
     private List<CertificateChainNodeViewModel> treeNodes = new();
+
+    // Tree filter
+    private bool treeFilterExpanded;
+    private string treeFilterText = string.Empty;
+    private TreeStatusFilterOption selectedTreeStatusFilter = new("All", null);
+    private static readonly List<TreeStatusFilterOption> treeStatusFilterOptions = new()
+    {
+        new("All", null),
+        new("Valid", CertificateStatus.Valid),
+        new("Expiring", CertificateStatus.Expiring),
+        new("Expired", CertificateStatus.Expired),
+        new("Revoked", CertificateStatus.Revoked),
+        new("Untrusted", CertificateStatus.Untrusted),
+        new("Superseded CA", CertificateStatus.Stale),
+        new("CRLs only", null, "CRL"),
+    };
+    private HashSet<CertificateChainNodeViewModel> visibleNodes = new();
+    private int visibleNodeCount;
+    private int totalNodeCount;
+    private bool IsTreeFilterActive =>
+        !string.IsNullOrWhiteSpace(treeFilterText)
+        || selectedTreeStatusFilter.Value != null
+        || selectedTreeStatusFilter.RoleOnly != null;
+
     private CertificateChainNodeViewModel? selectedNode;
     private X509Certificate2? selectedCert;
     private Asn1Node? asn1Root;
@@ -68,6 +96,8 @@ public partial class CertificateExplorer : IDisposable
     private bool selectedNodeAutoRenew = true;
     private bool isGeneratingCrl;
     private bool isPublishingAia;
+    private bool crlOverrideDialogHidden = true;
+    private DateTime? crlOverrideNextUpdate;
     private List<string> subjectAltNames = new();
     private FluentTreeItem? selectedTreeItem;
     private int treeVersion;
@@ -75,7 +105,7 @@ public partial class CertificateExplorer : IDisposable
     private bool isRevalidating;
     private bool isValidatingOnline;
     private bool pendingHighlight;
-    private Dictionary<string, ChainValidationResult> communityValidations = new();
+    private Dictionary<string, ChainValidationResult> trustDomainValidations = new();
 
     // Rename state
     private bool isRenaming;
@@ -101,7 +131,7 @@ public partial class CertificateExplorer : IDisposable
 
     // Move dialog
     private bool moveDialogHidden = true;
-    private CommunityOption? moveTargetCommunity;
+    private TrustDomainOption? moveTargetTrustDomain;
 
     // Confirm dialog
     private bool confirmDialogHidden = true;
@@ -132,14 +162,35 @@ public partial class CertificateExplorer : IDisposable
     private List<IssuanceUrlEntry> issuanceCdpUrls = new();
     private List<IssuanceUrlEntry> issuanceAiaUrls = new();
     private List<IssuanceSanEntry> issuanceSans = new();
+    private List<SanList> templateSanLists = new();
+    private bool sanPickerDialogHidden = true;
+    private SanList? sanListForPicker;
+    private List<SanListPickerItem> sanPickerItems = new();
+    private bool sanPickerSelectAll;
     private string issuancePfxPassword = string.Empty;
-    private string issuanceKeyStorage = "local"; // "local" or "vault-transit"
+    private bool rememberIssuancePassword;
+    private string issuanceKeyStorage = "local";
+    private List<string> availableKeyStorageProviders = new() { "local" };
     private bool isRenewMode;
     private List<IssuanceSanEntry> renewalSans = new();
     private string renewalSubjectDn = string.Empty;
+    private List<string> renewalOriginalCdpUrls = new();
+    private List<string> renewalOriginalAiaUrls = new();
+    private List<string> urlChangeWarnings = new();
+    private bool noBaseUrlsWarning;
+
+    // Impact confirmation dialog (shared by delete / revoke flows)
+    private bool impactDialogHidden = true;
+    private string impactDialogTitle = "Confirm";
+    private string impactDialogMessage = string.Empty;
+    private string impactDialogConfirmLabel = "Confirm";
+    private List<ImpactItem>? impactDialogImpacts;
+    private Func<Task>? impactDialogOnConfirm;
+    private bool impactDialogBusy;
 
     // Revoke dialog
     private bool revokeDialogHidden = true;
+    private List<ImpactItem>? revokeImpacts;
     private bool isRevoking;
     private RevokeReasonOption selectedRevokeReason = null!;
     private static readonly List<RevokeReasonOption> revokeReasonOptions = new()
@@ -153,21 +204,32 @@ public partial class CertificateExplorer : IDisposable
         new(9, "Privilege Withdrawn"),
     };
 
+    // Tree context menu
+    private bool contextMenuOpen;
+    private int contextMenuX;
+    private int contextMenuY;
+    private CertificateChainNodeViewModel? contextMenuNode;
+
     // Re-sign dialog
     private bool resignDialogHidden = true;
     private bool isResigning;
     private DateTime? resignNotBefore = DateTime.UtcNow;
     private DateTime? resignNotAfter = DateTime.UtcNow.AddYears(5);
     private string resignPfxPassword = string.Empty;
+    private DotNetObjectReference<CertificateExplorer>? dotNetRef;
+    private bool pendingDragDropInit;
 
     protected override async Task OnInitializedAsync()
     {
         TimeDisplay.OnChanged += StateHasChanged;
+
+        availableKeyStorageProviders = SigningOptions.Value.AvailableProviders;
+
         await using var db = await DbFactory.CreateDbContextAsync();
 
-        communityList = await db.Communities
+        trustDomainList = await db.TrustDomains
             .OrderBy(c => c.Name)
-            .Select(c => new CommunityOption
+            .Select(c => new TrustDomainOption
             {
                 Id = c.Id,
                 Name = c.Name,
@@ -177,10 +239,10 @@ public partial class CertificateExplorer : IDisposable
             })
             .ToListAsync();
 
-        if (CommunityId > 0)
+        if (TrustDomainId > 0)
         {
-            selectedCommunity = communityList.FirstOrDefault(c => c.Id == CommunityId);
-            await LoadCommunityTreeAsync(CommunityId);
+            selectedTrustDomain = trustDomainList.FirstOrDefault(c => c.Id == TrustDomainId);
+            await LoadTrustDomainTreeAsync(TrustDomainId);
 
             // Auto-select cert if thumbprint was provided via query string
             if (!string.IsNullOrEmpty(SelectedThumbprint))
@@ -194,40 +256,196 @@ public partial class CertificateExplorer : IDisposable
 
                 // Clear the query string so it doesn't linger as the user navigates
                 SelectedThumbprint = null;
-                Navigation.NavigateTo($"/explorer/{CommunityId}", replace: true);
+                Navigation.NavigateTo($"/explorer/{TrustDomainId}", replace: true);
             }
         }
     }
 
     protected override async Task OnAfterRenderAsync(bool firstRender)
     {
+        if (firstRender)
+        {
+            dotNetRef ??= DotNetObjectReference.Create(this);
+            await JS.InvokeVoidAsync("sigilInitTreeContextMenu", dotNetRef);
+        }
+
         if (pendingHighlight)
         {
             pendingHighlight = false;
             await UpdateTreeHighlightsAsync();
         }
-    }
 
-    private async Task OnCommunitySelected(CommunityOption? option)
-    {
-        if (option != null)
+        if (pendingDragDropInit)
         {
-            selectedCommunity = option;
-            CommunityId = option.Id;
-            await LoadCommunityTreeAsync(option.Id);
+            pendingDragDropInit = false;
+            await InitDragDropAsync();
         }
     }
 
-    private async Task LoadCommunityTreeAsync(int communityId)
+    [JSInvokable]
+    public async Task OnTreeContextMenuAsync(string elementId, int x, int y)
+    {
+        CertificateChainNodeViewModel? node = null;
+        if (elementId.StartsWith("tree-crl-", StringComparison.Ordinal))
+        {
+            if (int.TryParse(elementId["tree-crl-".Length..], out var crlId))
+                node = FindNodeById(treeNodes, crlId, "Crl");
+        }
+        else if (elementId.StartsWith("tree-", StringComparison.Ordinal))
+        {
+            var thumbprint = elementId["tree-".Length..];
+            node = FindNodeByThumbprint(treeNodes, thumbprint);
+        }
+        if (node == null) return;
+
+        // Load the node first so selectedNodeCanSign / selectedNodeHasPrivateKey are correct
+        // by the time the menu paints — otherwise CA-only items (Regen CRL, Publish AIA…)
+        // are hidden because they're gated on stale selection state from the previous click.
+        contextMenuNode = node;
+        contextMenuX = x;
+        contextMenuY = y;
+        await SelectNode(node);
+        contextMenuOpen = true;
+        StateHasChanged();
+    }
+
+    private async Task InitDragDropAsync()
+    {
+        dotNetRef ??= DotNetObjectReference.Create(this);
+
+        var dragItems = new List<object>();
+        var dropTargets = new List<object>();
+
+        CollectDragDropNodes(treeNodes, dragItems, dropTargets);
+
+        if (dragItems.Count > 0)
+        {
+            await JS.InvokeVoidAsync("sigilInitDragDrop", dotNetRef, dragItems, dropTargets);
+        }
+    }
+
+    private static void CollectDragDropNodes(
+        List<CertificateChainNodeViewModel> nodes,
+        List<object> dragItems,
+        List<object> dropTargets)
+    {
+        foreach (var node in nodes)
+        {
+            if (node.EntityType == "IssuedCertificate" && node.Status == CertificateStatus.Stale)
+            {
+                dragItems.Add(new { thumbprint = node.Thumbprint, id = node.Id, entityType = node.EntityType });
+            }
+
+            if (node.EntityType == "CaCertificate" && node.KeyStorage != null && !node.IsSuperseded)
+            {
+                dropTargets.Add(new { thumbprint = node.Thumbprint, id = node.Id, name = node.Name });
+            }
+
+            CollectDragDropNodes(node.Children, dragItems, dropTargets);
+        }
+    }
+
+    [JSInvokable]
+    public async Task OnDragDropRenew(int certId, string entityType, int targetCaId, string targetCaName)
+    {
+        var node = FindNodeById(treeNodes, certId, entityType);
+        if (node == null) return;
+
+        await SelectNode(node);
+
+        renewalOriginalCdpUrls = ExtractExtensionUrls(selectedCert, "2.5.29.31");
+        renewalOriginalAiaUrls = ExtractExtensionUrls(selectedCert, "1.3.6.1.5.5.7.1.1");
+        urlChangeWarnings.Clear();
+
+        renewalSubjectDn = selectedCert?.Subject ?? string.Empty;
+        renewalSans.Clear();
+        foreach (var san in subjectAltNames)
+        {
+            var trimmed = san.Trim();
+            if (TryParseSan(trimmed, "URL=", SanType.Uri, out var entry) ||
+                TryParseSan(trimmed, "URI:", SanType.Uri, out entry) ||
+                TryParseSan(trimmed, "Uri:", SanType.Uri, out entry) ||
+                TryParseSan(trimmed, "DNS Name=", SanType.Dns, out entry) ||
+                TryParseSan(trimmed, "DNS:", SanType.Dns, out entry) ||
+                TryParseSan(trimmed, "Dns:", SanType.Dns, out entry) ||
+                TryParseSan(trimmed, "RFC822 Name=", SanType.Email, out entry) ||
+                TryParseSan(trimmed, "email:", SanType.Email, out entry) ||
+                TryParseSan(trimmed, "Email:", SanType.Email, out entry) ||
+                TryParseSan(trimmed, "IP Address=", SanType.IpAddress, out entry) ||
+                TryParseSan(trimmed, "IP:", SanType.IpAddress, out entry) ||
+                TryParseSan(trimmed, "IpAddress:", SanType.IpAddress, out entry))
+            {
+                renewalSans.Add(entry);
+            }
+        }
+
+        isRenewMode = true;
+        await ShowIssuanceDialog(targetCaId, targetCaName);
+        isRenewMode = true;
+
+        // Match template from original cert
+        await using var db = await DbFactory.CreateDbContextAsync();
+        var issued = await db.IssuedCertificates.FindAsync(certId);
+        if (issued?.TemplateId != null)
+        {
+            var match = availableTemplates.FirstOrDefault(t => t.Id == issued.TemplateId);
+            if (match != null)
+            {
+                selectedTemplate = match;
+                OnTemplateSelected(match);
+            }
+        }
+
+        if (selectedTemplate == null || selectedTemplate.CertificateType != CertificateType.EndEntityClient)
+        {
+            var match = availableTemplates.FirstOrDefault(t => t.CertificateType == CertificateType.EndEntityClient)
+                        ?? availableTemplates.FirstOrDefault();
+            if (match != null) selectedTemplate = match;
+        }
+
+        OnTemplateSelected(selectedTemplate);
+        if (selectedTemplate != null)
+            await EnsureTemplateSanListsLoadedAsync(selectedTemplate);
+        issuanceCertName = node.Name + " (renewed)";
+        StateHasChanged();
+    }
+
+    private static CertificateChainNodeViewModel? FindNodeById(
+        List<CertificateChainNodeViewModel> nodes, int id, string entityType)
+    {
+        foreach (var node in nodes)
+        {
+            if (node.Id == id && node.EntityType == entityType) return node;
+            var found = FindNodeById(node.Children, id, entityType);
+            if (found != null) return found;
+        }
+        return null;
+    }
+
+    private async Task OnTrustDomainSelected(TrustDomainOption? option)
+    {
+        if (option != null)
+        {
+            selectedTrustDomain = option;
+            TrustDomainId = option.Id;
+            await LoadTrustDomainTreeAsync(option.Id);
+        }
+    }
+
+    private async Task LoadTrustDomainTreeAsync(int trustDomainId)
     {
         isLoadingTree = true;
         StateHasChanged();
 
-        var treeData = await ManagementService.GetCommunityTreeAsync(communityId);
+        var treeData = await ManagementService.GetTrustDomainTreeAsync(trustDomainId);
 
-        selectedCommunityName = treeData.CommunityName;
-        communityValidations = treeData.Validations;
+        selectedTrustDomainName = treeData.TrustDomainName;
+        trustDomainValidations = treeData.Validations;
         treeNodes = treeData.TreeNodes;
+        RecomputeVisibleNodes();
+
+        // Background check: validate Vault Transit-signed nodes' keys still exist
+        _ = CheckRemoteKeysAsync(treeNodes);
 
         treeVersion++;
         selectedTreeItem = null;
@@ -239,6 +457,7 @@ public partial class CertificateExplorer : IDisposable
         asn1Root = null;
         subjectAltNames.Clear();
         isLoadingTree = false;
+        pendingDragDropInit = true;
     }
 
 
@@ -326,7 +545,7 @@ public partial class CertificateExplorer : IDisposable
                 asn1Root = Asn1Parser.ParsePem(details.Pem);
 
                 if (!string.IsNullOrEmpty(node.Thumbprint)
-                    && communityValidations.TryGetValue(node.Thumbprint, out var cached))
+                    && trustDomainValidations.TryGetValue(node.Thumbprint, out var cached))
                 {
                     chainValidation = cached;
                 }
@@ -364,6 +583,34 @@ public partial class CertificateExplorer : IDisposable
         await UpdateTreeHighlightsAsync();
     }
 
+    private async Task CopySubjectDnAsync()
+    {
+        var dn = contextMenuNode?.Subject ?? contextMenuNode?.Name;
+        if (string.IsNullOrEmpty(dn)) return;
+        await JS.InvokeVoidAsync("sigilCopyText", dn);
+        ToastService.ShowSuccess("Subject DN copied to clipboard");
+    }
+
+    private async Task DownloadCrlAsync()
+    {
+        if (contextMenuNode?.EntityType != "Crl") return;
+        await JS.InvokeVoidAsync("open", $"/api/crl/{contextMenuNode.Id}/download", "_blank");
+    }
+
+    private async Task RepublishCrlAsync()
+    {
+        if (selectedCrl == null) return;
+        try
+        {
+            await CrlGenService.PublishCrlAsync(selectedCrl.CaCertificateId);
+            ToastService.ShowSuccess($"Re-published CRL #{selectedCrl.CrlNumber} to configured CDP URLs.");
+        }
+        catch (Exception ex)
+        {
+            ToastService.ShowCopyableError($"Re-publish failed: {ex.Message}");
+        }
+    }
+
     private async Task RevalidateSelectedAsync()
     {
         if (selectedNode == null || selectedNode.EntityType == "Crl") return;
@@ -381,9 +628,9 @@ public partial class CertificateExplorer : IDisposable
 
             if (!string.IsNullOrEmpty(selectedNode.Thumbprint) && chainValidation != null)
             {
-                communityValidations[selectedNode.Thumbprint] = chainValidation;
+                trustDomainValidations[selectedNode.Thumbprint] = chainValidation;
                 selectedNode.Status = CertificateManagementService.DeriveStatus(
-                    selectedNode.Thumbprint, selectedNode.NotAfter, false, communityValidations);
+                    selectedNode.Thumbprint, selectedNode.NotAfter, false, trustDomainValidations);
             }
         }
         catch (Exception ex)
@@ -411,7 +658,60 @@ public partial class CertificateExplorer : IDisposable
             if (result.IsSuccess)
             {
                 ToastService.ShowSuccess($"CRL #{result.CrlNumber} generated ({result.RevokedCount} revoked certs)");
-                await LoadCommunityTreeAsync(CommunityId);
+                await LoadTrustDomainTreeAsync(TrustDomainId);
+            }
+            else
+            {
+                ToastService.ShowCopyableError($"CRL generation failed: {result.Error}");
+            }
+        }
+        catch (Exception ex)
+        {
+            ToastService.ShowCopyableError($"CRL generation failed: {ex.Message}");
+        }
+        finally
+        {
+            isGeneratingCrl = false;
+            StateHasChanged();
+        }
+    }
+
+    private async Task ShowPublishCrlDialog()
+    {
+        if (selectedNode == null) return;
+
+        await using var db = await DbFactory.CreateDbContextAsync();
+        var ca = await db.CaCertificates.FindAsync(selectedNode.Id);
+        var trustDomain = ca != null ? await db.TrustDomains.FindAsync(ca.TrustDomainId) : null;
+        var days = trustDomain?.CrlValidityDays ?? 0;
+        if (days <= 0) days = 7;
+
+        crlOverrideNextUpdate = DateTime.UtcNow.AddDays(days);
+        crlOverrideDialogHidden = false;
+    }
+
+    private async Task GenerateCrlWithOverrideAsync()
+    {
+        if (selectedNode == null || crlOverrideNextUpdate == null) return;
+
+        crlOverrideDialogHidden = true;
+        var validity = crlOverrideNextUpdate.Value - DateTime.UtcNow;
+        if (validity <= TimeSpan.Zero)
+        {
+            ToastService.ShowCopyableError("NextUpdate must be in the future.");
+            return;
+        }
+
+        isGeneratingCrl = true;
+        StateHasChanged();
+
+        try
+        {
+            var result = await CrlGenService.GenerateCrlAsync(selectedNode.Id, validity);
+            if (result.IsSuccess)
+            {
+                ToastService.ShowSuccess($"CRL #{result.CrlNumber} generated (next update: {result.NextUpdate:yyyy-MM-dd HH:mm} UTC)");
+                await LoadTrustDomainTreeAsync(TrustDomainId);
             }
             else
             {
@@ -485,9 +785,9 @@ public partial class CertificateExplorer : IDisposable
 
             if (!string.IsNullOrEmpty(selectedNode.Thumbprint) && chainValidation != null)
             {
-                communityValidations[selectedNode.Thumbprint] = chainValidation;
+                trustDomainValidations[selectedNode.Thumbprint] = chainValidation;
                 selectedNode.Status = CertificateManagementService.DeriveStatus(
-                    selectedNode.Thumbprint, selectedNode.NotAfter, false, communityValidations);
+                    selectedNode.Thumbprint, selectedNode.NotAfter, false, trustDomainValidations);
             }
         }
         catch (Exception ex)
@@ -596,11 +896,12 @@ public partial class CertificateExplorer : IDisposable
         CertificateStatus.Revoked => "#9c27b0",
         CertificateStatus.Untrusted => "#d32f2f",
         CertificateStatus.Expiring => "#ff9800",
+        CertificateStatus.Stale => "#2196f3",
         _ => ""
     };
 
     private static bool IsError(CertificateStatus status) =>
-        status is CertificateStatus.Expired or CertificateStatus.Revoked or CertificateStatus.Untrusted;
+        status is CertificateStatus.Expired or CertificateStatus.Revoked or CertificateStatus.Untrusted or CertificateStatus.Stale;
 
     private string GetPublicKeyInfo()
     {
@@ -746,7 +1047,7 @@ public partial class CertificateExplorer : IDisposable
 
                 if (ext == ".crl")
                 {
-                    var result = await CrlImporter.ImportCrlAsync(fileBytes, fileName, CommunityId);
+                    var result = await CrlImporter.ImportCrlAsync(fileBytes, fileName, TrustDomainId);
                     if (result.IsSuccess)
                         successCount++;
                     else
@@ -795,7 +1096,7 @@ public partial class CertificateExplorer : IDisposable
         if (successCount > 0)
         {
             ToastService.ShowCopyableSuccess($"Imported {successCount} of {files.Count} files.");
-            await LoadCommunityTreeAsync(CommunityId);
+            await LoadTrustDomainTreeAsync(TrustDomainId);
         }
 
         if (importErrors.Count > 0 && successCount == 0
@@ -847,7 +1148,7 @@ public partial class CertificateExplorer : IDisposable
         try
         {
             var result = await ImportService.ImportParsedCertificateAsync(
-                parsed, CommunityId, password: usedPassword, rawFileOverride: fileBytes);
+                parsed, TrustDomainId, password: usedPassword, rawFileOverride: fileBytes);
             parsed.Certificate.Dispose();
 
             if (result.NeedsCaSelection)
@@ -907,12 +1208,24 @@ public partial class CertificateExplorer : IDisposable
     {
         if (selectedNode == null) return;
 
-        var dialog = await DialogService.ShowConfirmationAsync(
-            $"Permanently delete '{selectedNode.Name}'? This cannot be undone.",
-            "Delete Forever", "Cancel", "Confirm Delete");
-        var result = await dialog.Result;
+        var impacts = selectedNode.EntityType switch
+        {
+            "CaCertificate" => await ManagementService.GetCaDeletionImpactAsync(selectedNode.Id),
+            "IssuedCertificate" => await ManagementService.GetIssuedDeletionImpactAsync(selectedNode.Id),
+            _ => new List<ImpactItem>()
+        };
 
-        if (result.Cancelled) return;
+        ShowImpactDialog(
+            title: $"Delete '{selectedNode.Name}'?",
+            message: "This cannot be undone.",
+            confirmLabel: "Delete Forever",
+            impacts: impacts,
+            onConfirm: ConfirmDeleteSelectedAsync);
+    }
+
+    private async Task ConfirmDeleteSelectedAsync()
+    {
+        if (selectedNode == null) return;
 
         var deleteResult = await ManagementService.DeleteAsync(
             selectedNode.Id, selectedNode.EntityType, DeleteRemoteKeyAsync);
@@ -926,6 +1239,39 @@ public partial class CertificateExplorer : IDisposable
         {
             ToastService.ShowCopyableError(deleteResult.Error ?? "Delete failed.");
         }
+    }
+
+    private void ShowImpactDialog(string title, string message, string confirmLabel,
+        List<ImpactItem> impacts, Func<Task> onConfirm)
+    {
+        impactDialogTitle = title;
+        impactDialogMessage = message;
+        impactDialogConfirmLabel = confirmLabel;
+        impactDialogImpacts = impacts;
+        impactDialogOnConfirm = onConfirm;
+        impactDialogBusy = false;
+        impactDialogHidden = false;
+    }
+
+    private async Task OnImpactDialogConfirmAsync()
+    {
+        if (impactDialogOnConfirm == null) return;
+        impactDialogBusy = true;
+        StateHasChanged();
+        try
+        {
+            await impactDialogOnConfirm();
+        }
+        finally
+        {
+            impactDialogHidden = true;
+            impactDialogBusy = false;
+        }
+    }
+
+    private void OnImpactDialogCancel()
+    {
+        impactDialogHidden = true;
     }
 
     /// <summary>
@@ -970,32 +1316,32 @@ public partial class CertificateExplorer : IDisposable
         asn1Root = null;
         CloseIssuerDetails();
 
-        await LoadCommunityTreeAsync(CommunityId);
+        await LoadTrustDomainTreeAsync(TrustDomainId);
     }
 
     private void ShowMoveDialog()
     {
-        moveTargetCommunity = null;
+        moveTargetTrustDomain = null;
         moveDialogHidden = false;
     }
 
     private async Task MoveSelectedAsync()
     {
-        if (selectedNode == null || moveTargetCommunity == null) return;
+        if (selectedNode == null || moveTargetTrustDomain == null) return;
 
         var moveResult = await ManagementService.MoveAsync(
-            selectedNode.Id, selectedNode.EntityType, moveTargetCommunity.Id);
+            selectedNode.Id, selectedNode.EntityType, moveTargetTrustDomain.Id);
 
         moveDialogHidden = true;
 
         if (moveResult.Success)
         {
-            ToastService.ShowCopyableSuccess($"Moved '{selectedNode.Name}' to '{moveTargetCommunity.Name}'");
+            ToastService.ShowCopyableSuccess($"Moved '{selectedNode.Name}' to '{moveTargetTrustDomain.Name}'");
             selectedNode = null;
             selectedCert?.Dispose();
             selectedCert = null;
             chainValidation = null;
-            await LoadCommunityTreeAsync(CommunityId);
+            await LoadTrustDomainTreeAsync(TrustDomainId);
         }
         else
         {
@@ -1085,7 +1431,7 @@ public partial class CertificateExplorer : IDisposable
             if (pendingPasswordQueue.Count > 0)
             {
                 await TryAutoImportCertWithParsed(parsed, pendingFileName, pfxPassword);
-                await LoadCommunityTreeAsync(CommunityId);
+                await LoadTrustDomainTreeAsync(TrustDomainId);
                 ProcessNextPendingPassword();
             }
             else
@@ -1123,7 +1469,7 @@ public partial class CertificateExplorer : IDisposable
         try
         {
             var result = await ImportService.ImportParsedCertificateAsync(
-                parsed, CommunityId, password: password);
+                parsed, TrustDomainId, password: password);
 
             if (result.NeedsCaSelection)
             {
@@ -1155,7 +1501,7 @@ public partial class CertificateExplorer : IDisposable
             await using var db = await DbFactory.CreateDbContextAsync();
 
             var matchingCa = await db.CaCertificates
-                .Where(ca => ca.CommunityId == CommunityId)
+                .Where(ca => ca.TrustDomainId == TrustDomainId)
                 .ToListAsync();
 
             foreach (var ca in matchingCa)
@@ -1182,7 +1528,7 @@ public partial class CertificateExplorer : IDisposable
 
             if (matchedParentCaId == null)
             {
-                chainMatchDescription = "No matching issuer found in this community. Will be added as a root.";
+                chainMatchDescription = "No matching issuer found in this trustDomain. Will be added as a root.";
             }
         }
 
@@ -1197,7 +1543,7 @@ public partial class CertificateExplorer : IDisposable
         try
         {
             var result = await ImportService.ImportParsedCertificateAsync(
-                parsedCert, CommunityId,
+                parsedCert, TrustDomainId,
                 name: importName,
                 password: pfxPassword,
                 issuingCaId: matchedParentCaId);
@@ -1223,7 +1569,7 @@ public partial class CertificateExplorer : IDisposable
             if (result.Success)
             {
                 ToastService.ShowCopyableSuccess($"Certificate '{importName}' imported successfully.");
-                await LoadCommunityTreeAsync(CommunityId);
+                await LoadTrustDomainTreeAsync(TrustDomainId);
             }
             else
             {
@@ -1239,7 +1585,7 @@ public partial class CertificateExplorer : IDisposable
 
     private async Task ImportCrlAsync(byte[] crlBytes, string fileName)
     {
-        var result = await CrlImporter.ImportCrlAsync(crlBytes, fileName, CommunityId);
+        var result = await CrlImporter.ImportCrlAsync(crlBytes, fileName, TrustDomainId);
 
         if (!result.IsSuccess)
         {
@@ -1275,7 +1621,7 @@ public partial class CertificateExplorer : IDisposable
     {
         await using var db = await DbFactory.CreateDbContextAsync();
         availableCas = await db.CaCertificates
-            .Where(ca => ca.CommunityId == CommunityId)
+            .Where(ca => ca.TrustDomainId == TrustDomainId)
             .OrderBy(ca => ca.ParentId == null ? 0 : 1) // Roots first
             .ThenBy(ca => ca.Name)
             .Select(ca => new CaSelectOption
@@ -1294,7 +1640,7 @@ public partial class CertificateExplorer : IDisposable
 
         if (availableCas.Count == 0)
         {
-            importErrors.Add($"{fileName}: No CAs exist in this community to assign under");
+            importErrors.Add($"{fileName}: No CAs exist in this trustDomain to assign under");
             return;
         }
 
@@ -1358,14 +1704,14 @@ public partial class CertificateExplorer : IDisposable
         }
         else
         {
-            await LoadCommunityTreeAsync(CommunityId);
+            await LoadTrustDomainTreeAsync(TrustDomainId);
         }
     }
 
     private async Task SaveWithCaAssignmentAsync(ParsedCertificate parsed)
     {
         var result = await ImportService.ImportParsedCertificateAsync(
-            parsed, CommunityId,
+            parsed, TrustDomainId,
             name: Path.GetFileNameWithoutExtension(pendingFileName),
             password: pfxPassword,
             issuingCaId: selectedCaForAssignment!.Id,
@@ -1478,7 +1824,7 @@ public partial class CertificateExplorer : IDisposable
         {
             // Find CA whose SKI matches our AKI
             var cas = await db.CaCertificates
-                .Where(ca => ca.CommunityId == CommunityId)
+                .Where(ca => ca.TrustDomainId == TrustDomainId)
                 .ToListAsync();
 
             foreach (var ca in cas)
@@ -1505,7 +1851,7 @@ public partial class CertificateExplorer : IDisposable
         {
             // Fallback: match by issuer DN
             var cas = await db.CaCertificates
-                .Where(ca => ca.CommunityId == CommunityId && ca.Subject == cert.Issuer)
+                .Where(ca => ca.TrustDomainId == TrustDomainId && ca.Subject == cert.Issuer)
                 .ToListAsync();
 
             issuerEntity = cas.FirstOrDefault();
@@ -1592,6 +1938,7 @@ public partial class CertificateExplorer : IDisposable
     private async Task ShowIssuanceDialog(int? issuingCaId, string? issuingCaName)
     {
         isRenewMode = false;
+        urlChangeWarnings.Clear();
         issuingCaIdForIssuance = issuingCaId;
         issuingCaNameForIssuance = issuingCaName;
         issuingCaNotAfter = null;
@@ -1606,6 +1953,7 @@ public partial class CertificateExplorer : IDisposable
         }
 
         var allTemplates = await db.CertificateTemplates
+            .Include(t => t.SanLists)
             .OrderBy(t => t.CertificateType)
             .ThenBy(t => t.Name)
             .ToListAsync();
@@ -1629,13 +1977,70 @@ public partial class CertificateExplorer : IDisposable
         OnTemplateSelected(selectedTemplate);
 
         issuanceSans.Clear();
-        issuancePfxPassword = string.Empty;
         issuanceKeyStorage = "local";
         issuanceCertName = string.Empty;
         issuanceSubjectDn = string.Empty;
         isIssuing = false;
 
+        var cacheKey = PasswordCacheKey(issuingCaId);
+        var cached = PasswordCache.Get(cacheKey);
+        if (!string.IsNullOrEmpty(cached))
+        {
+            issuancePfxPassword = cached;
+            rememberIssuancePassword = true;
+        }
+        else
+        {
+            issuancePfxPassword = string.Empty;
+            rememberIssuancePassword = false;
+        }
+
         issuanceDialogHidden = false;
+    }
+
+    private static string PasswordCacheKey(int? issuingCaId) =>
+        issuingCaId.HasValue ? $"ca-{issuingCaId.Value}" : "root-ca";
+
+    private async Task OpenTrustDomainEditAsync()
+    {
+        if (TrustDomainId <= 0) return;
+        await JS.InvokeVoidAsync("open", $"/trust-domains?edit={TrustDomainId}", "_blank");
+    }
+
+    private async Task CheckRemoteKeysAsync(List<CertificateChainNodeViewModel> roots)
+    {
+        var vaultNodes = new List<CertificateChainNodeViewModel>();
+        CollectVaultNodes(roots, vaultNodes);
+        if (vaultNodes.Count == 0) return;
+
+        // Probe each key in parallel
+        var tasks = vaultNodes.Select(async node =>
+        {
+            if (string.IsNullOrEmpty(node.KeyIdentifier)) return;
+            var exists = await VaultTransitProvider.KeyExistsAsync(node.KeyIdentifier);
+            node.RemoteKeyMissing = !exists;
+        });
+
+        try
+        {
+            await Task.WhenAll(tasks);
+            treeVersion++;
+            await InvokeAsync(StateHasChanged);
+        }
+        catch
+        {
+            // Best-effort check — UI shouldn't break if Vault is unreachable
+        }
+    }
+
+    private static void CollectVaultNodes(List<CertificateChainNodeViewModel> nodes, List<CertificateChainNodeViewModel> sink)
+    {
+        foreach (var node in nodes)
+        {
+            if (node.KeyStorage == "vault-transit" && !string.IsNullOrEmpty(node.KeyIdentifier))
+                sink.Add(node);
+            CollectVaultNodes(node.Children, sink);
+        }
     }
 
     private void OnTemplateSelected(CertificateTemplate? template)
@@ -1645,22 +2050,33 @@ public partial class CertificateExplorer : IDisposable
 
         issuanceNotBeforeNullable = DateTime.UtcNow;
         var desiredNotAfter = DateTime.UtcNow.AddDays(template.ValidityDays);
-        // Clamp to issuing CA's expiry
         if (issuingCaNotAfter.HasValue && desiredNotAfter > issuingCaNotAfter.Value)
             desiredNotAfter = issuingCaNotAfter.Value;
         issuanceNotAfterNullable = desiredNotAfter;
 
-        var cdpTemplate = template.CdpUrlTemplate;
-        if (template.IncludeCdp && string.IsNullOrWhiteSpace(cdpTemplate))
-            cdpTemplate = "{BaseUrl}/crls/{CAName}.crl";
-        issuanceCdpUrls = ExpandUrlTemplates(cdpTemplate)
-            .Select(u => new IssuanceUrlEntry { Value = u }).ToList();
+        var baseUrls = (selectedTrustDomain?.BaseUrls ?? new())
+            .Select(bu => bu.Url).ToList();
+        var validator = IssuanceService.Validator;
+        var newCdpUrls = validator.ExpandCdpTemplates(template, baseUrls, issuingCaNameForIssuance);
+        var newAiaUrls = validator.ExpandAiaTemplates(template, baseUrls, issuingCaNameForIssuance);
 
-        var aiaTemplate = template.AiaUrlTemplate;
-        if (template.IncludeAia && string.IsNullOrWhiteSpace(aiaTemplate))
-            aiaTemplate = "{BaseUrl}/certs/{CAName}.cer";
-        issuanceAiaUrls = ExpandUrlTemplates(aiaTemplate)
-            .Select(u => new IssuanceUrlEntry { Value = u }).ToList();
+        urlChangeWarnings.Clear();
+
+        // Detect unsubstituted {BaseUrl} placeholders in any final URL — this catches the
+        // case where the trustDomain has no base URLs, an empty base URL string, etc.
+        noBaseUrlsWarning = newCdpUrls.Any(u => u.Contains("{BaseUrl}", StringComparison.OrdinalIgnoreCase))
+            || newAiaUrls.Any(u => u.Contains("{BaseUrl}", StringComparison.OrdinalIgnoreCase));
+
+        if (isRenewMode && renewalOriginalCdpUrls.Count + renewalOriginalAiaUrls.Count > 0)
+        {
+            var warnings = validator.CompareTemplateUrls(
+                renewalOriginalCdpUrls, renewalOriginalAiaUrls,
+                newCdpUrls, newAiaUrls);
+            urlChangeWarnings.AddRange(warnings.Select(w => w.Message));
+        }
+
+        issuanceCdpUrls = newCdpUrls.Select(u => new IssuanceUrlEntry { Value = u }).ToList();
+        issuanceAiaUrls = newAiaUrls.Select(u => new IssuanceUrlEntry { Value = u }).ToList();
 
         if (isRenewMode)
         {
@@ -1693,6 +2109,77 @@ public partial class CertificateExplorer : IDisposable
                 }
             }
         }
+
+        templateSanLists = template.SanLists?.Where(s => s != null).ToList() ?? new();
+    }
+
+    private async Task EnsureTemplateSanListsLoadedAsync(CertificateTemplate template)
+    {
+        if (template.SanLists != null && template.SanLists.Count > 0) return;
+
+        await using var db = await DbFactory.CreateDbContextAsync();
+        var loaded = await db.CertificateTemplates
+            .Include(t => t.SanLists)
+            .FirstOrDefaultAsync(t => t.Id == template.Id);
+
+        if (loaded?.SanLists != null)
+        {
+            template.SanLists = loaded.SanLists;
+            templateSanLists = loaded.SanLists.ToList();
+        }
+    }
+
+    private void ShowSanListPickerDialog(SanList list)
+    {
+        sanListForPicker = list;
+        sanPickerSelectAll = false;
+        sanPickerItems.Clear();
+
+        foreach (var part in list.Items.Split(';', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries))
+        {
+            var colonIdx = part.IndexOf(':');
+            if (colonIdx > 0)
+            {
+                var typeName = part[..colonIdx];
+                var value = part[(colonIdx + 1)..];
+                var sanType = typeName.ToUpperInvariant() switch
+                {
+                    "URI" => SanType.Uri,
+                    "DNS" => SanType.Dns,
+                    "EMAIL" => SanType.Email,
+                    "IP" => SanType.IpAddress,
+                    _ => SanType.Uri
+                };
+                var alreadyAdded = issuanceSans.Any(s => s.Type == sanType && s.Value == value);
+                sanPickerItems.Add(new SanListPickerItem { Type = sanType, Value = value, Selected = alreadyAdded });
+            }
+        }
+
+        sanPickerDialogHidden = false;
+    }
+
+    private void ToggleSanPickerSelectAll(bool selectAll)
+    {
+        sanPickerSelectAll = selectAll;
+        foreach (var item in sanPickerItems)
+            item.Selected = selectAll;
+    }
+
+    private void ApplySanListPicker()
+    {
+        foreach (var item in sanPickerItems)
+        {
+            var exists = issuanceSans.Any(s => s.Type == item.Type && s.Value == item.Value);
+            if (item.Selected && !exists)
+                issuanceSans.Add(new IssuanceSanEntry { Type = item.Type, Value = item.Value });
+            else if (!item.Selected && exists)
+            {
+                var match = issuanceSans.First(s => s.Type == item.Type && s.Value == item.Value);
+                issuanceSans.Remove(match);
+            }
+        }
+
+        sanPickerDialogHidden = true;
     }
 
     private void AddSanEntry()
@@ -1713,52 +2200,51 @@ public partial class CertificateExplorer : IDisposable
         isIssuing = true;
         StateHasChanged();
 
-        var cdpUrls = selectedTemplate.IncludeCdp
-            ? issuanceCdpUrls.Where(u => !string.IsNullOrWhiteSpace(u.Value)).Select(u => u.Value).ToList()
-            : new List<string>();
-        var aiaUrls = selectedTemplate.IncludeAia
-            ? issuanceAiaUrls.Where(u => !string.IsNullOrWhiteSpace(u.Value)).Select(u => u.Value).ToList()
-            : new List<string>();
-
-        // Ensure the issuing CA's cert and CRL are published before validating URLs
-        if (issuingCaIdForIssuance.HasValue)
-        {
-            await EnsureIssuerPublishedAsync(issuingCaIdForIssuance.Value);
-        }
-
-        // Warn about missing CDP/AIA when the template expects them
-        var warnings = new List<string>();
-        if (selectedTemplate.IncludeCdp && cdpUrls.Count == 0)
-            warnings.Add("CRL Distribution Point (CDP) URLs are empty but the template has CDP enabled.");
-        if (selectedTemplate.IncludeAia && aiaUrls.Count == 0)
-            warnings.Add("Authority Information Access (AIA) URLs are empty but the template has AIA enabled.");
-
-        // Validate that provided CDP and AIA URLs resolve
-        var unreachableUrls = await ValidateEndpointUrlsAsync(cdpUrls, aiaUrls);
-        foreach (var u in unreachableUrls)
-            warnings.Add($"{u.Url}: {u.Error}");
-
-        if (warnings.Count > 0)
-        {
-            var warningList = string.Join("\n", warnings.Select(w => $"  \u2022 {w}"));
-            var dialog = await DialogService.ShowConfirmationAsync(
-                $"The following issue(s) were detected:\n\n{warningList}\n\nCertificates issued without valid CDP/AIA endpoints may cause chain validation failures. Continue anyway?",
-                "Issue Anyway", "Cancel", "Endpoint Warnings");
-            var dialogResult = await dialog.Result;
-            if (dialogResult.Cancelled)
-            {
-                isIssuing = false;
-                return;
-            }
-        }
-
         try
         {
+            var cdpUrls = selectedTemplate.IncludeCdp
+                ? issuanceCdpUrls.Where(u => !string.IsNullOrWhiteSpace(u.Value)).Select(u => u.Value).ToList()
+                : new List<string>();
+            var aiaUrls = selectedTemplate.IncludeAia
+                ? issuanceAiaUrls.Where(u => !string.IsNullOrWhiteSpace(u.Value)).Select(u => u.Value).ToList()
+                : new List<string>();
+
+            // Ensure the issuing CA's cert and CRL are published before validating URLs
+            if (issuingCaIdForIssuance.HasValue)
+            {
+                await EnsureIssuerPublishedAsync(issuingCaIdForIssuance.Value);
+            }
+
+            // Warn about missing CDP/AIA when the template expects them
+            var warnings = new List<string>();
+            if (selectedTemplate.IncludeCdp && cdpUrls.Count == 0)
+                warnings.Add("CRL Distribution Point (CDP) URLs are empty but the template has CDP enabled.");
+            if (selectedTemplate.IncludeAia && aiaUrls.Count == 0)
+                warnings.Add("Authority Information Access (AIA) URLs are empty but the template has AIA enabled.");
+
+            // Validate that provided CDP and AIA URLs resolve
+            var unreachableUrls = await ValidateEndpointUrlsAsync(cdpUrls, aiaUrls);
+            foreach (var u in unreachableUrls)
+                warnings.Add($"{u.Url}: {u.Error}");
+
+            if (warnings.Count > 0)
+            {
+                var warningList = string.Join("\n", warnings.Select(w => $"  \u2022 {w}"));
+                var dialog = await DialogService.ShowConfirmationAsync(
+                    $"The following issue(s) were detected:\n\n{warningList}\n\nCertificates issued without valid CDP/AIA endpoints may cause chain validation failures. Continue anyway?",
+                    "Issue Anyway", "Cancel", "Endpoint Warnings");
+                var dialogResult = await dialog.Result;
+                if (dialogResult.Cancelled)
+                {
+                    return;
+                }
+            }
+
             var request = new CertificateIssuanceRequest
             {
                 IssuingCaCertificateId = issuingCaIdForIssuance,
                 TemplateId = selectedTemplate.Id,
-                CommunityId = CommunityId,
+                TrustDomainId = TrustDomainId,
                 SubjectDn = issuanceSubjectDn,
                 CertificateName = issuanceCertName,
                 SubjectAltNames = issuanceSans
@@ -1785,9 +2271,19 @@ public partial class CertificateExplorer : IDisposable
                         ToastService.ShowWarning($"Initial CRL generation failed: {crlResult.Error}");
                 }
 
+                // Save or clear PFX password in session cache based on user preference
+                if (issuanceKeyStorage == "local")
+                {
+                    var cacheKey = PasswordCacheKey(issuingCaIdForIssuance);
+                    if (rememberIssuancePassword && !string.IsNullOrEmpty(issuancePfxPassword))
+                        PasswordCache.Save(cacheKey, issuancePfxPassword);
+                    else
+                        PasswordCache.Clear(cacheKey);
+                }
+
                 issuanceDialogHidden = true;
                 ToastService.ShowCopyableSuccess($"Certificate issued: {result.Thumbprint}");
-                await LoadCommunityTreeAsync(CommunityId);
+                await LoadTrustDomainTreeAsync(TrustDomainId);
             }
             else
             {
@@ -1805,55 +2301,30 @@ public partial class CertificateExplorer : IDisposable
         }
     }
 
-    private async Task<List<(string Url, string Error)>> ValidateEndpointUrlsAsync(List<string> cdpUrls, List<string> aiaUrls)
+    private Task<List<(string Url, string Error)>> ValidateEndpointUrlsAsync(List<string> cdpUrls, List<string> aiaUrls)
     {
-        var unreachable = new List<(string Url, string Error)>();
-        var urlsToCheck = new List<(string Url, string Label)>();
-
-        foreach (var url in cdpUrls)
-            urlsToCheck.Add((url, "CDP"));
-        foreach (var url in aiaUrls)
-            urlsToCheck.Add((url, "AIA"));
-
-        if (urlsToCheck.Count == 0) return unreachable;
-
-        using var httpClient = HttpClientFactory.CreateClient("SigilCrl");
-        httpClient.Timeout = TimeSpan.FromSeconds(5);
-
-        var tasks = urlsToCheck.Select(async entry =>
+        // Only validate URL format (must be absolute http/https). Reachability is not checked —
+        // these URLs are consumed by clients at runtime, not by Sigil's host, so resolvability
+        // from Sigil's network is irrelevant and the HEAD probe just slows things down.
+        var invalid = new List<(string Url, string Error)>();
+        foreach (var url in cdpUrls.Concat(aiaUrls))
         {
-            try
+            if (!Uri.TryCreate(url, UriKind.Absolute, out var absolute) ||
+                (absolute.Scheme != Uri.UriSchemeHttp && absolute.Scheme != Uri.UriSchemeHttps))
             {
-                using var response = await httpClient.SendAsync(
-                    new HttpRequestMessage(HttpMethod.Head, entry.Url),
-                    HttpCompletionOption.ResponseHeadersRead);
-
-                if (!response.IsSuccessStatusCode)
-                {
-                    return (entry.Url, Error: $"HTTP {(int)response.StatusCode} {response.ReasonPhrase}");
-                }
-
-                return (entry.Url, Error: (string?)null)!;
+                invalid.Add((url, "Not an absolute http(s) URL"));
             }
-            catch (TaskCanceledException)
-            {
-                return (entry.Url, Error: "Connection timed out");
-            }
-            catch (HttpRequestException ex)
-            {
-                return (entry.Url, Error: ex.InnerException?.Message ?? ex.Message);
-            }
-        });
-
-        var results = await Task.WhenAll(tasks);
-        unreachable.AddRange(results.Where(r => r.Error != null)!);
-
-        return unreachable;
+        }
+        return Task.FromResult(invalid);
     }
 
     private async Task ShowSimilarDialog()
     {
         if (selectedNode == null || selectedCert == null) return;
+
+        renewalOriginalCdpUrls = ExtractExtensionUrls(selectedCert, "2.5.29.31");
+        renewalOriginalAiaUrls = ExtractExtensionUrls(selectedCert, "1.3.6.1.5.5.7.1.1");
+        urlChangeWarnings.Clear();
 
         renewalSubjectDn = selectedCert.Subject;
         renewalSans.Clear();
@@ -1947,6 +2418,8 @@ public partial class CertificateExplorer : IDisposable
         }
 
         OnTemplateSelected(selectedTemplate);
+        if (selectedTemplate != null)
+            await EnsureTemplateSanListsLoadedAsync(selectedTemplate);
 
         issuanceCertName = selectedNode.Name;
 
@@ -1990,8 +2463,10 @@ public partial class CertificateExplorer : IDisposable
     {
         if (selectedNode == null || selectedCert == null) return;
 
-        // Extract SANs and subject from existing cert BEFORE opening the dialog,
-        // so they survive template selection changes
+        renewalOriginalCdpUrls = ExtractExtensionUrls(selectedCert, "2.5.29.31");
+        renewalOriginalAiaUrls = ExtractExtensionUrls(selectedCert, "1.3.6.1.5.5.7.1.1");
+        urlChangeWarnings.Clear();
+
         renewalSubjectDn = selectedCert.Subject;
         renewalSans.Clear();
         foreach (var san in subjectAltNames)
@@ -2090,6 +2565,8 @@ public partial class CertificateExplorer : IDisposable
 
         // Always call OnTemplateSelected with isRenewMode=true to restore subject/SANs
         OnTemplateSelected(selectedTemplate);
+        if (selectedTemplate != null)
+            await EnsureTemplateSanListsLoadedAsync(selectedTemplate);
 
         issuanceCertName = selectedNode.Name + " (renewed)";
     }
@@ -2149,7 +2626,7 @@ public partial class CertificateExplorer : IDisposable
             {
                 resignDialogHidden = true;
                 ToastService.ShowCopyableSuccess($"Certificate re-signed (same key): {result.Thumbprint}");
-                await LoadCommunityTreeAsync(CommunityId);
+                await LoadTrustDomainTreeAsync(TrustDomainId);
             }
             else
             {
@@ -2178,31 +2655,7 @@ public partial class CertificateExplorer : IDisposable
         return false;
     }
 
-    private List<string> ExpandUrlTemplates(string? template)
-    {
-        if (string.IsNullOrWhiteSpace(template)) return new();
 
-        var baseUrls = selectedCommunity?.BaseUrls ?? new();
-        if (baseUrls.Count == 0)
-        {
-            var result = template;
-            if (issuingCaNameForIssuance != null)
-                result = result.Replace("{CAName}", issuingCaNameForIssuance, StringComparison.OrdinalIgnoreCase);
-            return string.IsNullOrWhiteSpace(result) ? new() : new() { result };
-        }
-
-        var expanded = new List<string>();
-        foreach (var baseUrl in baseUrls)
-        {
-            var result = template
-                .Replace("{BaseUrl}", baseUrl.Url.TrimEnd('/'), StringComparison.OrdinalIgnoreCase);
-            if (issuingCaNameForIssuance != null)
-                result = result.Replace("{CAName}", issuingCaNameForIssuance, StringComparison.OrdinalIgnoreCase);
-            expanded.Add(result);
-        }
-
-        return expanded;
-    }
 
     private static string? ExtractCrlAki(byte[] crlBytes)
     {
@@ -2233,7 +2686,7 @@ public partial class CertificateExplorer : IDisposable
         _ => ct.ToString()
     };
 
-    public class CommunityOption
+    public class TrustDomainOption
     {
         public int Id { get; set; }
         public string Name { get; set; } = string.Empty;
@@ -2260,11 +2713,21 @@ public partial class CertificateExplorer : IDisposable
         public string Value { get; set; } = string.Empty;
     }
 
-    private void ShowRevokeDialog()
+    public class SanListPickerItem
+    {
+        public SanType Type { get; set; }
+        public string Value { get; set; } = string.Empty;
+        public bool Selected { get; set; }
+    }
+
+    private async Task ShowRevokeDialog()
     {
         if (selectedNode == null) return;
         selectedRevokeReason = revokeReasonOptions[0];
         isRevoking = false;
+        revokeImpacts = selectedNode.EntityType == "CaCertificate"
+            ? await ManagementService.GetCaRevokeImpactAsync(selectedNode.Id)
+            : null;
         revokeDialogHidden = false;
     }
 
@@ -2303,7 +2766,7 @@ public partial class CertificateExplorer : IDisposable
                 ToastService.ShowCopyableError(revokeResult.Error ?? "Revocation failed.");
             }
 
-            await LoadCommunityTreeAsync(CommunityId);
+            await LoadTrustDomainTreeAsync(TrustDomainId);
         }
         catch (Exception ex)
         {
@@ -2318,8 +2781,133 @@ public partial class CertificateExplorer : IDisposable
 
     public record RevokeReasonOption(int Code, string Label);
 
+    public record TreeStatusFilterOption(string Label, CertificateStatus? Value, string? RoleOnly = null);
+
+    private string IdentitySummary()
+    {
+        if (string.IsNullOrWhiteSpace(issuanceSubjectDn)) return "(empty)";
+        var cn = ExtractCommonName(issuanceSubjectDn);
+        return string.IsNullOrEmpty(cn) ? "(empty)" : cn;
+    }
+
+    private string ExtensionsSummary()
+    {
+        var parts = new List<string>();
+        if (selectedTemplate?.IncludeCdp == true)
+            parts.Add($"{issuanceCdpUrls.Count(c => !string.IsNullOrWhiteSpace(c.Value))} CDP");
+        if (selectedTemplate?.IncludeAia == true)
+            parts.Add($"{issuanceAiaUrls.Count(a => !string.IsNullOrWhiteSpace(a.Value))} AIA");
+        parts.Add($"{issuanceSans.Count(s => !string.IsNullOrWhiteSpace(s.Value))} SAN");
+        return string.Join(" · ", parts);
+    }
+
+    private string KeyStorageSummary() => issuanceKeyStorage switch
+    {
+        "vault-transit" => "Vault Transit",
+        "gcp-kms" => "GCP Cloud KMS",
+        _ => "Local (PFX)"
+    };
+
+    private static string ExtractCommonName(string subjectDn)
+    {
+        var match = System.Text.RegularExpressions.Regex.Match(
+            subjectDn, @"CN\s*=\s*([^,]+)", System.Text.RegularExpressions.RegexOptions.IgnoreCase);
+        return match.Success ? match.Groups[1].Value.Trim() : subjectDn.Trim();
+    }
+
+    private IEnumerable<CertificateChainNodeViewModel> VisibleRoots() =>
+        treeNodes.Where(IsNodeVisible);
+
+    private bool IsNodeVisible(CertificateChainNodeViewModel node) =>
+        !IsTreeFilterActive || visibleNodes.Contains(node);
+
+    private void OnTreeFilterChanged()
+    {
+        RecomputeVisibleNodes();
+        treeVersion++;
+    }
+
+    private void OnTreeStatusFilterChanged(TreeStatusFilterOption? option)
+    {
+        selectedTreeStatusFilter = option ?? treeStatusFilterOptions[0];
+        RecomputeVisibleNodes();
+        treeVersion++;
+    }
+
+    private void ClearTreeFilter()
+    {
+        treeFilterText = string.Empty;
+        selectedTreeStatusFilter = treeStatusFilterOptions[0];
+        RecomputeVisibleNodes();
+        treeVersion++;
+    }
+
+    private void RecomputeVisibleNodes()
+    {
+        visibleNodes = new HashSet<CertificateChainNodeViewModel>();
+        totalNodeCount = 0;
+        visibleNodeCount = 0;
+
+        foreach (var root in treeNodes)
+            ComputeVisibility(root);
+    }
+
+    private bool ComputeVisibility(CertificateChainNodeViewModel node)
+    {
+        var crlFocus = selectedTreeStatusFilter.RoleOnly == "CRL";
+        var nodeCountsTowardTotal = crlFocus
+            ? node.CertificateRole == "CRL"
+            : node.CertificateRole != "CRL";
+        if (nodeCountsTowardTotal)
+            totalNodeCount++;
+
+        var selfMatches = MatchesFilter(node);
+        var anyChildMatches = false;
+        foreach (var child in node.Children)
+        {
+            if (ComputeVisibility(child))
+                anyChildMatches = true;
+        }
+
+        var visible = selfMatches || anyChildMatches;
+        if (visible)
+        {
+            visibleNodes.Add(node);
+            if (selfMatches && nodeCountsTowardTotal)
+                visibleNodeCount++;
+        }
+        return visible;
+    }
+
+    private bool MatchesFilter(CertificateChainNodeViewModel node)
+    {
+        // Role-only filter (e.g. "CRLs only"): match only nodes of that role.
+        // Parents become visible via child-matches in ComputeVisibility.
+        if (selectedTreeStatusFilter.RoleOnly != null)
+        {
+            if (node.CertificateRole != selectedTreeStatusFilter.RoleOnly) return false;
+        }
+        else if (selectedTreeStatusFilter.Value != null)
+        {
+            // Status filter: only applies to non-CRL nodes
+            if (node.CertificateRole == "CRL") return false;
+            if (node.Status != selectedTreeStatusFilter.Value) return false;
+        }
+
+        if (!string.IsNullOrWhiteSpace(treeFilterText))
+        {
+            var needle = treeFilterText.Trim();
+            return node.Name.Contains(needle, StringComparison.OrdinalIgnoreCase)
+                || node.Subject.Contains(needle, StringComparison.OrdinalIgnoreCase)
+                || node.Thumbprint.StartsWith(needle, StringComparison.OrdinalIgnoreCase);
+        }
+
+        return true;
+    }
+
     public void Dispose()
     {
         TimeDisplay.OnChanged -= StateHasChanged;
+        dotNetRef?.Dispose();
     }
 }

@@ -13,6 +13,7 @@ using Microsoft.AspNetCore.Components;
 using Microsoft.FluentUI.AspNetCore.Components;
 using Sigil.Common.Data.Entities;
 using Sigil.Common.Services;
+using Sigil.Common.ViewModels;
 using Sigil.UI.Services;
 
 namespace Sigil.UI.Components.Pages;
@@ -20,8 +21,11 @@ namespace Sigil.UI.Components.Pages;
 public partial class Templates
 {
     [Inject] private TemplateService TemplateService { get; set; } = null!;
+    [Inject] private SanListService SanListService { get; set; } = null!;
     [Inject] private IDialogService DialogService { get; set; } = null!;
     [Inject] private IToastService ToastService { get; set; } = null!;
+
+    [SupplyParameterFromQuery] public string? Action { get; set; }
 
     private List<CertificateTemplate> templates = new();
     private bool dialogHidden = true;
@@ -55,6 +59,8 @@ public partial class Templates
     private bool editSanDns;
     private bool editSanEmail;
     private bool editSanIp;
+    private List<SanList> availableSanLists = new();
+    private HashSet<int> editSelectedSanListIds = new();
 
     // Options for selects
     private static readonly CertificateType[] certTypes = Enum.GetValues<CertificateType>();
@@ -91,26 +97,30 @@ public partial class Templates
     protected override async Task OnInitializedAsync()
     {
         await LoadTemplatesAsync();
+        if (Action == "new")
+            await ShowAddDialog();
     }
 
     private async Task LoadTemplatesAsync()
     {
-        templates = await TemplateService.GetAllAsync();
+        templates = await TemplateService.GetAllWithSanListsAsync();
     }
 
-    private void ShowAddDialog()
+    private async Task ShowAddDialog()
     {
         isEditing = false;
         editingId = null;
         ResetForm();
+        availableSanLists = await SanListService.GetAllAsync();
         dialogHidden = false;
     }
 
-    private void ShowEditDialog(CertificateTemplate t)
+    private async Task ShowEditDialog(CertificateTemplate t)
     {
         isEditing = true;
         editingId = t.Id;
         PopulateForm(t);
+        availableSanLists = await SanListService.GetAllAsync();
         dialogHidden = false;
     }
 
@@ -142,6 +152,7 @@ public partial class Templates
         editSanDns = false;
         editSanEmail = false;
         editSanIp = false;
+        editSelectedSanListIds.Clear();
     }
 
     private void PopulateForm(CertificateTemplate t)
@@ -188,6 +199,8 @@ public partial class Templates
         editSanDns = sanTypes.Contains("DNS", StringComparer.OrdinalIgnoreCase);
         editSanEmail = sanTypes.Contains("Email", StringComparer.OrdinalIgnoreCase);
         editSanIp = sanTypes.Contains("IP", StringComparer.OrdinalIgnoreCase);
+
+        editSelectedSanListIds = new HashSet<int>(t.SanLists.Select(s => s.Id));
     }
 
     private CertificateTemplate BuildEntityFromForm(CertificateTemplate? existing = null)
@@ -235,12 +248,14 @@ public partial class Templates
             entity = BuildEntityFromForm();
             entity.Id = editingId.Value;
             await TemplateService.SaveAsync(entity);
+            await TemplateService.UpdateSanListsAsync(entity.Id, editSelectedSanListIds);
             ToastService.ShowCopyableSuccess($"Template '{entity.Name}' updated.");
         }
         else
         {
             entity = BuildEntityFromForm();
-            await TemplateService.SaveAsync(entity);
+            entity = await TemplateService.SaveAsync(entity);
+            await TemplateService.UpdateSanListsAsync(entity.Id, editSelectedSanListIds);
             ToastService.ShowCopyableSuccess($"Template '{entity.Name}' created.");
         }
 
@@ -282,22 +297,53 @@ public partial class Templates
         dialogHidden = false;
     }
 
+    // Impact confirmation dialog state
+    private bool impactDialogHidden = true;
+    private string impactDialogTitle = "Confirm";
+    private string impactDialogMessage = string.Empty;
+    private string impactDialogConfirmLabel = "Confirm";
+    private List<ImpactItem>? impactDialogImpacts;
+    private Func<Task>? impactDialogOnConfirm;
+    private bool impactDialogBusy;
+
     private async Task DeleteTemplateAsync(CertificateTemplate template)
     {
         if (template.IsPreset) return;
 
-        var dialog = await DialogService.ShowConfirmationAsync(
-            $"Delete template '{template.Name}'?",
-            "Delete", "Cancel", "Confirm Delete");
-        var result = await dialog.Result;
+        var impacts = await TemplateService.GetDeletionImpactAsync(template.Id);
+        impactDialogTitle = $"Delete template '{template.Name}'?";
+        impactDialogMessage = "Issued certificates that reference this template will not be deleted, but the reference will be cleared.";
+        impactDialogConfirmLabel = "Delete Template";
+        impactDialogImpacts = impacts;
+        impactDialogOnConfirm = () => ConfirmDeleteTemplateAsync(template);
+        impactDialogBusy = false;
+        impactDialogHidden = false;
+    }
 
-        if (!result.Cancelled)
+    private async Task ConfirmDeleteTemplateAsync(CertificateTemplate template)
+    {
+        await TemplateService.DeleteAsync(template.Id);
+        ToastService.ShowCopyableSuccess($"Template '{template.Name}' deleted.");
+        await LoadTemplatesAsync();
+    }
+
+    private async Task OnImpactDialogConfirmAsync()
+    {
+        if (impactDialogOnConfirm == null) return;
+        impactDialogBusy = true;
+        StateHasChanged();
+        try
         {
-            await TemplateService.DeleteAsync(template.Id);
-            ToastService.ShowCopyableSuccess($"Template '{template.Name}' deleted.");
-            await LoadTemplatesAsync();
+            await impactDialogOnConfirm();
+        }
+        finally
+        {
+            impactDialogHidden = true;
+            impactDialogBusy = false;
         }
     }
+
+    private void OnImpactDialogCancel() => impactDialogHidden = true;
 
     private void ToggleKeyUsageFlag(X509KeyUsageFlags flag, bool enabled)
     {
@@ -379,4 +425,8 @@ public partial class Templates
         CertificateType.EndEntityServer => ("#f59e0b", "Server"),
         _ => ("#666", ct.ToString())
     };
+
+    private static int CountSanItems(string items) =>
+        string.IsNullOrWhiteSpace(items) ? 0 :
+        items.Split(';', StringSplitOptions.RemoveEmptyEntries).Length;
 }

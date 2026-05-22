@@ -10,7 +10,7 @@
 
 using System.Security.Cryptography;
 using System.Security.Cryptography.X509Certificates;
-using FluentAssertions;
+using Shouldly;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging.Abstractions;
 using Sigil.Common.Data;
@@ -39,9 +39,9 @@ public class CertificateExportServiceTests : IDisposable
 
         var result = await service.ExportPrivateKeyPemAsync(caId, "CaCertificate");
 
-        result.Success.Should().BeTrue();
-        result.Pem.Should().StartWith("-----BEGIN PRIVATE KEY-----");
-        result.Pem.Should().EndWith("-----END PRIVATE KEY-----");
+        result.Success.ShouldBeTrue();
+        result.Pem.ShouldStartWith("-----BEGIN PRIVATE KEY-----");
+        result.Pem.ShouldEndWith("-----END PRIVATE KEY-----");
     }
 
     [Fact]
@@ -52,9 +52,9 @@ public class CertificateExportServiceTests : IDisposable
 
         var result = await service.ExportPrivateKeyPemAsync(caId, "CaCertificate");
 
-        result.Success.Should().BeTrue();
-        result.Pem.Should().StartWith("-----BEGIN PRIVATE KEY-----");
-        result.Pem.Should().EndWith("-----END PRIVATE KEY-----");
+        result.Success.ShouldBeTrue();
+        result.Pem.ShouldStartWith("-----BEGIN PRIVATE KEY-----");
+        result.Pem.ShouldEndWith("-----END PRIVATE KEY-----");
     }
 
     [Fact]
@@ -65,8 +65,8 @@ public class CertificateExportServiceTests : IDisposable
 
         var result = await service.ExportPrivateKeyPemAsync(issuedId, "IssuedCertificate");
 
-        result.Success.Should().BeTrue();
-        result.Pem.Should().Contain("BEGIN PRIVATE KEY");
+        result.Success.ShouldBeTrue();
+        result.Pem.ShouldContain("BEGIN PRIVATE KEY");
     }
 
     [Fact]
@@ -77,7 +77,7 @@ public class CertificateExportServiceTests : IDisposable
 
         var result = await service.ExportPrivateKeyPemAsync(caId, "CaCertificate");
 
-        result.Success.Should().BeTrue();
+        result.Success.ShouldBeTrue();
 
         using var reimported = RSA.Create();
         reimported.ImportFromPem(result.Pem);
@@ -86,7 +86,7 @@ public class CertificateExportServiceTests : IDisposable
 
         using var publicKey = cert.GetRSAPublicKey()!;
         publicKey.VerifyData(testData, signature, HashAlgorithmName.SHA256, RSASignaturePadding.Pkcs1)
-            .Should().BeTrue();
+            .ShouldBeTrue();
 
         cert.Dispose();
     }
@@ -99,8 +99,8 @@ public class CertificateExportServiceTests : IDisposable
 
         var result = await service.ExportPrivateKeyPemAsync(caId, "CaCertificate");
 
-        result.Success.Should().BeFalse();
-        result.Error.Should().Contain("No private key");
+        result.Success.ShouldBeFalse();
+        result.Error.ShouldContain("No private key");
     }
 
     [Fact]
@@ -110,8 +110,8 @@ public class CertificateExportServiceTests : IDisposable
 
         var result = await service.ExportPrivateKeyPemAsync(99999, "CaCertificate");
 
-        result.Success.Should().BeFalse();
-        result.Error.Should().Contain("not found");
+        result.Success.ShouldBeFalse();
+        result.Error.ShouldContain("not found");
     }
 
     [Fact]
@@ -122,8 +122,8 @@ public class CertificateExportServiceTests : IDisposable
 
         var result = await service.ExportPrivateKeyPemAsync(caId, "CaCertificate");
 
-        result.Success.Should().BeFalse();
-        result.Error.Should().Contain("security level");
+        result.Success.ShouldBeFalse();
+        result.Error.ShouldContain("security level");
     }
 
     [Fact]
@@ -134,8 +134,8 @@ public class CertificateExportServiceTests : IDisposable
 
         var result = await service.ExportPrivateKeyPemAsync(caId, "CaCertificate");
 
-        result.Success.Should().BeFalse();
-        result.Error.Should().Contain("security level");
+        result.Success.ShouldBeFalse();
+        result.Error.ShouldContain("security level");
     }
 
     [Fact]
@@ -146,12 +146,12 @@ public class CertificateExportServiceTests : IDisposable
 
         var result = await service.ExportCertificateDerBase64Async(caId, "CaCertificate");
 
-        result.Success.Should().BeTrue();
+        result.Success.ShouldBeTrue();
         var derBytes = Convert.FromBase64String(result.Pem!);
-        derBytes.Should().NotBeEmpty();
+        derBytes.ShouldNotBeEmpty();
 
-        using var roundTripped = new X509Certificate2(derBytes);
-        roundTripped.Thumbprint.Should().Be(cert.Thumbprint);
+        using var roundTripped = X509CertificateLoader.LoadCertificate(derBytes);
+        roundTripped.Thumbprint.ShouldBe(cert.Thumbprint);
         cert.Dispose();
     }
 
@@ -163,9 +163,9 @@ public class CertificateExportServiceTests : IDisposable
 
         var result = await service.ExportCertificateDerBase64Async(issuedId, "IssuedCertificate");
 
-        result.Success.Should().BeTrue();
+        result.Success.ShouldBeTrue();
         var derBytes = Convert.FromBase64String(result.Pem!);
-        derBytes.Should().NotBeEmpty();
+        derBytes.ShouldNotBeEmpty();
     }
 
     [Fact]
@@ -175,8 +175,8 @@ public class CertificateExportServiceTests : IDisposable
 
         var result = await service.ExportCertificateDerBase64Async(99999, "CaCertificate");
 
-        result.Success.Should().BeFalse();
-        result.Error.Should().Contain("not found");
+        result.Success.ShouldBeFalse();
+        result.Error.ShouldContain("not found");
     }
 
     #region Helpers
@@ -218,7 +218,7 @@ public class CertificateExportServiceTests : IDisposable
             NotBefore = cert.NotBefore,
             NotAfter = cert.NotAfter,
             CertSecurityLevel = securityLevel,
-            CommunityId = 1
+            TrustDomainId = 1
         };
 
         db.CaCertificates.Add(ca);
@@ -278,7 +278,7 @@ public class CertificateExportServiceTests : IDisposable
             KeySize = 2048,
             NotBefore = cert.NotBefore,
             NotAfter = cert.NotAfter,
-            CommunityId = 1
+            TrustDomainId = 1
         };
 
         db.CaCertificates.Add(ca);

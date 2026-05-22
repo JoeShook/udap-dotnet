@@ -21,7 +21,7 @@ public partial class Jobs : IDisposable
 
     private bool isLoading = true;
     private List<CrlStatusRow> crlStatuses = new();
-    private Dictionary<string, List<CrlStatusRow>> crlStatusesByCommunity = new();
+    private Dictionary<string, List<CrlStatusRow>> crlStatusesByTrustDomain = new();
     private List<RecurringJobRow> recurringJobs = new();
 
     protected override async Task OnInitializedAsync()
@@ -86,7 +86,7 @@ public partial class Jobs : IDisposable
         {
             CaId = s.CaId,
             CaName = s.CaName,
-            CommunityName = s.CommunityName,
+            TrustDomainName = s.TrustDomainName,
             LatestCrlNumber = s.LatestCrlNumber,
             NextUpdate = s.NextUpdate,
             HasCrl = s.HasCrl,
@@ -94,8 +94,8 @@ public partial class Jobs : IDisposable
             RevokedCount = s.RevokedCount
         }).ToList();
 
-        crlStatusesByCommunity = crlStatuses
-            .GroupBy(s => s.CommunityName)
+        crlStatusesByTrustDomain = crlStatuses
+            .GroupBy(s => s.TrustDomainName)
             .OrderBy(g => g.Key)
             .ToDictionary(g => g.Key, g => g.ToList());
     }
@@ -113,7 +113,7 @@ public partial class Jobs : IDisposable
     {
         public int CaId { get; init; }
         public string CaName { get; init; } = string.Empty;
-        public string CommunityName { get; init; } = string.Empty;
+        public string TrustDomainName { get; init; } = string.Empty;
         public long? LatestCrlNumber { get; init; }
         public DateTime NextUpdate { get; init; }
         public bool HasCrl { get; init; }

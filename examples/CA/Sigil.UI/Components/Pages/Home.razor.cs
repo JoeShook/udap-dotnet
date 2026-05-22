@@ -23,13 +23,13 @@ public partial class Home : IDisposable
     private bool isLoading = true;
 
     // Summary stats
-    private int communityCount;
+    private int trustDomainCount;
     private int caCertCount;
     private int issuedCertCount;
     private int templateCount;
 
-    // Community summaries
-    private List<CommunitySummary> communitySummaries = new();
+    // TrustDomain summaries
+    private List<TrustDomainSummary> trustDomainSummaries = new();
 
     // Expiring / expired certs
     private List<CertRow> expiringCerts = new();
@@ -59,12 +59,12 @@ public partial class Home : IDisposable
 
         var data = await DashboardService.GetDashboardAsync();
 
-        communityCount = data.CommunityCount;
+        trustDomainCount = data.TrustDomainCount;
         caCertCount = data.CaCertCount;
         issuedCertCount = data.IssuedCertCount;
         templateCount = data.TemplateCount;
         revokedCertCount = data.RevokedCertCount;
-        communitySummaries = data.CommunitySummaries;
+        trustDomainSummaries = data.TrustDomainSummaries;
         expiringCerts = data.ExpiringCerts;
         expiredCerts = data.ExpiredCerts;
         overdueCrls = data.OverdueCrls;
@@ -73,14 +73,14 @@ public partial class Home : IDisposable
         StateHasChanged();
     }
 
-    private void NavigateToCommunity(int communityId)
+    private void NavigateToTrustDomain(int trustDomainId)
     {
-        Navigation.NavigateTo($"/explorer/{communityId}");
+        Navigation.NavigateTo($"/explorer/{trustDomainId}");
     }
 
-    private void NavigateToCert(int communityId, string thumbprint)
+    private void NavigateToCert(int trustDomainId, string thumbprint)
     {
-        Navigation.NavigateTo($"/explorer/{communityId}?thumbprint={thumbprint}");
+        Navigation.NavigateTo($"/explorer/{trustDomainId}?thumbprint={thumbprint}");
     }
 
 }

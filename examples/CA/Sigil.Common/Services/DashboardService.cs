@@ -36,15 +36,15 @@ public class DashboardService
 
         var data = new DashboardData
         {
-            CommunityCount = await db.Communities.CountAsync(ct),
+            TrustDomainCount = await db.TrustDomains.CountAsync(ct),
             CaCertCount = await db.CaCertificates.CountAsync(ct),
             IssuedCertCount = await db.IssuedCertificates.CountAsync(ct),
             TemplateCount = await db.CertificateTemplates.CountAsync(ct),
             RevokedCertCount = await db.IssuedCertificates.CountAsync(i => i.IsRevoked, ct)
         };
 
-        data.CommunitySummaries = await db.Communities
-            .Select(c => new CommunitySummary
+        data.TrustDomainSummaries = await db.TrustDomains
+            .Select(c => new TrustDomainSummary
             {
                 Id = c.Id,
                 Name = c.Name,
@@ -74,8 +74,8 @@ public class DashboardService
                 Subject = c.Subject,
                 Thumbprint = c.Thumbprint,
                 NotAfter = c.NotAfter,
-                CommunityName = c.Community.Name,
-                CommunityId = c.CommunityId,
+                TrustDomainName = c.TrustDomain.Name,
+                TrustDomainId = c.TrustDomainId,
                 CertType = "CA",
                 DaysRemaining = (int)(c.NotAfter - now).TotalDays
             })
@@ -89,8 +89,8 @@ public class DashboardService
                 Subject = i.Subject,
                 Thumbprint = i.Thumbprint,
                 NotAfter = i.NotAfter,
-                CommunityName = i.IssuingCaCertificate.Community.Name,
-                CommunityId = i.IssuingCaCertificate.CommunityId,
+                TrustDomainName = i.IssuingCaCertificate.TrustDomain.Name,
+                TrustDomainId = i.IssuingCaCertificate.TrustDomainId,
                 CertType = "End Entity",
                 DaysRemaining = (int)(i.NotAfter - now).TotalDays
             })
@@ -108,8 +108,8 @@ public class DashboardService
                 Subject = c.Subject,
                 Thumbprint = c.Thumbprint,
                 NotAfter = c.NotAfter,
-                CommunityName = c.Community.Name,
-                CommunityId = c.CommunityId,
+                TrustDomainName = c.TrustDomain.Name,
+                TrustDomainId = c.TrustDomainId,
                 CertType = "CA",
                 DaysRemaining = (int)(c.NotAfter - now).TotalDays
             })
@@ -123,8 +123,8 @@ public class DashboardService
                 Subject = i.Subject,
                 Thumbprint = i.Thumbprint,
                 NotAfter = i.NotAfter,
-                CommunityName = i.IssuingCaCertificate.Community.Name,
-                CommunityId = i.IssuingCaCertificate.CommunityId,
+                TrustDomainName = i.IssuingCaCertificate.TrustDomain.Name,
+                TrustDomainId = i.IssuingCaCertificate.TrustDomainId,
                 CertType = "End Entity",
                 DaysRemaining = (int)(i.NotAfter - now).TotalDays
             })
@@ -142,8 +142,8 @@ public class DashboardService
                 CrlNumber = c.CrlNumber,
                 CaName = c.CaCertificate.Name,
                 CaThumbprint = c.CaCertificate.Thumbprint,
-                CommunityName = c.CaCertificate.Community.Name,
-                CommunityId = c.CaCertificate.CommunityId,
+                TrustDomainName = c.CaCertificate.TrustDomain.Name,
+                TrustDomainId = c.CaCertificate.TrustDomainId,
                 NextUpdate = c.NextUpdate,
                 DaysOverdue = (int)(now - c.NextUpdate).TotalDays
             })

@@ -10,7 +10,7 @@
 
 using System.Security.Cryptography;
 using System.Security.Cryptography.X509Certificates;
-using FluentAssertions;
+using Shouldly;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging.Abstractions;
 using NSubstitute;
@@ -57,11 +57,11 @@ public class CertificateManagementServiceTests
 
         var result = await service.RenameAsync(caId, "CaCertificate", "New Name");
 
-        result.Success.Should().BeTrue();
+        result.Success.ShouldBeTrue();
 
         await using var db = _dbFactory.CreateDbContext();
         var ca = await db.CaCertificates.FindAsync(caId);
-        ca!.Name.Should().Be("New Name");
+        ca!.Name.ShouldBe("New Name");
     }
 
     [Fact]
@@ -72,7 +72,7 @@ public class CertificateManagementServiceTests
 
         var result = await service.RenameAsync(issuedId, "IssuedCertificate", "Renamed Cert");
 
-        result.Success.Should().BeTrue();
+        result.Success.ShouldBeTrue();
     }
 
     [Fact]
@@ -83,7 +83,7 @@ public class CertificateManagementServiceTests
 
         var result = await service.RenameAsync(caId, "CaCertificate", "  ");
 
-        result.Success.Should().BeFalse();
+        result.Success.ShouldBeFalse();
     }
 
     [Fact]
@@ -93,8 +93,8 @@ public class CertificateManagementServiceTests
 
         var result = await service.RenameAsync(99999, "CaCertificate", "Name");
 
-        result.Success.Should().BeFalse();
-        result.Error.Should().Contain("not found");
+        result.Success.ShouldBeFalse();
+        result.Error.ShouldContain("not found");
     }
 
     [Fact]
@@ -107,7 +107,7 @@ public class CertificateManagementServiceTests
 
         await using var db = _dbFactory.CreateDbContext();
         var ca = await db.CaCertificates.FindAsync(caId);
-        ca!.AutoRenew.Should().BeFalse();
+        ca!.AutoRenew.ShouldBeFalse();
     }
 
     [Fact]
@@ -118,12 +118,12 @@ public class CertificateManagementServiceTests
 
         var result = await service.ArchiveAsync(caId, "CaCertificate");
 
-        result.Success.Should().BeTrue();
+        result.Success.ShouldBeTrue();
 
         await using var db = _dbFactory.CreateDbContext();
         var ca = await db.CaCertificates.FindAsync(caId);
-        ca!.IsArchived.Should().BeTrue();
-        ca.ArchivedAt.Should().NotBeNull();
+        ca!.IsArchived.ShouldBeTrue();
+        ca.ArchivedAt.ShouldNotBeNull();
     }
 
     [Fact]
@@ -133,7 +133,7 @@ public class CertificateManagementServiceTests
 
         var result = await service.ArchiveAsync(99999, "CaCertificate");
 
-        result.Success.Should().BeFalse();
+        result.Success.ShouldBeFalse();
     }
 
     [Fact]
@@ -144,8 +144,8 @@ public class CertificateManagementServiceTests
 
         var result = await service.DeleteAsync(caId, "CaCertificate");
 
-        result.Success.Should().BeFalse();
-        result.Error.Should().Contain("issued cert");
+        result.Success.ShouldBeFalse();
+        result.Error.ShouldContain("issued cert");
     }
 
     [Fact]
@@ -156,11 +156,11 @@ public class CertificateManagementServiceTests
 
         var result = await service.DeleteAsync(caId, "CaCertificate");
 
-        result.Success.Should().BeTrue();
+        result.Success.ShouldBeTrue();
 
         await using var db = _dbFactory.CreateDbContext();
         var ca = await db.CaCertificates.FindAsync(caId);
-        ca.Should().BeNull();
+        ca.ShouldBeNull();
     }
 
     [Fact]
@@ -171,33 +171,33 @@ public class CertificateManagementServiceTests
 
         var result = await service.DeleteAsync(issuedId, "IssuedCertificate");
 
-        result.Success.Should().BeTrue();
+        result.Success.ShouldBeTrue();
     }
 
     [Fact]
-    public async Task MoveAsync_CaCertificate_ChangesCommunity()
+    public async Task MoveAsync_CaCertificate_ChangesTrustDomain()
     {
         var caId = await SeedCaCertificateAsync("Mobile CA");
-        int targetCommunityId;
+        int targetTrustDomainId;
 
         await using (var db = _dbFactory.CreateDbContext())
         {
-            var target = new Community { Name = "Target", Enabled = true };
-            db.Communities.Add(target);
+            var target = new TrustDomain { Name = "Target", Enabled = true };
+            db.TrustDomains.Add(target);
             await db.SaveChangesAsync();
-            targetCommunityId = target.Id;
+            targetTrustDomainId = target.Id;
         }
 
         var service = CreateService();
 
-        var result = await service.MoveAsync(caId, "CaCertificate", targetCommunityId);
+        var result = await service.MoveAsync(caId, "CaCertificate", targetTrustDomainId);
 
-        result.Success.Should().BeTrue();
+        result.Success.ShouldBeTrue();
 
         await using var db2 = _dbFactory.CreateDbContext();
         var ca = await db2.CaCertificates.FindAsync(caId);
-        ca!.CommunityId.Should().Be(targetCommunityId);
-        ca.ParentId.Should().BeNull();
+        ca!.TrustDomainId.ShouldBe(targetTrustDomainId);
+        ca.ParentId.ShouldBeNull();
     }
 
     [Fact]
@@ -208,13 +208,13 @@ public class CertificateManagementServiceTests
 
         var result = await service.RevokeAsync(caId, "CaCertificate", 1);
 
-        result.Success.Should().BeTrue();
+        result.Success.ShouldBeTrue();
 
         await using var db = _dbFactory.CreateDbContext();
         var ca = await db.CaCertificates.FindAsync(caId);
-        ca!.IsRevoked.Should().BeTrue();
-        ca.RevokedAt.Should().NotBeNull();
-        ca.RevocationReason.Should().Be(1);
+        ca!.IsRevoked.ShouldBeTrue();
+        ca.RevokedAt.ShouldNotBeNull();
+        ca.RevocationReason.ShouldBe(1);
     }
 
     [Fact]
@@ -225,13 +225,13 @@ public class CertificateManagementServiceTests
 
         var details = await service.GetNodeDetailsAsync(caId, "CaCertificate");
 
-        details.Pem.Should().NotBeNullOrEmpty();
-        details.HasPrivateKey.Should().BeTrue();
-        details.AutoRenew.Should().BeTrue();
+        details.Pem.ShouldNotBeNullOrEmpty();
+        details.HasPrivateKey.ShouldBeTrue();
+        details.AutoRenew.ShouldBeTrue();
     }
 
     [Fact]
-    public async Task GetCommunityTreeAsync_BuildsTree()
+    public async Task GetTrustDomainTreeAsync_BuildsTree()
     {
         var (caId, _) = await SeedCaAndIssuedAsync();
         var service = CreateService();
@@ -239,12 +239,12 @@ public class CertificateManagementServiceTests
         await using var db = _dbFactory.CreateDbContext();
         var ca = await db.CaCertificates.FindAsync(caId);
 
-        var treeData = await service.GetCommunityTreeAsync(ca!.CommunityId);
+        var treeData = await service.GetTrustDomainTreeAsync(ca!.TrustDomainId);
 
-        treeData.CommunityName.Should().Be("Test Community");
-        treeData.TreeNodes.Should().ContainSingle();
-        treeData.TreeNodes[0].EntityType.Should().Be("CaCertificate");
-        treeData.TreeNodes[0].Children.Should().ContainSingle(c => c.EntityType == "IssuedCertificate");
+        treeData.TrustDomainName.ShouldBe("Test TrustDomain");
+        treeData.TreeNodes.ShouldHaveSingleItem();
+        treeData.TreeNodes[0].EntityType.ShouldBe("CaCertificate");
+        treeData.TreeNodes[0].Children.Where(c => c.EntityType == "IssuedCertificate").ShouldHaveSingleItem();
     }
 
     [Fact]
@@ -253,7 +253,7 @@ public class CertificateManagementServiceTests
         var status = CertificateManagementService.DeriveStatus(
             "AABB", DateTime.UtcNow.AddDays(-1), false, new());
 
-        status.Should().Be(CertificateStatus.Expired);
+        status.ShouldBe(CertificateStatus.Expired);
     }
 
     [Fact]
@@ -262,7 +262,7 @@ public class CertificateManagementServiceTests
         var status = CertificateManagementService.DeriveStatus(
             "AABB", DateTime.UtcNow.AddYears(1), true, new());
 
-        status.Should().Be(CertificateStatus.Revoked);
+        status.ShouldBe(CertificateStatus.Revoked);
     }
 
     [Fact]
@@ -271,7 +271,7 @@ public class CertificateManagementServiceTests
         var status = CertificateManagementService.DeriveStatus(
             "AABB", DateTime.UtcNow.AddDays(15), false, new());
 
-        status.Should().Be(CertificateStatus.Expiring);
+        status.ShouldBe(CertificateStatus.Expiring);
     }
 
     [Fact]
@@ -280,7 +280,7 @@ public class CertificateManagementServiceTests
         var status = CertificateManagementService.DeriveStatus(
             "AABB", DateTime.UtcNow.AddYears(1), false, new());
 
-        status.Should().Be(CertificateStatus.Valid);
+        status.ShouldBe(CertificateStatus.Valid);
     }
 
     #region Helpers
@@ -293,17 +293,17 @@ public class CertificateManagementServiceTests
 
         await using var db = _dbFactory.CreateDbContext();
 
-        var community = await db.Communities.FirstOrDefaultAsync();
-        if (community == null)
+        var trustDomain = await db.TrustDomains.FirstOrDefaultAsync();
+        if (trustDomain == null)
         {
-            community = new Community { Name = "Test Community", Enabled = true };
-            db.Communities.Add(community);
+            trustDomain = new TrustDomain { Name = "Test TrustDomain", Enabled = true };
+            db.TrustDomains.Add(trustDomain);
             await db.SaveChangesAsync();
         }
 
         var ca = new CaCertificate
         {
-            CommunityId = community.Id,
+            TrustDomainId = trustDomain.Id,
             Name = name,
             Subject = $"CN={name}",
             X509CertificatePem = cert.ExportCertificatePem(),
@@ -334,13 +334,13 @@ public class CertificateManagementServiceTests
 
         await using var db = _dbFactory.CreateDbContext();
 
-        var community = new Community { Name = "Test Community", Enabled = true };
-        db.Communities.Add(community);
+        var trustDomain = new TrustDomain { Name = "Test TrustDomain", Enabled = true };
+        db.TrustDomains.Add(trustDomain);
         await db.SaveChangesAsync();
 
         var ca = new CaCertificate
         {
-            CommunityId = community.Id,
+            TrustDomainId = trustDomain.Id,
             Name = "Test CA",
             Subject = "CN=Test CA",
             X509CertificatePem = caCert.ExportCertificatePem(),

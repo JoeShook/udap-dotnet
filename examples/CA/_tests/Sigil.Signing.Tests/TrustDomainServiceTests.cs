@@ -8,7 +8,7 @@
 // */
 #endregion
 
-using FluentAssertions;
+using Shouldly;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging.Abstractions;
 using Sigil.Common.Data;
@@ -16,12 +16,12 @@ using Sigil.Common.Services;
 
 namespace Sigil.Signing.Tests;
 
-public class CommunityServiceTests
+public class TrustDomainServiceTests
 {
     private readonly IDbContextFactory<SigilDbContext> _dbFactory = new TestDbContextFactory();
 
-    private CommunityService CreateService() =>
-        new(_dbFactory, NullLogger<CommunityService>.Instance);
+    private TrustDomainService CreateService() =>
+        new(_dbFactory, NullLogger<TrustDomainService>.Instance);
 
     [Fact]
     public async Task GetAll_EmptyDb_ReturnsEmpty()
@@ -30,23 +30,23 @@ public class CommunityServiceTests
 
         var result = await service.GetAllAsync();
 
-        result.Should().BeEmpty();
+        result.ShouldBeEmpty();
     }
 
     [Fact]
-    public async Task CreateAsync_BasicCommunity_Persists()
+    public async Task CreateAsync_BasicTrustDomain_Persists()
     {
         var service = CreateService();
 
-        var community = await service.CreateAsync("My Community", "A test community", []);
+        var trustDomain = await service.CreateAsync("My TrustDomain", "A test trustDomain", []);
 
-        community.Id.Should().BeGreaterThan(0);
-        community.Name.Should().Be("My Community");
+        trustDomain.Id.ShouldBeGreaterThan(0);
+        trustDomain.Name.ShouldBe("My TrustDomain");
 
         var all = await service.GetAllAsync();
-        all.Should().ContainSingle();
-        all[0].Name.Should().Be("My Community");
-        all[0].Description.Should().Be("A test community");
+        all.ShouldHaveSingleItem();
+        all[0].Name.ShouldBe("My TrustDomain");
+        all[0].Description.ShouldBe("A test trustDomain");
     }
 
     [Fact]
@@ -60,14 +60,14 @@ public class CommunityServiceTests
             ("https://other.com/fhir", null)
         };
 
-        await service.CreateAsync("URL Community", null, urls);
+        await service.CreateAsync("URL TrustDomain", null, urls);
 
         var all = await service.GetAllAsync();
-        all.Should().ContainSingle();
-        all[0].BaseUrls.Should().HaveCount(2);
-        all[0].BaseUrls[0].Url.Should().Be("https://example.com/fhir");
-        all[0].BaseUrls[0].PublishingBasePath.Should().Be("/publish/path");
-        all[0].BaseUrls[1].Url.Should().Be("https://other.com/fhir");
+        all.ShouldHaveSingleItem();
+        all[0].BaseUrls.Count.ShouldBe(2);
+        all[0].BaseUrls[0].Url.ShouldBe("https://example.com/fhir");
+        all[0].BaseUrls[0].PublishingBasePath.ShouldBe("/publish/path");
+        all[0].BaseUrls[1].Url.ShouldBe("https://other.com/fhir");
     }
 
     [Fact]
@@ -78,37 +78,37 @@ public class CommunityServiceTests
         await service.CreateAsync("  Spaced  ", null, [("  https://example.com/  ", null)]);
 
         var all = await service.GetAllAsync();
-        all[0].Name.Should().Be("Spaced");
-        all[0].BaseUrls[0].Url.Should().Be("https://example.com");
+        all[0].Name.ShouldBe("Spaced");
+        all[0].BaseUrls[0].Url.ShouldBe("https://example.com");
     }
 
     [Fact]
     public async Task UpdateAsync_ChangesNameAndUrls()
     {
         var service = CreateService();
-        var community = await service.CreateAsync("Original", null, [("https://old.com", null)]);
+        var trustDomain = await service.CreateAsync("Original", null, [("https://old.com", null)]);
 
-        await service.UpdateAsync(community.Id, "Renamed", "New desc",
+        await service.UpdateAsync(trustDomain.Id, "Renamed", "New desc",
             [("https://new.com", "/new/path")]);
 
         var all = await service.GetAllAsync();
-        all.Should().ContainSingle();
-        all[0].Name.Should().Be("Renamed");
-        all[0].Description.Should().Be("New desc");
-        all[0].BaseUrls.Should().ContainSingle();
-        all[0].BaseUrls[0].Url.Should().Be("https://new.com");
+        all.ShouldHaveSingleItem();
+        all[0].Name.ShouldBe("Renamed");
+        all[0].Description.ShouldBe("New desc");
+        all[0].BaseUrls.ShouldHaveSingleItem();
+        all[0].BaseUrls[0].Url.ShouldBe("https://new.com");
     }
 
     [Fact]
-    public async Task DeleteAsync_RemovesCommunity()
+    public async Task DeleteAsync_RemovesTrustDomain()
     {
         var service = CreateService();
-        var community = await service.CreateAsync("To Delete", null, []);
+        var trustDomain = await service.CreateAsync("To Delete", null, []);
 
-        await service.DeleteAsync(community.Id);
+        await service.DeleteAsync(trustDomain.Id);
 
         var all = await service.GetAllAsync();
-        all.Should().BeEmpty();
+        all.ShouldBeEmpty();
     }
 
     [Fact]
@@ -118,7 +118,7 @@ public class CommunityServiceTests
 
         var act = () => service.DeleteAsync(99999);
 
-        await act.Should().NotThrowAsync();
+        await Should.NotThrowAsync(act);
     }
 
     [Fact]
@@ -131,9 +131,9 @@ public class CommunityServiceTests
 
         var all = await service.GetAllAsync();
 
-        all.Should().HaveCount(3);
-        all[0].Name.Should().Be("Alpha");
-        all[1].Name.Should().Be("Middle");
-        all[2].Name.Should().Be("Zebra");
+        all.Count.ShouldBe(3);
+        all[0].Name.ShouldBe("Alpha");
+        all[1].Name.ShouldBe("Middle");
+        all[2].Name.ShouldBe("Zebra");
     }
 }

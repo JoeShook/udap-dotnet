@@ -15,24 +15,29 @@ using Sigil.Common.ViewModels;
 
 namespace Sigil.UI.Components.Pages;
 
-public partial class Communities
+public partial class TrustDomains
 {
-    [Inject] private CommunityService CommunityService { get; set; } = null!;
+    [Inject] private TrustDomainService TrustDomainService { get; set; } = null!;
     [Inject] private NavigationManager Navigation { get; set; } = null!;
     [Inject] private IDialogService DialogService { get; set; } = null!;
 
-    private List<CommunityViewModel> communities = new();
+    [SupplyParameterFromQuery] public string? Action { get; set; }
+    [SupplyParameterFromQuery] public int? Edit { get; set; }
+
+    private List<TrustDomainViewModel> trustDomains = new();
     private bool addDialogHidden = true;
-    private string newCommunityName = string.Empty;
-    private string newCommunityDescription = string.Empty;
-    private List<BaseUrlEntry> newCommunityBaseUrls = new();
+    private string newTrustDomainName = string.Empty;
+    private string newTrustDomainDescription = string.Empty;
+    private int newTrustDomainExpiry = 7;
+    private List<BaseUrlEntry> newTrustDomainBaseUrls = new();
 
     // Edit dialog
     private bool editDialogHidden = true;
-    private int editCommunityId;
-    private string editCommunityName = string.Empty;
-    private string editCommunityDescription = string.Empty;
-    private List<BaseUrlEntry> editCommunityBaseUrls = new();
+    private int editTrustDomainId;
+    private string editTrustDomainName = string.Empty;
+    private string editTrustDomainDescription = string.Empty;
+    private int editTrustDomainExpiry = 7;
+    private List<BaseUrlEntry> editTrustDomainBaseUrls = new();
 
     // Folder browser
     private bool folderBrowserHidden = true;
@@ -57,56 +62,99 @@ public partial class Communities
 
     protected override async Task OnInitializedAsync()
     {
-        await LoadCommunitiesAsync();
+        await LoadTrustDomainsAsync();
+        if (Action == "new")
+        {
+            ShowAddDialog();
+        }
+        else if (Edit.HasValue)
+        {
+            var target = trustDomains.FirstOrDefault(c => c.Id == Edit.Value);
+            if (target != null)
+                ShowEditDialog(target);
+        }
     }
 
-    private async Task LoadCommunitiesAsync()
+    private async Task LoadTrustDomainsAsync()
     {
-        communities = await CommunityService.GetAllAsync();
+        trustDomains = await TrustDomainService.GetAllAsync();
     }
 
     private void ShowAddDialog()
     {
-        newCommunityName = string.Empty;
-        newCommunityDescription = string.Empty;
-        newCommunityBaseUrls = new List<BaseUrlEntry>();
+        newTrustDomainName = string.Empty;
+        newTrustDomainDescription = string.Empty;
+        newTrustDomainExpiry = 7;
+        newTrustDomainBaseUrls = new List<BaseUrlEntry>();
         addDialogHidden = false;
     }
 
-    private async Task AddCommunityAsync()
+    private async Task AddTrustDomainAsync()
     {
-        if (string.IsNullOrWhiteSpace(newCommunityName)) return;
+        if (string.IsNullOrWhiteSpace(newTrustDomainName)) return;
 
-        var baseUrls = newCommunityBaseUrls
+        var baseUrls = newTrustDomainBaseUrls
             .Where(e => !string.IsNullOrWhiteSpace(e.Value))
             .Select(e => (e.Value, (string?)e.PublishingBasePath))
             .ToList();
 
-        await CommunityService.CreateAsync(newCommunityName, newCommunityDescription, baseUrls);
+        await TrustDomainService.CreateAsync(newTrustDomainName, newTrustDomainDescription, baseUrls, newTrustDomainExpiry);
         addDialogHidden = true;
-        await LoadCommunitiesAsync();
+        await LoadTrustDomainsAsync();
     }
 
-    private async Task DeleteCommunityAsync(CommunityViewModel community)
-    {
-        var dialog = await DialogService.ShowConfirmationAsync(
-            $"Delete community '{community.Name}' and all its certificates?",
-            "Delete", "Cancel", "Confirm Delete");
-        var result = await dialog.Result;
+    // Impact confirmation dialog state
+    private bool impactDialogHidden = true;
+    private string impactDialogTitle = "Confirm";
+    private string impactDialogMessage = string.Empty;
+    private string impactDialogConfirmLabel = "Confirm";
+    private List<ImpactItem>? impactDialogImpacts;
+    private Func<Task>? impactDialogOnConfirm;
+    private bool impactDialogBusy;
 
-        if (!result.Cancelled)
+    private async Task DeleteTrustDomainAsync(TrustDomainViewModel trustDomain)
+    {
+        var impacts = await TrustDomainService.GetDeletionImpactAsync(trustDomain.Id);
+        impactDialogTitle = $"Delete trust domain '{trustDomain.Name}'?";
+        impactDialogMessage = "All certificates, CRLs, and revocation records in this trust domain will be permanently deleted. This cannot be undone.";
+        impactDialogConfirmLabel = "Delete Trust Domain";
+        impactDialogImpacts = impacts;
+        impactDialogOnConfirm = () => ConfirmDeleteTrustDomainAsync(trustDomain.Id);
+        impactDialogBusy = false;
+        impactDialogHidden = false;
+    }
+
+    private async Task ConfirmDeleteTrustDomainAsync(int trustDomainId)
+    {
+        await TrustDomainService.DeleteAsync(trustDomainId);
+        await LoadTrustDomainsAsync();
+    }
+
+    private async Task OnImpactDialogConfirmAsync()
+    {
+        if (impactDialogOnConfirm == null) return;
+        impactDialogBusy = true;
+        StateHasChanged();
+        try
         {
-            await CommunityService.DeleteAsync(community.Id);
-            await LoadCommunitiesAsync();
+            await impactDialogOnConfirm();
+        }
+        finally
+        {
+            impactDialogHidden = true;
+            impactDialogBusy = false;
         }
     }
 
-    private void ShowEditDialog(CommunityViewModel community)
+    private void OnImpactDialogCancel() => impactDialogHidden = true;
+
+    private void ShowEditDialog(TrustDomainViewModel trustDomain)
     {
-        editCommunityId = community.Id;
-        editCommunityName = community.Name;
-        editCommunityDescription = community.Description ?? string.Empty;
-        editCommunityBaseUrls = community.BaseUrls
+        editTrustDomainId = trustDomain.Id;
+        editTrustDomainName = trustDomain.Name;
+        editTrustDomainDescription = trustDomain.Description ?? string.Empty;
+        editTrustDomainExpiry = trustDomain.CrlValidityDays;
+        editTrustDomainBaseUrls = trustDomain.BaseUrls
             .Select(u => new BaseUrlEntry { Value = u.Url, PublishingBasePath = u.PublishingBasePath ?? string.Empty })
             .ToList();
         editDialogHidden = false;
@@ -114,22 +162,22 @@ public partial class Communities
 
     private async Task SaveEditAsync()
     {
-        if (string.IsNullOrWhiteSpace(editCommunityName)) return;
+        if (string.IsNullOrWhiteSpace(editTrustDomainName)) return;
 
-        var baseUrls = editCommunityBaseUrls
+        var baseUrls = editTrustDomainBaseUrls
             .Where(e => !string.IsNullOrWhiteSpace(e.Value))
             .Select(e => (e.Value, (string?)e.PublishingBasePath))
             .ToList();
 
-        await CommunityService.UpdateAsync(editCommunityId, editCommunityName, editCommunityDescription, baseUrls);
+        await TrustDomainService.UpdateAsync(editTrustDomainId, editTrustDomainName, editTrustDomainDescription, baseUrls, editTrustDomainExpiry);
 
         editDialogHidden = true;
-        await LoadCommunitiesAsync();
+        await LoadTrustDomainsAsync();
     }
 
-    private void NavigateToExplorer(int communityId)
+    private void NavigateToExplorer(int trustDomainId)
     {
-        Navigation.NavigateTo($"/explorer/{communityId}");
+        Navigation.NavigateTo($"/explorer/{trustDomainId}");
     }
 
     // --- Folder Browser ---

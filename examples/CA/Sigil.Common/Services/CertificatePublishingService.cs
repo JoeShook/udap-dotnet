@@ -42,12 +42,12 @@ public class CertificatePublishingService
             return new PublishResult(false, Error: "CA certificate not found.");
 
         using var cert = X509Certificate2.CreateFromPem(ca.X509CertificatePem);
-        var baseUrls = await db.CommunityBaseUrls
-            .Where(bu => bu.CommunityId == ca.CommunityId && bu.PublishingBasePath != null)
+        var baseUrls = await db.TrustDomainBaseUrls
+            .Where(bu => bu.TrustDomainId == ca.TrustDomainId && bu.PublishingBasePath != null)
             .ToListAsync(ct);
 
         if (baseUrls.Count == 0)
-            return new PublishResult(false, Error: "No publishing paths configured on this community's base URLs.");
+            return new PublishResult(false, Error: "No publishing paths configured on this trust domain's base URLs.");
 
         var published = 0;
         foreach (var baseUrl in baseUrls)
@@ -74,8 +74,8 @@ public class CertificatePublishingService
         var ca = await db.CaCertificates.FindAsync([issuingCaId], ct);
         if (ca == null) return;
 
-        var baseUrls = await db.CommunityBaseUrls
-            .Where(bu => bu.CommunityId == ca.CommunityId && bu.PublishingBasePath != null)
+        var baseUrls = await db.TrustDomainBaseUrls
+            .Where(bu => bu.TrustDomainId == ca.TrustDomainId && bu.PublishingBasePath != null)
             .ToListAsync(ct);
 
         if (baseUrls.Count == 0) return;

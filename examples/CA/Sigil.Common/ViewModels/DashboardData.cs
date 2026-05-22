@@ -12,18 +12,18 @@ namespace Sigil.Common.ViewModels;
 
 public class DashboardData
 {
-    public int CommunityCount { get; set; }
+    public int TrustDomainCount { get; set; }
     public int CaCertCount { get; set; }
     public int IssuedCertCount { get; set; }
     public int TemplateCount { get; set; }
     public int RevokedCertCount { get; set; }
-    public List<CommunitySummary> CommunitySummaries { get; set; } = new();
+    public List<TrustDomainSummary> TrustDomainSummaries { get; set; } = new();
     public List<CertRow> ExpiringCerts { get; set; } = new();
     public List<CertRow> ExpiredCerts { get; set; } = new();
     public List<CrlRow> OverdueCrls { get; set; } = new();
 }
 
-public class CommunitySummary
+public class TrustDomainSummary
 {
     public int Id { get; set; }
     public string Name { get; set; } = string.Empty;
@@ -46,8 +46,8 @@ public class CertRow
     public string Subject { get; set; } = string.Empty;
     public string Thumbprint { get; set; } = string.Empty;
     public DateTime NotAfter { get; set; }
-    public string CommunityName { get; set; } = string.Empty;
-    public int CommunityId { get; set; }
+    public string TrustDomainName { get; set; } = string.Empty;
+    public int TrustDomainId { get; set; }
     public string CertType { get; set; } = string.Empty;
     public int DaysRemaining { get; set; }
 }
@@ -57,8 +57,8 @@ public class CrlRow
     public long CrlNumber { get; set; }
     public string CaName { get; set; } = string.Empty;
     public string CaThumbprint { get; set; } = string.Empty;
-    public string CommunityName { get; set; } = string.Empty;
-    public int CommunityId { get; set; }
+    public string TrustDomainName { get; set; } = string.Empty;
+    public int TrustDomainId { get; set; }
     public DateTime NextUpdate { get; set; }
     public int DaysOverdue { get; set; }
 }
