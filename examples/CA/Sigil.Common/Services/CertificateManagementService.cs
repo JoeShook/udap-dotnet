@@ -523,6 +523,16 @@ public class CertificateManagementService
             });
         }
 
+        var latestActiveCrl = ca.Crls.Where(c => !c.IsArchived).OrderByDescending(c => c.CrlNumber).FirstOrDefault();
+        if (latestActiveCrl != null)
+        {
+            node.LatestCrlFreshness = DateTime.UtcNow > latestActiveCrl.NextUpdate
+                ? CrlFreshness.Expired
+                : DateTime.UtcNow > latestActiveCrl.NextUpdate.AddDays(-7)
+                    ? CrlFreshness.ExpiringSoon
+                    : CrlFreshness.Fresh;
+        }
+
         return node;
     }
 

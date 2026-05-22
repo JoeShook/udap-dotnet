@@ -49,5 +49,19 @@ public class CertificateChainNodeViewModel
     /// </summary>
     public bool? RemoteKeyMissing { get; set; }
 
+    /// <summary>
+    /// For CA nodes: freshness of the most recently published CRL. Surfaced on the tree
+    /// row so operators can spot an expired CRL without expanding the node.
+    /// </summary>
+    public CrlFreshness LatestCrlFreshness { get; set; } = CrlFreshness.Missing;
+
     public List<CertificateChainNodeViewModel> Children { get; set; } = new();
+}
+
+public enum CrlFreshness
+{
+    Missing,
+    Fresh,
+    ExpiringSoon,
+    Expired
 }

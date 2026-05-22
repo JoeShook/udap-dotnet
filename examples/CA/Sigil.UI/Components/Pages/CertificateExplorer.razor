@@ -271,7 +271,7 @@
 
 @* Issue Certificate dialog *@
 <FluentDialog @bind-Hidden="@issuanceDialogHidden" Modal="true" TrapFocus="true"
-              Style="min-width: 900px; max-height: 80vh; overflow: auto; position: relative;">
+              Style="--dialog-width: 900px; min-width: 700px; max-width: 95vw; max-height: 80vh; position: relative;">
     <div class="sigil-resize-handle"></div>
     <FluentDialogHeader>
         @if (issuingCaIdForIssuance == null)
@@ -284,6 +284,7 @@
         }
     </FluentDialogHeader>
     <FluentDialogBody>
+        <div style="max-width: 100%; min-width: 0; overflow-x: hidden;">
         @if (noBaseUrlsWarning)
         {
             <FluentMessageBar Title="Community has no Base URLs"
@@ -335,9 +336,9 @@
                         <FluentTextField @bind-Value="issuanceCertName" Label="Display Name (optional)"
                                          Placeholder="Defaults to CN value"
                                          Style="width: 100%;" />
-                        <div style="display: flex; gap: 1rem;">
-                            <FluentDatePicker @bind-Value="issuanceNotBeforeNullable" Label="Not Before" Style="flex: 1;" />
-                            <FluentDatePicker @bind-Value="issuanceNotAfterNullable" Label="Not After" Style="flex: 1;" />
+                        <div style="display: flex; gap: 1rem; flex-wrap: wrap;">
+                            <FluentDatePicker @bind-Value="issuanceNotBeforeNullable" Label="Not Before" Style="flex: 1; min-width: 180px;" />
+                            <FluentDatePicker @bind-Value="issuanceNotAfterNullable" Label="Not After" Style="flex: 1; min-width: 180px;" />
                         </div>
                         @if (urlChangeWarnings.Count > 0)
                         {
@@ -503,6 +504,7 @@
                 </ChildContent>
             </FluentAccordionItem>
         </FluentAccordion>
+        </div>
     </FluentDialogBody>
     <FluentDialogFooter>
         <FluentButton Appearance="Appearance.Accent" OnClick="IssueCertificateAsync"
@@ -633,7 +635,7 @@ else if (treeNodes.Count > 0)
                     BarHandle="true"
                     Style="margin-top: 1rem; height: calc(100vh - 200px);">
         <Panel1>
-            <FluentCard Style="height: 100%; overflow-y: auto;">
+            <FluentCard Style="height: 100%; display: flex; flex-direction: column;">
                 <div style="display: flex; align-items: center; gap: 0.5rem; margin-bottom: 0.5rem;">
                     <FluentLabel Typo="Typography.Subject" Style="flex: 1; min-width: 0;">
                         @selectedCommunityName
@@ -675,6 +677,7 @@ else if (treeNodes.Count > 0)
                         Showing @visibleNodeCount of @totalNodeCount certificates
                     </div>
                 }
+                <div style="flex: 1; overflow-y: auto; min-height: 0;">
                 <FluentTreeView @key="@treeVersion"
                                 CurrentSelected="@selectedTreeItem"
                                 CurrentSelectedChanged="OnTreeItemSelected">
@@ -691,6 +694,7 @@ else if (treeNodes.Count > 0)
                                             CustomColor="@(IsError(root.Status) ? NodeColor(root.Status) : "#2d6a4f")" />
                                 <CertBadge Status="@root.Status" />
                             </span>
+                            <CrlFreshnessIndicator Freshness="@root.LatestCrlFreshness" />
                             <VaultTransitBadge Node="@root" />
                             @foreach (var intermediate in root.Children.Where(c => c.CertificateRole == "IntermediateCA" && IsNodeVisible(c)))
                             {
@@ -705,6 +709,7 @@ else if (treeNodes.Count > 0)
                                                     CustomColor="@(IsError(intermediate.Status) ? NodeColor(intermediate.Status) : "#1976d2")" />
                                         <CertBadge Status="@intermediate.Status" />
                                     </span>
+                                    <CrlFreshnessIndicator Freshness="@intermediate.LatestCrlFreshness" />
                                     <VaultTransitBadge Node="@intermediate" />
                                     @foreach (var subCa in intermediate.Children.Where(c => c.CertificateRole == "IntermediateCA" && IsNodeVisible(c)))
                                     {
@@ -730,6 +735,7 @@ else if (treeNodes.Count > 0)
                                     {
                                         <FluentTreeItem Text="@crl.Name"
                                                         @key="@($"crl-{crl.Id}")"
+                                                        Id="@($"tree-crl-{crl.Id}")"
                                                         Data="@crl"
                                                         Style="@(IsError(crl.Status) ? $"color: {NodeColor(crl.Status)};" : "font-style: italic; opacity: 0.8;")">
                                             <span slot="start" style="display: flex; align-items: center; gap: 0.35rem;">
@@ -762,6 +768,7 @@ else if (treeNodes.Count > 0)
                             {
                                 <FluentTreeItem Text="@crl.Name"
                                                 @key="@($"crl-{crl.Id}")"
+                                                Id="@($"tree-crl-{crl.Id}")"
                                                 Data="@crl"
                                                 Style="@(IsError(crl.Status) ? $"color: {NodeColor(crl.Status)};" : "font-style: italic; opacity: 0.8;")">
                                     <span slot="start" style="display: flex; align-items: center; gap: 0.35rem;">
@@ -775,6 +782,7 @@ else if (treeNodes.Count > 0)
                         </FluentTreeItem>
                     }
                 </FluentTreeView>
+                </div>
             </FluentCard>
         </Panel1>
         <Panel2>
@@ -1286,6 +1294,93 @@ else if (CommunityId > 0 && !showDropZone)
                      OnConfirm="OnImpactDialogConfirmAsync"
                      OnCancel="OnImpactDialogCancel" />
 
+@* Tree right-click context menu (single shared instance, anchored at cursor) *@
+<div id="tree-context-anchor"
+     style="@($"position: fixed; left: {contextMenuX}px; top: {contextMenuY}px; width: 1px; height: 1px; pointer-events: none;")"></div>
+
+<FluentMenu Anchor="tree-context-anchor" @bind-Open="@contextMenuOpen" VerticalThreshold="170">
+    @if (contextMenuNode != null)
+    {
+        var n = contextMenuNode;
+        var isCa = n.CertificateRole is "RootCA" or "IntermediateCA";
+        var isCrl = n.CertificateRole == "CRL";
+
+        @if (isCa && selectedNodeCanSign)
+        {
+            <FluentMenuItem OnClick="@(() => ShowIssuanceDialog(n.Id, n.Name))">
+                <FluentIcon Value="@(new Icons.Regular.Size16.Add())" slot="start" />
+                Issue Certificate
+            </FluentMenuItem>
+            <FluentDivider />
+        }
+
+        @if (!isCrl)
+        {
+            <FluentMenuItem OnClick="ShowSimilarDialog">
+                <FluentIcon Value="@(new Icons.Regular.Size16.Copy())" slot="start" />
+                Issue Similar
+            </FluentMenuItem>
+            <FluentMenuItem OnClick="ShowRenewDialog">
+                <FluentIcon Value="@(new Icons.Regular.Size16.ArrowRepeatAll())" slot="start" />
+                Re-key
+            </FluentMenuItem>
+            @if (isCa && selectedNodeCanSign)
+            {
+                <FluentMenuItem OnClick="ShowResignDialog">
+                    <FluentIcon Value="@(new Icons.Regular.Size16.ArrowRepeatAll())" slot="start" />
+                    Re-sign
+                </FluentMenuItem>
+            }
+            <FluentMenuItem OnClick="StartRename">
+                <FluentIcon Value="@(new Icons.Regular.Size16.Edit())" slot="start" />
+                Rename
+            </FluentMenuItem>
+            <FluentMenuItem OnClick="CopySubjectDnAsync">
+                <FluentIcon Value="@(new Icons.Regular.Size16.Copy())" slot="start" />
+                Copy Subject DN
+            </FluentMenuItem>
+            <FluentMenuItem OnClick="ShowMoveDialog">
+                <FluentIcon Value="@(new Icons.Regular.Size16.ArrowForward())" slot="start" />
+                Move…
+            </FluentMenuItem>
+            <FluentDivider />
+        }
+
+        @if (isCa && selectedNodeCanSign)
+        {
+            <FluentMenuItem OnClick="GenerateCrlForSelectedAsync" Disabled="@isGeneratingCrl">
+                <FluentIcon Value="@(new Icons.Regular.Size16.ShieldKeyhole())" slot="start" />
+                Regen CRL
+            </FluentMenuItem>
+            <FluentMenuItem OnClick="ShowPublishCrlDialog" Disabled="@isGeneratingCrl">
+                <FluentIcon Value="@(new Icons.Regular.Size16.DocumentArrowRight())" slot="start" />
+                Publish CRL…
+            </FluentMenuItem>
+            <FluentMenuItem OnClick="PublishAiaForSelectedAsync" Disabled="@isPublishingAia">
+                <FluentIcon Value="@(new Icons.Regular.Size16.Certificate())" slot="start" />
+                Publish AIA
+            </FluentMenuItem>
+            <FluentDivider />
+        }
+
+        @if (!isCrl && n.Status != CertificateStatus.Revoked)
+        {
+            <FluentMenuItem OnClick="ShowRevokeDialog">
+                <FluentIcon Value="@(new Icons.Regular.Size16.ShieldDismiss())" slot="start" />
+                Revoke…
+            </FluentMenuItem>
+        }
+        <FluentMenuItem OnClick="ArchiveSelectedAsync">
+            <FluentIcon Value="@(new Icons.Regular.Size16.Archive())" slot="start" />
+            Archive
+        </FluentMenuItem>
+        <FluentMenuItem OnClick="DeleteSelectedAsync">
+            <FluentIcon Value="@(new Icons.Regular.Size16.Delete())" slot="start" />
+            Delete…
+        </FluentMenuItem>
+    }
+</FluentMenu>
+
 @code {
     private RenderFragment RenderCaTreeItem(CertificateChainNodeViewModel caNode) => __builder =>
     {
@@ -1308,6 +1403,7 @@ else if (CommunityId > 0 && !showDropZone)
                 }
                 <CertBadge Status="@caNode.Status" />
             </span>
+            <CrlFreshnessIndicator Freshness="@caNode.LatestCrlFreshness" />
             <VaultTransitBadge Node="@caNode" />
             @* Recursive: sub-CA nodes *@
             @foreach (var subCa in caNode.Children.Where(c => c.CertificateRole is "IntermediateCA" or "RootCA" && IsNodeVisible(c)))
@@ -1336,6 +1432,7 @@ else if (CommunityId > 0 && !showDropZone)
             {
                 <FluentTreeItem Text="@crl.Name"
                                 @key="@($"crl-{crl.Id}")"
+                                Id="@($"tree-crl-{crl.Id}")"
                                 Data="@crl"
                                 Style="@(IsError(crl.Status) ? $"color: {NodeColor(crl.Status)};" : "font-style: italic; opacity: 0.8;")">
                     <span slot="start" style="display: flex; align-items: center; gap: 0.35rem;">

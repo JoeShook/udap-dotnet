@@ -11,6 +11,7 @@
 using System.Security.Cryptography.X509Certificates;
 using Microsoft.AspNetCore.Components;
 using Microsoft.AspNetCore.Components.Forms;
+using Microsoft.AspNetCore.Components.Web;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Options;
 using Microsoft.FluentUI.AspNetCore.Components;
@@ -74,12 +75,15 @@ public partial class CertificateExplorer : IDisposable
         new("Revoked", CertificateStatus.Revoked),
         new("Untrusted", CertificateStatus.Untrusted),
         new("Superseded CA", CertificateStatus.Stale),
+        new("CRLs only", null, "CRL"),
     };
     private HashSet<CertificateChainNodeViewModel> visibleNodes = new();
     private int visibleNodeCount;
     private int totalNodeCount;
     private bool IsTreeFilterActive =>
-        !string.IsNullOrWhiteSpace(treeFilterText) || selectedTreeStatusFilter.Value != null;
+        !string.IsNullOrWhiteSpace(treeFilterText)
+        || selectedTreeStatusFilter.Value != null
+        || selectedTreeStatusFilter.RoleOnly != null;
 
     private CertificateChainNodeViewModel? selectedNode;
     private X509Certificate2? selectedCert;
@@ -200,6 +204,12 @@ public partial class CertificateExplorer : IDisposable
         new(9, "Privilege Withdrawn"),
     };
 
+    // Tree context menu
+    private bool contextMenuOpen;
+    private int contextMenuX;
+    private int contextMenuY;
+    private CertificateChainNodeViewModel? contextMenuNode;
+
     // Re-sign dialog
     private bool resignDialogHidden = true;
     private bool isResigning;
@@ -253,6 +263,12 @@ public partial class CertificateExplorer : IDisposable
 
     protected override async Task OnAfterRenderAsync(bool firstRender)
     {
+        if (firstRender)
+        {
+            dotNetRef ??= DotNetObjectReference.Create(this);
+            await JS.InvokeVoidAsync("sigilInitTreeContextMenu", dotNetRef);
+        }
+
         if (pendingHighlight)
         {
             pendingHighlight = false;
@@ -264,6 +280,30 @@ public partial class CertificateExplorer : IDisposable
             pendingDragDropInit = false;
             await InitDragDropAsync();
         }
+    }
+
+    [JSInvokable]
+    public async Task OnTreeContextMenuAsync(string elementId, int x, int y)
+    {
+        CertificateChainNodeViewModel? node = null;
+        if (elementId.StartsWith("tree-crl-", StringComparison.Ordinal))
+        {
+            if (int.TryParse(elementId["tree-crl-".Length..], out var crlId))
+                node = FindNodeById(treeNodes, crlId, "Crl");
+        }
+        else if (elementId.StartsWith("tree-", StringComparison.Ordinal))
+        {
+            var thumbprint = elementId["tree-".Length..];
+            node = FindNodeByThumbprint(treeNodes, thumbprint);
+        }
+        if (node == null) return;
+
+        contextMenuNode = node;
+        contextMenuX = x;
+        contextMenuY = y;
+        contextMenuOpen = true;
+        await SelectNode(node);
+        StateHasChanged();
     }
 
     private async Task InitDragDropAsync()
@@ -538,6 +578,14 @@ public partial class CertificateExplorer : IDisposable
         }
 
         await UpdateTreeHighlightsAsync();
+    }
+
+    private async Task CopySubjectDnAsync()
+    {
+        var dn = contextMenuNode?.Subject ?? contextMenuNode?.Name;
+        if (string.IsNullOrEmpty(dn)) return;
+        await JS.InvokeVoidAsync("sigilCopyText", dn);
+        ToastService.ShowSuccess("Subject DN copied to clipboard");
     }
 
     private async Task RevalidateSelectedAsync()
@@ -2709,7 +2757,7 @@ public partial class CertificateExplorer : IDisposable
 
     public record RevokeReasonOption(int Code, string Label);
 
-    public record TreeStatusFilterOption(string Label, CertificateStatus? Value);
+    public record TreeStatusFilterOption(string Label, CertificateStatus? Value, string? RoleOnly = null);
 
     private string IdentitySummary()
     {
@@ -2782,7 +2830,11 @@ public partial class CertificateExplorer : IDisposable
 
     private bool ComputeVisibility(CertificateChainNodeViewModel node)
     {
-        if (node.CertificateRole != "CRL")
+        var crlFocus = selectedTreeStatusFilter.RoleOnly == "CRL";
+        var nodeCountsTowardTotal = crlFocus
+            ? node.CertificateRole == "CRL"
+            : node.CertificateRole != "CRL";
+        if (nodeCountsTowardTotal)
             totalNodeCount++;
 
         var selfMatches = MatchesFilter(node);
@@ -2797,7 +2849,7 @@ public partial class CertificateExplorer : IDisposable
         if (visible)
         {
             visibleNodes.Add(node);
-            if (node.CertificateRole != "CRL" && selfMatches)
+            if (selfMatches && nodeCountsTowardTotal)
                 visibleNodeCount++;
         }
         return visible;
@@ -2805,9 +2857,15 @@ public partial class CertificateExplorer : IDisposable
 
     private bool MatchesFilter(CertificateChainNodeViewModel node)
     {
-        // Status filter: only applies to non-CRL nodes
-        if (selectedTreeStatusFilter.Value != null)
+        // Role-only filter (e.g. "CRLs only"): match only nodes of that role.
+        // Parents become visible via child-matches in ComputeVisibility.
+        if (selectedTreeStatusFilter.RoleOnly != null)
         {
+            if (node.CertificateRole != selectedTreeStatusFilter.RoleOnly) return false;
+        }
+        else if (selectedTreeStatusFilter.Value != null)
+        {
+            // Status filter: only applies to non-CRL nodes
             if (node.CertificateRole == "CRL") return false;
             if (node.Status != selectedTreeStatusFilter.Value) return false;
         }

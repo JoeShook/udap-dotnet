@@ -42,14 +42,15 @@ code {
 }
 .sigil-resize-handle::after {
     content: '';
-    width: 3px;
-    height: 32px;
+    width: 4px;
+    height: 40px;
     border-radius: 2px;
-    background: rgba(255, 255, 255, 0.25);
-    transition: background 0.15s;
+    background: currentColor;
+    opacity: 0.35;
+    transition: opacity 0.15s;
 }
 .sigil-resize-handle:hover::after {
-    background: rgba(255, 255, 255, 0.5);
+    opacity: 0.75;
 }
 
 /* Drag-drop re-key */
