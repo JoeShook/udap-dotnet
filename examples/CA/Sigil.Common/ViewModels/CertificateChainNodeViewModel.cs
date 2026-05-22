@@ -55,6 +55,12 @@ public class CertificateChainNodeViewModel
     /// </summary>
     public CrlFreshness LatestCrlFreshness { get; set; } = CrlFreshness.Missing;
 
+    /// <summary>
+    /// For CRL nodes: true when this is the most recent (highest CrlNumber) non-archived
+    /// CRL for its issuing CA. Re-publishing only makes sense for the latest CRL.
+    /// </summary>
+    public bool IsLatestCrl { get; set; }
+
     public List<CertificateChainNodeViewModel> Children { get; set; } = new();
 }
 

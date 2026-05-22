@@ -1363,6 +1363,22 @@ else if (CommunityId > 0 && !showDropZone)
             <FluentDivider />
         }
 
+        @if (isCrl)
+        {
+            <FluentMenuItem OnClick="DownloadCrlAsync">
+                <FluentIcon Value="@(new Icons.Regular.Size16.ArrowDownload())" slot="start" />
+                Download .crl
+            </FluentMenuItem>
+            @if (n.IsLatestCrl)
+            {
+                <FluentMenuItem OnClick="RepublishCrlAsync">
+                    <FluentIcon Value="@(new Icons.Regular.Size16.DocumentArrowRight())" slot="start" />
+                    Re-publish to CDP
+                </FluentMenuItem>
+            }
+            <FluentDivider />
+        }
+
         @if (!isCrl && n.Status != CertificateStatus.Revoked)
         {
             <FluentMenuItem OnClick="ShowRevokeDialog">

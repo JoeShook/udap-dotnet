@@ -503,6 +503,7 @@ public class CertificateManagementService
             });
         }
 
+        var seenLatestActiveCrl = false;
         foreach (var crl in ca.Crls.OrderByDescending(c => c.CrlNumber))
         {
             var crlStatus = DateTime.UtcNow > crl.NextUpdate
@@ -510,6 +511,13 @@ public class CertificateManagementService
                 : DateTime.UtcNow > crl.NextUpdate.AddDays(-7)
                     ? CertificateStatus.Expiring
                     : CertificateStatus.Valid;
+
+            var isLatest = false;
+            if (!seenLatestActiveCrl && !crl.IsArchived)
+            {
+                isLatest = true;
+                seenLatestActiveCrl = true;
+            }
 
             node.Children.Add(new CertificateChainNodeViewModel
             {
@@ -519,7 +527,8 @@ public class CertificateManagementService
                 NotAfter = crl.NextUpdate,
                 CertificateRole = "CRL",
                 EntityType = "Crl",
-                Status = crlStatus
+                Status = crlStatus,
+                IsLatestCrl = isLatest
             });
         }
 

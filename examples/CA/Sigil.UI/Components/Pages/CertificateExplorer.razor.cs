@@ -298,11 +298,14 @@ public partial class CertificateExplorer : IDisposable
         }
         if (node == null) return;
 
+        // Load the node first so selectedNodeCanSign / selectedNodeHasPrivateKey are correct
+        // by the time the menu paints — otherwise CA-only items (Regen CRL, Publish AIA…)
+        // are hidden because they're gated on stale selection state from the previous click.
         contextMenuNode = node;
         contextMenuX = x;
         contextMenuY = y;
-        contextMenuOpen = true;
         await SelectNode(node);
+        contextMenuOpen = true;
         StateHasChanged();
     }
 
@@ -588,6 +591,26 @@ public partial class CertificateExplorer : IDisposable
         ToastService.ShowSuccess("Subject DN copied to clipboard");
     }
 
+    private async Task DownloadCrlAsync()
+    {
+        if (contextMenuNode?.EntityType != "Crl") return;
+        await JS.InvokeVoidAsync("open", $"/api/crl/{contextMenuNode.Id}/download", "_blank");
+    }
+
+    private async Task RepublishCrlAsync()
+    {
+        if (selectedCrl == null) return;
+        try
+        {
+            await CrlGenService.PublishCrlAsync(selectedCrl.CaCertificateId);
+            ToastService.ShowSuccess($"Re-published CRL #{selectedCrl.CrlNumber} to configured CDP URLs.");
+        }
+        catch (Exception ex)
+        {
+            ToastService.ShowCopyableError($"Re-publish failed: {ex.Message}");
+        }
+    }
+
     private async Task RevalidateSelectedAsync()
     {
         if (selectedNode == null || selectedNode.EntityType == "Crl") return;
@@ -660,7 +683,8 @@ public partial class CertificateExplorer : IDisposable
         await using var db = await DbFactory.CreateDbContextAsync();
         var ca = await db.CaCertificates.FindAsync(selectedNode.Id);
         var community = ca != null ? await db.Communities.FindAsync(ca.CommunityId) : null;
-        var days = community?.CrlValidityDays ?? 7;
+        var days = community?.CrlValidityDays ?? 0;
+        if (days <= 0) days = 7;
 
         crlOverrideNextUpdate = DateTime.UtcNow.AddDays(days);
         crlOverrideDialogHidden = false;

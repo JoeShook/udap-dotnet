@@ -81,7 +81,9 @@ public class CrlGenerationService
         if (validity == null)
         {
             var community = await db.Communities.FindAsync([ca.CommunityId], ct);
-            validity = TimeSpan.FromDays(community?.CrlValidityDays ?? 7);
+            var days = community?.CrlValidityDays ?? 0;
+            if (days <= 0) days = 7;
+            validity = TimeSpan.FromDays(days);
         }
 
         // Collect revoked issued certificates for this CA
