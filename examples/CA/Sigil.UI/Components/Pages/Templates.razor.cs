@@ -13,6 +13,7 @@ using Microsoft.AspNetCore.Components;
 using Microsoft.FluentUI.AspNetCore.Components;
 using Sigil.Common.Data.Entities;
 using Sigil.Common.Services;
+using Sigil.Common.ViewModels;
 using Sigil.UI.Services;
 
 namespace Sigil.UI.Components.Pages;
@@ -296,22 +297,53 @@ public partial class Templates
         dialogHidden = false;
     }
 
+    // Impact confirmation dialog state
+    private bool impactDialogHidden = true;
+    private string impactDialogTitle = "Confirm";
+    private string impactDialogMessage = string.Empty;
+    private string impactDialogConfirmLabel = "Confirm";
+    private List<ImpactItem>? impactDialogImpacts;
+    private Func<Task>? impactDialogOnConfirm;
+    private bool impactDialogBusy;
+
     private async Task DeleteTemplateAsync(CertificateTemplate template)
     {
         if (template.IsPreset) return;
 
-        var dialog = await DialogService.ShowConfirmationAsync(
-            $"Delete template '{template.Name}'?",
-            "Delete", "Cancel", "Confirm Delete");
-        var result = await dialog.Result;
+        var impacts = await TemplateService.GetDeletionImpactAsync(template.Id);
+        impactDialogTitle = $"Delete template '{template.Name}'?";
+        impactDialogMessage = "Issued certificates that reference this template will not be deleted, but the reference will be cleared.";
+        impactDialogConfirmLabel = "Delete Template";
+        impactDialogImpacts = impacts;
+        impactDialogOnConfirm = () => ConfirmDeleteTemplateAsync(template);
+        impactDialogBusy = false;
+        impactDialogHidden = false;
+    }
 
-        if (!result.Cancelled)
+    private async Task ConfirmDeleteTemplateAsync(CertificateTemplate template)
+    {
+        await TemplateService.DeleteAsync(template.Id);
+        ToastService.ShowCopyableSuccess($"Template '{template.Name}' deleted.");
+        await LoadTemplatesAsync();
+    }
+
+    private async Task OnImpactDialogConfirmAsync()
+    {
+        if (impactDialogOnConfirm == null) return;
+        impactDialogBusy = true;
+        StateHasChanged();
+        try
         {
-            await TemplateService.DeleteAsync(template.Id);
-            ToastService.ShowCopyableSuccess($"Template '{template.Name}' deleted.");
-            await LoadTemplatesAsync();
+            await impactDialogOnConfirm();
+        }
+        finally
+        {
+            impactDialogHidden = true;
+            impactDialogBusy = false;
         }
     }
+
+    private void OnImpactDialogCancel() => impactDialogHidden = true;
 
     private void ToggleKeyUsageFlag(X509KeyUsageFlags flag, bool enabled)
     {

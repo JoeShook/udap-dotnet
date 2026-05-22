@@ -22,6 +22,7 @@ public partial class Communities
     [Inject] private IDialogService DialogService { get; set; } = null!;
 
     [SupplyParameterFromQuery] public string? Action { get; set; }
+    [SupplyParameterFromQuery] public int? Edit { get; set; }
 
     private List<CommunityViewModel> communities = new();
     private bool addDialogHidden = true;
@@ -63,7 +64,15 @@ public partial class Communities
     {
         await LoadCommunitiesAsync();
         if (Action == "new")
+        {
             ShowAddDialog();
+        }
+        else if (Edit.HasValue)
+        {
+            var target = communities.FirstOrDefault(c => c.Id == Edit.Value);
+            if (target != null)
+                ShowEditDialog(target);
+        }
     }
 
     private async Task LoadCommunitiesAsync()
@@ -94,19 +103,50 @@ public partial class Communities
         await LoadCommunitiesAsync();
     }
 
+    // Impact confirmation dialog state
+    private bool impactDialogHidden = true;
+    private string impactDialogTitle = "Confirm";
+    private string impactDialogMessage = string.Empty;
+    private string impactDialogConfirmLabel = "Confirm";
+    private List<ImpactItem>? impactDialogImpacts;
+    private Func<Task>? impactDialogOnConfirm;
+    private bool impactDialogBusy;
+
     private async Task DeleteCommunityAsync(CommunityViewModel community)
     {
-        var dialog = await DialogService.ShowConfirmationAsync(
-            $"Delete community '{community.Name}' and all its certificates?",
-            "Delete", "Cancel", "Confirm Delete");
-        var result = await dialog.Result;
+        var impacts = await CommunityService.GetDeletionImpactAsync(community.Id);
+        impactDialogTitle = $"Delete community '{community.Name}'?";
+        impactDialogMessage = "All certificates, CRLs, and revocation records in this community will be permanently deleted. This cannot be undone.";
+        impactDialogConfirmLabel = "Delete Community";
+        impactDialogImpacts = impacts;
+        impactDialogOnConfirm = () => ConfirmDeleteCommunityAsync(community.Id);
+        impactDialogBusy = false;
+        impactDialogHidden = false;
+    }
 
-        if (!result.Cancelled)
+    private async Task ConfirmDeleteCommunityAsync(int communityId)
+    {
+        await CommunityService.DeleteAsync(communityId);
+        await LoadCommunitiesAsync();
+    }
+
+    private async Task OnImpactDialogConfirmAsync()
+    {
+        if (impactDialogOnConfirm == null) return;
+        impactDialogBusy = true;
+        StateHasChanged();
+        try
         {
-            await CommunityService.DeleteAsync(community.Id);
-            await LoadCommunitiesAsync();
+            await impactDialogOnConfirm();
+        }
+        finally
+        {
+            impactDialogHidden = true;
+            impactDialogBusy = false;
         }
     }
+
+    private void OnImpactDialogCancel() => impactDialogHidden = true;
 
     private void ShowEditDialog(CommunityViewModel community)
     {

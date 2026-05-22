@@ -96,6 +96,7 @@ try
     builder.Services.AddScoped<CrlGenerationService>();
     builder.Services.AddScoped<CrlAutoRenewalJob>();
     builder.Services.AddScoped<Sigil.UI.Services.TimeDisplayService>();
+    builder.Services.AddScoped<Sigil.UI.Services.IssuancePasswordCache>();
 
     // System status — populate from existing options sections
     builder.Services.AddOptions<SystemStatusOptions>().Configure<

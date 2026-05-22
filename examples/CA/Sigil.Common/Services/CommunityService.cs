@@ -136,4 +136,26 @@ public class CommunityService
             await db.SaveChangesAsync(ct);
         }
     }
+
+    public async Task<List<ImpactItem>> GetDeletionImpactAsync(int communityId, CancellationToken ct = default)
+    {
+        await using var db = await _dbFactory.CreateDbContextAsync(ct);
+        var impacts = new List<ImpactItem>();
+
+        var caCount = await db.CaCertificates.CountAsync(c => c.CommunityId == communityId, ct);
+        if (caCount > 0)
+            impacts.Add(new ImpactItem(caCount, "CA certificate(s)", ImpactSeverity.Critical));
+
+        var issuedCount = await db.IssuedCertificates
+            .CountAsync(i => i.IssuingCaCertificate.CommunityId == communityId, ct);
+        if (issuedCount > 0)
+            impacts.Add(new ImpactItem(issuedCount, "issued certificate(s)", ImpactSeverity.Critical));
+
+        var crlCount = await db.Crls
+            .CountAsync(c => c.CaCertificate.CommunityId == communityId && !c.IsArchived, ct);
+        if (crlCount > 0)
+            impacts.Add(new ImpactItem(crlCount, "CRL(s)", ImpactSeverity.Warning));
+
+        return impacts;
+    }
 }

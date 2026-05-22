@@ -12,8 +12,10 @@ using Sigil.Vault.Hosting;
 
 var builder = DistributedApplication.CreateBuilder(args);
 
-// Vault (dev mode) with Transit engine + signing keys
-var vault = builder.AddVaultDev("vault")
+// Vault with persistent file storage + Transit engine + signing keys.
+// Persistent mode survives container restarts (init state stored at
+// %LOCALAPPDATA%/Sigil/vault-vault-init.json, data in Docker volume vault-vault-data).
+var vault = builder.AddVaultDev("vault", persistent: true)
     .WithTransitEngine(
         new TransitKeySpec("sigil-rsa-4096", "rsa-4096"),
         new TransitKeySpec("sigil-ecdsa-p384", "ecdsa-p384"));

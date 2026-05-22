@@ -34,7 +34,20 @@ public class CertificateChainNodeViewModel
     /// </summary>
     public string? KeyStorage { get; set; }
 
+    /// <summary>
+    /// For remote-keyed entries, the provider-specific key identifier (e.g. Vault Transit
+    /// key name). Used to verify the key still exists in the remote provider.
+    /// </summary>
+    public string? KeyIdentifier { get; set; }
+
     public bool IsSuperseded { get; set; }
+
+    /// <summary>
+    /// For remote-keyed certificates (Vault Transit, GCP KMS): true when the remote
+    /// signing key is missing in the provider (e.g. Vault dev mode was restarted).
+    /// null = not checked or not applicable (local key).
+    /// </summary>
+    public bool? RemoteKeyMissing { get; set; }
 
     public List<CertificateChainNodeViewModel> Children { get; set; } = new();
 }

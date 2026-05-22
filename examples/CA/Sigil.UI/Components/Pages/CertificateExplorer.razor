@@ -284,181 +284,225 @@
         }
     </FluentDialogHeader>
     <FluentDialogBody>
-        <div style="display: flex; flex-direction: column; gap: 0.75rem;">
-            @* Template selection *@
-            <FluentSelect TOption="CertificateTemplate"
-                          Items="@availableTemplates"
-                          OptionText="@(t => $"{t.Name} ({GetCertTypeLabel(t.CertificateType)})")"
-                          SelectedOption="@selectedTemplate"
-                          SelectedOptionChanged="OnTemplateSelected"
-                          Label="Template"
-                          Style="width: 100%;" />
-            @if (selectedTemplate?.Description != null)
-            {
-                <p style="font-size: 0.8rem; opacity: 0.6; margin: -0.25rem 0 0;">@selectedTemplate.Description</p>
-            }
-
-            @* Subject DN *@
-            <FluentTextField @bind-Value="issuanceSubjectDn" Label="Subject Distinguished Name"
-                             Placeholder="CN=My Certificate, O=My Org, C=US"
-                             Style="width: 100%;" />
-
-            @* Certificate Name *@
-            <FluentTextField @bind-Value="issuanceCertName" Label="Display Name (optional)"
-                             Placeholder="Defaults to CN value"
-                             Style="width: 100%;" />
-
-            @* Validity *@
-            <div style="display: flex; gap: 1rem;">
-                <FluentDatePicker @bind-Value="issuanceNotBeforeNullable" Label="Not Before" Style="flex: 1;" />
-                <FluentDatePicker @bind-Value="issuanceNotAfterNullable" Label="Not After" Style="flex: 1;" />
-            </div>
-
-            @if (urlChangeWarnings.Count > 0)
-            {
-                <FluentMessageBar Title="Template changes CDP/AIA URLs"
-                                  Intent="@MessageIntent.Warning"
-                                  Style="margin: 0.5rem 0;">
-                    <ul style="margin: 0.25rem 0; padding-left: 1.25rem;">
-                        @foreach (var w in urlChangeWarnings)
+        @if (noBaseUrlsWarning)
+        {
+            <FluentMessageBar Title="Community has no Base URLs"
+                              Intent="@MessageIntent.Error"
+                              Style="margin-bottom: 0.5rem;">
+                <p style="margin: 0.25rem 0;">
+                    The template uses <code>{BaseUrl}</code> in CDP/AIA URLs but this community has no Base URLs configured.
+                    Add one and reopen this dialog, or enter absolute URLs manually in the Extensions section.
+                </p>
+                <FluentButton Appearance="Appearance.Accent" Size="ButtonSize.Small"
+                              IconStart="@(new Icons.Regular.Size16.Open())"
+                              OnClick="OpenCommunityEditAsync">
+                    Edit Community (new tab)
+                </FluentButton>
+            </FluentMessageBar>
+        }
+        <FluentAccordion>
+            <FluentAccordionItem Expanded="true">
+                <HeadingTemplate>
+                    <span style="display: inline-flex; align-items: baseline; gap: 0.5rem; width: 100%;">
+                        <strong>Identity &amp; Validity</strong>
+                        <span style="opacity: 0.6; font-size: 0.8rem; font-weight: normal;">@IdentitySummary()</span>
+                    </span>
+                </HeadingTemplate>
+                <ChildContent>
+                    <div style="display: flex; flex-direction: column; gap: 0.75rem; padding-top: 0.5rem;">
+                        <FluentSelect TOption="CertificateTemplate"
+                                      Items="@availableTemplates"
+                                      OptionText="@(t => $"{t.Name} ({GetCertTypeLabel(t.CertificateType)})")"
+                                      SelectedOption="@selectedTemplate"
+                                      SelectedOptionChanged="OnTemplateSelected"
+                                      Label="Template"
+                                      Style="width: 100%;" />
+                        @if (selectedTemplate?.Description != null)
                         {
-                            <li>@w</li>
+                            <p style="font-size: 0.8rem; opacity: 0.6; margin: -0.25rem 0 0;">@selectedTemplate.Description</p>
                         }
-                    </ul>
-                </FluentMessageBar>
-            }
+                        <FluentTextField @bind-Value="issuanceSubjectDn"
+                                         Label="Subject Distinguished Name (required)"
+                                         Required="true"
+                                         Placeholder="CN=My Certificate, O=My Org, C=US"
+                                         Style="width: 100%;" />
+                        @if (string.IsNullOrWhiteSpace(issuanceSubjectDn))
+                        {
+                            <div style="font-size: 0.75rem; color: #e94560; margin-top: -0.5rem;">
+                                A Subject DN (at minimum a CN=) is required to issue the certificate.
+                            </div>
+                        }
+                        <FluentTextField @bind-Value="issuanceCertName" Label="Display Name (optional)"
+                                         Placeholder="Defaults to CN value"
+                                         Style="width: 100%;" />
+                        <div style="display: flex; gap: 1rem;">
+                            <FluentDatePicker @bind-Value="issuanceNotBeforeNullable" Label="Not Before" Style="flex: 1;" />
+                            <FluentDatePicker @bind-Value="issuanceNotAfterNullable" Label="Not After" Style="flex: 1;" />
+                        </div>
+                        @if (urlChangeWarnings.Count > 0)
+                        {
+                            <FluentMessageBar Title="Template changes CDP/AIA URLs"
+                                              Intent="@MessageIntent.Warning"
+                                              Style="margin: 0.5rem 0;">
+                                <ul style="margin: 0.25rem 0; padding-left: 1.25rem;">
+                                    @foreach (var w in urlChangeWarnings)
+                                    {
+                                        <li>@w</li>
+                                    }
+                                </ul>
+                            </FluentMessageBar>
+                        }
+                        @if (selectedTemplate != null)
+                        {
+                            <div style="border: 1px solid var(--neutral-stroke-rest); border-radius: 4px; padding: 0.5rem; font-size: 0.8rem; opacity: 0.7;">
+                                <strong>Template:</strong> @selectedTemplate.KeyAlgorithm
+                                @if (selectedTemplate.KeyAlgorithm == "ECDSA")
+                                {
+                                    @($" ({selectedTemplate.EcdsaCurve ?? "P-384"})")
+                                }
+                                else
+                                {
+                                    @($" {selectedTemplate.KeySize}-bit")
+                                }
+                                | @selectedTemplate.HashAlgorithm
+                                | @selectedTemplate.ValidityDays days
+                                @if (selectedTemplate.IsBasicConstraintsCa)
+                                {
+                                    @(" | CA")
+                                    @if (selectedTemplate.PathLengthConstraint.HasValue)
+                                    {
+                                        @($" (path: {selectedTemplate.PathLengthConstraint})")
+                                    }
+                                }
+                            </div>
+                        }
+                    </div>
+                </ChildContent>
+            </FluentAccordionItem>
 
-            @* CDP URLs *@
-            @if (selectedTemplate?.IncludeCdp == true)
-            {
-                <FluentLabel Typo="Typography.Subject" Style="margin-top: 0.25rem;">CRL Distribution Point URLs</FluentLabel>
-                @foreach (var cdp in issuanceCdpUrls)
-                {
-                    <FluentStack Orientation="Orientation.Horizontal" Style="gap: 0.5rem; align-items: end;">
-                        <FluentTextField @bind-Value="cdp.Value" Style="flex: 1;"
-                                         Placeholder="http://crl.example.com/my.crl" />
+            <FluentAccordionItem>
+                <HeadingTemplate>
+                    <span style="display: inline-flex; align-items: baseline; gap: 0.5rem; width: 100%;">
+                        <strong>Extensions</strong>
+                        <span style="opacity: 0.6; font-size: 0.8rem; font-weight: normal;">@ExtensionsSummary()</span>
+                    </span>
+                </HeadingTemplate>
+                <ChildContent>
+                    <div style="display: flex; flex-direction: column; gap: 0.75rem; padding-top: 0.5rem;">
+                        @if (selectedTemplate?.IncludeCdp == true)
+                        {
+                            <FluentLabel Typo="Typography.Subject">CRL Distribution Point URLs</FluentLabel>
+                            @foreach (var cdp in issuanceCdpUrls)
+                            {
+                                <FluentStack Orientation="Orientation.Horizontal" Style="gap: 0.5rem; align-items: end;">
+                                    <FluentTextField @bind-Value="cdp.Value" Style="flex: 1;"
+                                                     Placeholder="http://crl.example.com/my.crl" />
+                                    <FluentButton Appearance="Appearance.Outline" Size="ButtonSize.Small"
+                                                  IconStart="@(new Icons.Regular.Size16.Delete())"
+                                                  OnClick="@(() => issuanceCdpUrls.Remove(cdp))" />
+                                </FluentStack>
+                            }
+                            <FluentButton Appearance="Appearance.Outline" Size="ButtonSize.Small"
+                                          IconStart="@(new Icons.Regular.Size16.Add())"
+                                          OnClick="@(() => issuanceCdpUrls.Add(new IssuanceUrlEntry()))">
+                                Add CDP URL
+                            </FluentButton>
+                        }
+                        @if (selectedTemplate?.IncludeAia == true)
+                        {
+                            <FluentLabel Typo="Typography.Subject" Style="margin-top: 0.25rem;">Authority Information Access URLs</FluentLabel>
+                            @foreach (var aia in issuanceAiaUrls)
+                            {
+                                <FluentStack Orientation="Orientation.Horizontal" Style="gap: 0.5rem; align-items: end;">
+                                    <FluentTextField @bind-Value="aia.Value" Style="flex: 1;"
+                                                     Placeholder="http://certs.example.com/ca.cer" />
+                                    <FluentButton Appearance="Appearance.Outline" Size="ButtonSize.Small"
+                                                  IconStart="@(new Icons.Regular.Size16.Delete())"
+                                                  OnClick="@(() => issuanceAiaUrls.Remove(aia))" />
+                                </FluentStack>
+                            }
+                            <FluentButton Appearance="Appearance.Outline" Size="ButtonSize.Small"
+                                          IconStart="@(new Icons.Regular.Size16.Add())"
+                                          OnClick="@(() => issuanceAiaUrls.Add(new IssuanceUrlEntry()))">
+                                Add AIA URL
+                            </FluentButton>
+                        }
+                        <FluentLabel Typo="Typography.Subject" Style="margin-top: 0.25rem;">Subject Alternative Names</FluentLabel>
+                        @if (templateSanLists.Count > 0)
+                        {
+                            <FluentStack Orientation="Orientation.Horizontal" Style="gap: 0.5rem; margin-bottom: 0.5rem; flex-wrap: wrap;">
+                                @foreach (var sl in templateSanLists)
+                                {
+                                    <FluentButton Appearance="Appearance.Outline" Size="ButtonSize.Small"
+                                                  IconStart="@(new Icons.Regular.Size16.ListBar())"
+                                                  OnClick="@(() => ShowSanListPickerDialog(sl))">
+                                        @sl.Name
+                                    </FluentButton>
+                                }
+                            </FluentStack>
+                        }
+                        @foreach (var san in issuanceSans)
+                        {
+                            <FluentStack Orientation="Orientation.Horizontal" Style="gap: 0.5rem; align-items: end;">
+                                <FluentSelect TOption="SanType"
+                                              Items="@sanTypeOptions"
+                                              OptionText="@(s => s.ToString())"
+                                              @bind-SelectedOption="san.Type"
+                                              Style="width: 120px;" />
+                                <FluentTextField @bind-Value="san.Value" Style="flex: 1;"
+                                                 Placeholder="@GetSanPlaceholder(san.Type)" />
+                                <FluentButton Appearance="Appearance.Outline" Size="ButtonSize.Small"
+                                              IconStart="@(new Icons.Regular.Size16.Delete())"
+                                              OnClick="@(() => RemoveSanEntry(san))" />
+                            </FluentStack>
+                        }
                         <FluentButton Appearance="Appearance.Outline" Size="ButtonSize.Small"
-                                      IconStart="@(new Icons.Regular.Size16.Delete())"
-                                      OnClick="@(() => issuanceCdpUrls.Remove(cdp))" />
-                    </FluentStack>
-                }
-                <FluentButton Appearance="Appearance.Outline" Size="ButtonSize.Small"
-                              IconStart="@(new Icons.Regular.Size16.Add())"
-                              OnClick="@(() => issuanceCdpUrls.Add(new IssuanceUrlEntry()))">
-                    Add CDP URL
-                </FluentButton>
-            }
-
-            @* AIA URLs *@
-            @if (selectedTemplate?.IncludeAia == true)
-            {
-                <FluentLabel Typo="Typography.Subject" Style="margin-top: 0.25rem;">Authority Information Access URLs</FluentLabel>
-                @foreach (var aia in issuanceAiaUrls)
-                {
-                    <FluentStack Orientation="Orientation.Horizontal" Style="gap: 0.5rem; align-items: end;">
-                        <FluentTextField @bind-Value="aia.Value" Style="flex: 1;"
-                                         Placeholder="http://certs.example.com/ca.cer" />
-                        <FluentButton Appearance="Appearance.Outline" Size="ButtonSize.Small"
-                                      IconStart="@(new Icons.Regular.Size16.Delete())"
-                                      OnClick="@(() => issuanceAiaUrls.Remove(aia))" />
-                    </FluentStack>
-                }
-                <FluentButton Appearance="Appearance.Outline" Size="ButtonSize.Small"
-                              IconStart="@(new Icons.Regular.Size16.Add())"
-                              OnClick="@(() => issuanceAiaUrls.Add(new IssuanceUrlEntry()))">
-                    Add AIA URL
-                </FluentButton>
-            }
-
-            @* Subject Alternative Names *@
-            <FluentLabel Typo="Typography.Subject" Style="margin-top: 0.25rem;">Subject Alternative Names</FluentLabel>
-            @if (templateSanLists.Count > 0)
-            {
-                <FluentStack Orientation="Orientation.Horizontal" Style="gap: 0.5rem; margin-bottom: 0.5rem; flex-wrap: wrap;">
-                    @foreach (var sl in templateSanLists)
-                    {
-                        <FluentButton Appearance="Appearance.Outline" Size="ButtonSize.Small"
-                                      IconStart="@(new Icons.Regular.Size16.ListBar())"
-                                      OnClick="@(() => ShowSanListPickerDialog(sl))">
-                            @sl.Name
+                                      IconStart="@(new Icons.Regular.Size16.Add())"
+                                      OnClick="AddSanEntry">
+                            Add SAN
                         </FluentButton>
-                    }
-                </FluentStack>
-            }
-            @foreach (var san in issuanceSans)
-            {
-                <FluentStack Orientation="Orientation.Horizontal" Style="gap: 0.5rem; align-items: end;">
-                    <FluentSelect TOption="SanType"
-                                  Items="@sanTypeOptions"
-                                  OptionText="@(s => s.ToString())"
-                                  @bind-SelectedOption="san.Type"
-                                  Style="width: 120px;" />
-                    <FluentTextField @bind-Value="san.Value" Style="flex: 1;"
-                                     Placeholder="@GetSanPlaceholder(san.Type)" />
-                    <FluentButton Appearance="Appearance.Outline" Size="ButtonSize.Small"
-                                  IconStart="@(new Icons.Regular.Size16.Delete())"
-                                  OnClick="@(() => RemoveSanEntry(san))" />
-                </FluentStack>
-            }
-            <FluentButton Appearance="Appearance.Outline" Size="ButtonSize.Small"
-                          IconStart="@(new Icons.Regular.Size16.Add())"
-                          OnClick="AddSanEntry">
-                Add SAN
-            </FluentButton>
+                    </div>
+                </ChildContent>
+            </FluentAccordionItem>
 
-            @* Key Storage *@
-            @if (availableKeyStorageProviders.Count > 1)
-            {
-                <FluentSelect TOption="string"
-                              Items="@availableKeyStorageProviders"
-                              OptionText="@(s => s switch { "vault-transit" => "Vault Transit (remote signing)", "gcp-kms" => "GCP Cloud KMS (remote signing)", _ => "Local (PFX)" })"
-                              @bind-SelectedOption="issuanceKeyStorage"
-                              Label="Key Storage"
-                              Style="width: 100%;" />
-            }
-
-            @* PFX Password — only for local key storage *@
-            @if (issuanceKeyStorage == "local")
-            {
-                <FluentTextField @bind-Value="issuancePfxPassword"
-                                 Label="PFX Password (for private key storage)"
-                                 TextFieldType="TextFieldType.Password"
-                                 Style="width: 100%;" />
-            }
-            else
-            {
-                <div style="border: 1px solid var(--neutral-stroke-rest); border-radius: 4px; padding: 0.5rem; font-size: 0.8rem; color: var(--accent-fill-rest);">
-                    <FluentIcon Value="@(new Icons.Regular.Size16.ShieldKeyhole())" Style="vertical-align: middle;" />
-                    Private key will be generated and stored in Vault Transit — it never leaves the provider.
-                </div>
-            }
-
-            @* Template summary *@
-            @if (selectedTemplate != null)
-            {
-                <div style="border: 1px solid var(--neutral-stroke-rest); border-radius: 4px; padding: 0.5rem; font-size: 0.8rem; opacity: 0.7;">
-                    <strong>Template:</strong> @selectedTemplate.KeyAlgorithm
-                    @if (selectedTemplate.KeyAlgorithm == "ECDSA")
-                    {
-                        @($" ({selectedTemplate.EcdsaCurve ?? "P-384"})")
-                    }
-                    else
-                    {
-                        @($" {selectedTemplate.KeySize}-bit")
-                    }
-                    | @selectedTemplate.HashAlgorithm
-                    | @selectedTemplate.ValidityDays days
-                    @if (selectedTemplate.IsBasicConstraintsCa)
-                    {
-                        @(" | CA")
-                        @if (selectedTemplate.PathLengthConstraint.HasValue)
+            <FluentAccordionItem>
+                <HeadingTemplate>
+                    <span style="display: inline-flex; align-items: baseline; gap: 0.5rem; width: 100%;">
+                        <strong>Key &amp; Storage</strong>
+                        <span style="opacity: 0.6; font-size: 0.8rem; font-weight: normal;">@KeyStorageSummary()</span>
+                    </span>
+                </HeadingTemplate>
+                <ChildContent>
+                    <div style="display: flex; flex-direction: column; gap: 0.75rem; padding-top: 0.5rem;">
+                        @if (availableKeyStorageProviders.Count > 1)
                         {
-                            @($" (path: {selectedTemplate.PathLengthConstraint})")
+                            <FluentSelect TOption="string"
+                                          Items="@availableKeyStorageProviders"
+                                          OptionText="@(s => s switch { "vault-transit" => "Vault Transit (remote signing)", "gcp-kms" => "GCP Cloud KMS (remote signing)", _ => "Local (PFX)" })"
+                                          @bind-SelectedOption="issuanceKeyStorage"
+                                          Label="Key Storage"
+                                          Style="width: 100%;" />
                         }
-                    }
-                </div>
-            }
-        </div>
+                        @if (issuanceKeyStorage == "local")
+                        {
+                            <FluentTextField @bind-Value="issuancePfxPassword"
+                                             Label="PFX Password (for private key storage)"
+                                             TextFieldType="TextFieldType.Password"
+                                             Style="width: 100%;" />
+                            <FluentCheckbox @bind-Value="rememberIssuancePassword"
+                                            Label="Remember password for this session" />
+                        }
+                        else
+                        {
+                            <div style="border: 1px solid var(--neutral-stroke-rest); border-radius: 4px; padding: 0.5rem; font-size: 0.8rem; color: var(--accent-fill-rest);">
+                                <FluentIcon Value="@(new Icons.Regular.Size16.ShieldKeyhole())" Style="vertical-align: middle;" />
+                                Private key will be generated and stored in @KeyStorageSummary() — it never leaves the provider.
+                            </div>
+                        }
+                    </div>
+                </ChildContent>
+            </FluentAccordionItem>
+        </FluentAccordion>
     </FluentDialogBody>
     <FluentDialogFooter>
         <FluentButton Appearance="Appearance.Accent" OnClick="IssueCertificateAsync"
@@ -537,6 +581,18 @@
                     <strong>Type</strong>
                     <span>@selectedNode.CertificateRole</span>
                 </div>
+            }
+
+            @if (revokeImpacts is { Count: > 0 })
+            {
+                <FluentMessageBar Title="Downstream impact" Intent="MessageIntent.Error">
+                    <ul style="margin: 0.25rem 0; padding-left: 1.25rem;">
+                        @foreach (var item in revokeImpacts)
+                        {
+                            <li><strong>@item.Count</strong> @item.Label</li>
+                        }
+                    </ul>
+                </FluentMessageBar>
             }
 
             <FluentSelect TOption="RevokeReasonOption"
@@ -635,10 +691,7 @@ else if (treeNodes.Count > 0)
                                             CustomColor="@(IsError(root.Status) ? NodeColor(root.Status) : "#2d6a4f")" />
                                 <CertBadge Status="@root.Status" />
                             </span>
-                            @if (root.KeyStorage == "vault-transit")
-                            {
-                                <span slot="end" title="Vault Transit"><FluentIcon Value="@(new Icons.Regular.Size16.LockShield())" Color="Color.Custom" CustomColor="#1565c0" /></span>
-                            }
+                            <VaultTransitBadge Node="@root" />
                             @foreach (var intermediate in root.Children.Where(c => c.CertificateRole == "IntermediateCA" && IsNodeVisible(c)))
                             {
                                 <FluentTreeItem Text="@intermediate.Name"
@@ -652,10 +705,7 @@ else if (treeNodes.Count > 0)
                                                     CustomColor="@(IsError(intermediate.Status) ? NodeColor(intermediate.Status) : "#1976d2")" />
                                         <CertBadge Status="@intermediate.Status" />
                                     </span>
-                                    @if (intermediate.KeyStorage == "vault-transit")
-                                    {
-                                        <span slot="end" title="Vault Transit"><FluentIcon Value="@(new Icons.Regular.Size16.LockShield())" Color="Color.Custom" CustomColor="#1565c0" /></span>
-                                    }
+                                    <VaultTransitBadge Node="@intermediate" />
                                     @foreach (var subCa in intermediate.Children.Where(c => c.CertificateRole == "IntermediateCA" && IsNodeVisible(c)))
                                     {
                                         @RenderCaTreeItem(subCa)
@@ -673,10 +723,7 @@ else if (treeNodes.Count > 0)
                                                             Style="@(IsError(child.Status) ? "" : "opacity: 0.7;")" />
                                                 <CertBadge Status="@child.Status" />
                                             </span>
-                                            @if (child.KeyStorage == "vault-transit")
-                                            {
-                                                <span slot="end" title="Vault Transit"><FluentIcon Value="@(new Icons.Regular.Size16.LockShield())" Color="Color.Custom" CustomColor="#1565c0" /></span>
-                                            }
+                                            <VaultTransitBadge Node="@child" />
                                         </FluentTreeItem>
                                     }
                                     @foreach (var crl in intermediate.Children.Where(c => c.CertificateRole == "CRL" && IsNodeVisible(c)))
@@ -708,10 +755,7 @@ else if (treeNodes.Count > 0)
                                                     Style="@(IsError(issued.Status) ? "" : "opacity: 0.7;")" />
                                         <CertBadge Status="@issued.Status" />
                                     </span>
-                                    @if (issued.KeyStorage == "vault-transit")
-                                    {
-                                        <span slot="end" title="Vault Transit"><FluentIcon Value="@(new Icons.Regular.Size16.LockShield())" Color="Color.Custom" CustomColor="#1565c0" /></span>
-                                    }
+                                    <VaultTransitBadge Node="@issued" />
                                 </FluentTreeItem>
                             }
                             @foreach (var crl in root.Children.Where(c => c.CertificateRole == "CRL" && IsNodeVisible(c)))
@@ -1233,6 +1277,15 @@ else if (CommunityId > 0 && !showDropZone)
     </FluentCard>
 }
 
+<ImpactConfirmDialog Hidden="@impactDialogHidden"
+                     Title="@impactDialogTitle"
+                     Message="@impactDialogMessage"
+                     ConfirmLabel="@impactDialogConfirmLabel"
+                     Impacts="@impactDialogImpacts"
+                     IsBusy="@impactDialogBusy"
+                     OnConfirm="OnImpactDialogConfirmAsync"
+                     OnCancel="OnImpactDialogCancel" />
+
 @code {
     private RenderFragment RenderCaTreeItem(CertificateChainNodeViewModel caNode) => __builder =>
     {
@@ -1255,10 +1308,7 @@ else if (CommunityId > 0 && !showDropZone)
                 }
                 <CertBadge Status="@caNode.Status" />
             </span>
-            @if (caNode.KeyStorage == "vault-transit")
-            {
-                <span slot="end" title="Vault Transit"><FluentIcon Value="@(new Icons.Regular.Size16.LockShield())" Color="Color.Custom" CustomColor="#1565c0" /></span>
-            }
+            <VaultTransitBadge Node="@caNode" />
             @* Recursive: sub-CA nodes *@
             @foreach (var subCa in caNode.Children.Where(c => c.CertificateRole is "IntermediateCA" or "RootCA" && IsNodeVisible(c)))
             {
@@ -1278,10 +1328,7 @@ else if (CommunityId > 0 && !showDropZone)
                                     Style="@(IsError(issued.Status) ? "" : "opacity: 0.7;")" />
                         <CertBadge Status="@issued.Status" />
                     </span>
-                    @if (issued.KeyStorage == "vault-transit")
-                    {
-                        <span slot="end" title="Vault Transit"><FluentIcon Value="@(new Icons.Regular.Size16.LockShield())" Color="Color.Custom" CustomColor="#1565c0" /></span>
-                    }
+                    <VaultTransitBadge Node="@issued" />
                 </FluentTreeItem>
             }
             @* CRL nodes *@

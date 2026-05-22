@@ -211,3 +211,12 @@
         </FluentButton>
     </FluentDialogFooter>
 </FluentDialog>
+
+<Sigil.UI.Components.Shared.ImpactConfirmDialog Hidden="@impactDialogHidden"
+                                                Title="@impactDialogTitle"
+                                                Message="@impactDialogMessage"
+                                                ConfirmLabel="@impactDialogConfirmLabel"
+                                                Impacts="@impactDialogImpacts"
+                                                IsBusy="@impactDialogBusy"
+                                                OnConfirm="OnImpactDialogConfirmAsync"
+                                                OnCancel="OnImpactDialogCancel" />

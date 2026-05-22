@@ -466,6 +466,9 @@ public class CertificateManagementService
             KeyStorage = !string.IsNullOrEmpty(ca.StoreProviderHint)
                     ? ca.StoreProviderHint[..ca.StoreProviderHint.IndexOf(':')]
                 : ca.EncryptedPfxBytes != null ? "local"
+                : null,
+            KeyIdentifier = !string.IsNullOrEmpty(ca.StoreProviderHint) && ca.StoreProviderHint.Contains(':')
+                ? ca.StoreProviderHint[(ca.StoreProviderHint.IndexOf(':') + 1)..]
                 : null
         };
 
@@ -493,6 +496,9 @@ public class CertificateManagementService
                 KeyStorage = !string.IsNullOrEmpty(issued.StoreProviderHint)
                         ? issued.StoreProviderHint[..issued.StoreProviderHint.IndexOf(':')]
                     : issued.EncryptedPfxBytes != null ? "local"
+                    : null,
+                KeyIdentifier = !string.IsNullOrEmpty(issued.StoreProviderHint) && issued.StoreProviderHint.Contains(':')
+                    ? issued.StoreProviderHint[(issued.StoreProviderHint.IndexOf(':') + 1)..]
                     : null
             });
         }
@@ -541,5 +547,64 @@ public class CertificateManagementService
 
         if (DateTime.UtcNow > notAfter.AddDays(-30)) return CertificateStatus.Expiring;
         return CertificateStatus.Valid;
+    }
+
+    public async Task<List<ImpactItem>> GetCaDeletionImpactAsync(int caId, CancellationToken ct = default)
+    {
+        await using var db = await _dbFactory.CreateDbContextAsync(ct);
+        var ca = await db.CaCertificates
+            .Include(c => c.Children)
+            .Include(c => c.IssuedCertificates)
+            .Include(c => c.Crls).ThenInclude(c => c.Revocations)
+            .FirstOrDefaultAsync(c => c.Id == caId, ct);
+
+        var impacts = new List<ImpactItem>();
+        if (ca == null) return impacts;
+
+        if (ca.Children.Count > 0)
+            impacts.Add(new ImpactItem(ca.Children.Count, "child CA(s)", ImpactSeverity.Critical));
+        if (ca.IssuedCertificates.Count > 0)
+            impacts.Add(new ImpactItem(ca.IssuedCertificates.Count, "issued certificate(s)", ImpactSeverity.Critical));
+        var nonArchivedCrls = ca.Crls.Count(c => !c.IsArchived);
+        if (nonArchivedCrls > 0)
+            impacts.Add(new ImpactItem(nonArchivedCrls, "CRL(s)", ImpactSeverity.Warning));
+        var revocations = ca.Crls.Sum(c => c.Revocations.Count);
+        if (revocations > 0)
+            impacts.Add(new ImpactItem(revocations, "revocation record(s)", ImpactSeverity.Info));
+
+        return impacts;
+    }
+
+    public async Task<List<ImpactItem>> GetIssuedDeletionImpactAsync(int issuedId, CancellationToken ct = default)
+    {
+        await using var db = await _dbFactory.CreateDbContextAsync(ct);
+        var issued = await db.IssuedCertificates.FindAsync([issuedId], ct);
+        var impacts = new List<ImpactItem>();
+        if (issued == null) return impacts;
+
+        if (issued.IsRevoked)
+            impacts.Add(new ImpactItem(1, "revocation record will remain on CRL", ImpactSeverity.Info));
+
+        return impacts;
+    }
+
+    public async Task<List<ImpactItem>> GetCaRevokeImpactAsync(int caId, CancellationToken ct = default)
+    {
+        await using var db = await _dbFactory.CreateDbContextAsync(ct);
+        var ca = await db.CaCertificates
+            .Include(c => c.Children)
+            .Include(c => c.IssuedCertificates)
+            .FirstOrDefaultAsync(c => c.Id == caId, ct);
+
+        var impacts = new List<ImpactItem>();
+        if (ca == null) return impacts;
+
+        var activeIssued = ca.IssuedCertificates.Count(i => !i.IsRevoked);
+        if (activeIssued > 0)
+            impacts.Add(new ImpactItem(activeIssued, "issued certificate(s) will become untrusted", ImpactSeverity.Critical));
+        if (ca.Children.Count > 0)
+            impacts.Add(new ImpactItem(ca.Children.Count, "child CA(s) will become untrusted", ImpactSeverity.Critical));
+
+        return impacts;
     }
 }

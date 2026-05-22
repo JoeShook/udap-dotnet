@@ -75,6 +75,16 @@ public class CertificateIssuanceService
         if (string.IsNullOrWhiteSpace(request.SubjectDn))
             return CertificateIssuanceResult.Failure("Subject DN is required.");
 
+        // Validate AIA URLs and SAN URIs up front — they must be absolute URIs
+        var badAia = request.AiaUrls.FirstOrDefault(u => !Uri.TryCreate(u, UriKind.Absolute, out _));
+        if (badAia != null)
+            return CertificateIssuanceResult.Failure($"AIA URL is not a valid absolute URI: '{badAia}'. Use http:// or https://.");
+
+        var badSanUri = request.SubjectAltNames
+            .FirstOrDefault(s => s.Type == SanType.Uri && !Uri.TryCreate(s.Value, UriKind.Absolute, out _));
+        if (badSanUri != null)
+            return CertificateIssuanceResult.Failure($"SAN URI is not a valid absolute URI: '{badSanUri.Value}'. Use http:// or https:// (or a custom scheme like spiffe://).");
+
         // Determine effective signing mode for this request
         bool useRemoteSigning = request.SigningProviderOverride != null
             ? request.SigningProviderOverride != "local"
@@ -647,6 +657,13 @@ public class CertificateIssuanceService
                 }
             }
         }
+        catch (Exception ex) when (ex.Message.Contains("signing key not found", StringComparison.OrdinalIgnoreCase))
+        {
+            return CertificateIssuanceResult.Failure(
+                "The issuing CA's signing key is missing from Vault Transit. " +
+                "This usually means Vault was restarted (dev mode stores keys in memory and wipes them on restart). " +
+                "Re-create the issuing CA, or run Vault with persistent storage.");
+        }
         catch (Exception ex)
         {
             return CertificateIssuanceResult.Failure($"Remote certificate generation failed: {ex.Message}");
@@ -797,6 +814,13 @@ public class CertificateIssuanceService
                     };
                 }
             }
+        }
+        catch (Exception ex) when (ex.Message.Contains("signing key not found", StringComparison.OrdinalIgnoreCase))
+        {
+            return CertificateIssuanceResult.Failure(
+                "The new certificate's signing key is missing from Vault Transit. " +
+                "This usually means Vault was restarted (dev mode stores keys in memory and wipes them on restart). " +
+                "Re-create the certificate, or run Vault with persistent storage.");
         }
         catch (Exception ex)
         {

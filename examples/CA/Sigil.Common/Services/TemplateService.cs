@@ -12,6 +12,7 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
 using Sigil.Common.Data;
 using Sigil.Common.Data.Entities;
+using Sigil.Common.ViewModels;
 
 namespace Sigil.Common.Services;
 
@@ -99,5 +100,17 @@ public class TemplateService
             db.CertificateTemplates.Remove(entity);
             await db.SaveChangesAsync(ct);
         }
+    }
+
+    public async Task<List<ImpactItem>> GetDeletionImpactAsync(int templateId, CancellationToken ct = default)
+    {
+        await using var db = await _dbFactory.CreateDbContextAsync(ct);
+        var impacts = new List<ImpactItem>();
+
+        var issuedCount = await db.IssuedCertificates.CountAsync(i => i.TemplateId == templateId, ct);
+        if (issuedCount > 0)
+            impacts.Add(new ImpactItem(issuedCount, "issued certificate(s) reference this template", ImpactSeverity.Info));
+
+        return impacts;
     }
 }
