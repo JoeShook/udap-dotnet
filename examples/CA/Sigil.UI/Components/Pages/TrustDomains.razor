@@ -43,7 +43,7 @@
         <PropertyColumn Property="@(c => c.RootCaCount)" Title="Root CAs" />
         <PropertyColumn Property="@(c => c.TotalCertCount)" Title="Total Certs" />
         <TemplateColumn Title="Actions">
-            <FluentStack Orientation="Orientation.Horizontal" Style="gap: 0.25rem;">
+            <FluentStack Orientation="Orientation.Horizontal" Wrap="true" Style="gap: 0.25rem;">
                 <FluentButton Size="ButtonSize.Small"
                               Appearance="Appearance.Outline"
                               IconStart="@(new Icons.Regular.Size16.Certificate())"

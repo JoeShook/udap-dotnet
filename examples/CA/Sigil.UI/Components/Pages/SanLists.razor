@@ -32,7 +32,7 @@
             @context.Templates.Count
         </TemplateColumn>
         <TemplateColumn Title="Actions">
-            <FluentStack Orientation="Orientation.Horizontal" Style="gap: 0.25rem;">
+            <FluentStack Orientation="Orientation.Horizontal" Wrap="true" Style="gap: 0.25rem;">
                 <FluentButton Size="ButtonSize.Small" Appearance="Appearance.Outline"
                               IconStart="@(new Icons.Regular.Size16.Edit())"
                               OnClick="@(() => ShowEditDialog(context))">
