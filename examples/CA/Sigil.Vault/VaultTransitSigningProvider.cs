@@ -43,6 +43,13 @@ public sealed class VaultTransitSigningProvider : ISigningProvider
         string keyAlgorithm, int keySize, string? ecdsaCurve = null,
         CancellationToken ct = default)
     {
+        if (keyAlgorithm.Equals("Ed25519", StringComparison.OrdinalIgnoreCase))
+        {
+            throw new NotSupportedException(
+                "Ed25519 via Vault Transit is not wired in Phase A. Use the local signing provider for DID/VC keys, " +
+                "or wait for Phase C. Vault Transit does support Ed25519 in principle (type=ed25519).");
+        }
+
         var vaultKeyType = MapToVaultKeyType(keyAlgorithm, keySize, ecdsaCurve);
         var keyName = $"sigil-{Guid.NewGuid():N}";
 
@@ -58,6 +65,14 @@ public sealed class VaultTransitSigningProvider : ISigningProvider
         _logger.LogInformation("Created Vault Transit key '{Name}' (type: {Type})", keyName, vaultKeyType);
 
         return new SigningKeyReference("vault-transit", keyName, keyAlgorithm, keySize);
+    }
+
+    public Task<RawPublicKey> GetRawPublicKeyAsync(
+        SigningKeyReference keyRef, CancellationToken ct = default)
+    {
+        throw new NotSupportedException(
+            "Raw public key extraction from Vault Transit is not wired in Phase A. " +
+            "DID/VC code currently uses the local signing provider only.");
     }
 
     public async Task<AsymmetricAlgorithm> GetPublicKeyAsync(

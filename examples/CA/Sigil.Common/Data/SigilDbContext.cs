@@ -27,6 +27,11 @@ public class SigilDbContext : DbContext
     public DbSet<CertificateRevocation> CertificateRevocations => Set<CertificateRevocation>();
     public DbSet<CertificateTemplate> CertificateTemplates => Set<CertificateTemplate>();
     public DbSet<SanList> SanLists => Set<SanList>();
+    public DbSet<DidTemplate> DidTemplates => Set<DidTemplate>();
+    public DbSet<DidDocument> DidDocuments => Set<DidDocument>();
+    public DbSet<VerificationMethod> VerificationMethods => Set<VerificationMethod>();
+    public DbSet<CredentialSchema> CredentialSchemas => Set<CredentialSchema>();
+    public DbSet<IssuedCredential> IssuedCredentials => Set<IssuedCredential>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -160,5 +165,93 @@ public class SigilDbContext : DbContext
             entity.HasIndex(e => e.Name).IsUnique();
         });
 
+        // DidTemplate
+        modelBuilder.Entity<DidTemplate>(entity =>
+        {
+            entity.HasKey(e => e.Id);
+            entity.Property(e => e.Name).HasMaxLength(200).IsRequired();
+            entity.HasIndex(e => e.Name).IsUnique();
+            entity.Property(e => e.Method).HasMaxLength(50).IsRequired();
+            entity.Property(e => e.KeyAlgorithm).HasMaxLength(20).IsRequired();
+            entity.Property(e => e.EcdsaCurve).HasMaxLength(20);
+            entity.Property(e => e.DefaultPurposes).HasMaxLength(200).IsRequired();
+        });
+
+        // DidDocument
+        modelBuilder.Entity<DidDocument>(entity =>
+        {
+            entity.HasKey(e => e.Id);
+            entity.Property(e => e.Did).HasMaxLength(500).IsRequired();
+            entity.HasIndex(e => e.Did).IsUnique();
+            entity.Property(e => e.Method).HasMaxLength(50).IsRequired();
+            entity.HasIndex(e => e.TrustDomainId);
+
+            entity.HasOne(e => e.TrustDomain)
+                .WithMany(td => td.DidDocuments)
+                .HasForeignKey(e => e.TrustDomainId)
+                .OnDelete(DeleteBehavior.Cascade);
+
+            entity.HasOne(e => e.Template)
+                .WithMany(t => t.DidDocuments)
+                .HasForeignKey(e => e.DidTemplateId)
+                .OnDelete(DeleteBehavior.SetNull);
+        });
+
+        // VerificationMethod
+        modelBuilder.Entity<VerificationMethod>(entity =>
+        {
+            entity.HasKey(e => e.Id);
+            entity.Property(e => e.MethodId).HasMaxLength(500).IsRequired();
+            entity.HasIndex(e => e.MethodId);
+            entity.Property(e => e.KeyAlgorithm).HasMaxLength(20).IsRequired();
+            entity.Property(e => e.Provider).HasMaxLength(50).IsRequired();
+            entity.Property(e => e.KeyIdentifier).HasMaxLength(200).IsRequired();
+            entity.Property(e => e.PublicKeyMultibase).HasMaxLength(500).IsRequired();
+            entity.Property(e => e.Purposes).HasMaxLength(200).IsRequired();
+
+            entity.HasOne(e => e.DidDocument)
+                .WithMany(d => d.VerificationMethods)
+                .HasForeignKey(e => e.DidDocumentId)
+                .OnDelete(DeleteBehavior.Cascade);
+        });
+
+        // CredentialSchema
+        modelBuilder.Entity<CredentialSchema>(entity =>
+        {
+            entity.HasKey(e => e.Id);
+            entity.Property(e => e.Name).HasMaxLength(200).IsRequired();
+            entity.HasIndex(e => e.Name).IsUnique();
+            entity.Property(e => e.TypeUri).HasMaxLength(500);
+            entity.Property(e => e.Format).HasMaxLength(50).IsRequired();
+            entity.Property(e => e.ClaimsSchemaJson).IsRequired();
+        });
+
+        // IssuedCredential
+        modelBuilder.Entity<IssuedCredential>(entity =>
+        {
+            entity.HasKey(e => e.Id);
+            entity.Property(e => e.CredentialId).HasMaxLength(200).IsRequired();
+            entity.HasIndex(e => e.CredentialId).IsUnique();
+            entity.Property(e => e.SubjectDid).HasMaxLength(500).IsRequired();
+            entity.Property(e => e.Format).HasMaxLength(50).IsRequired();
+            entity.Property(e => e.SignedCredential).IsRequired();
+            entity.Property(e => e.ClaimsJson).IsRequired();
+            entity.HasIndex(e => e.IssuerDidDocumentId);
+
+            entity.HasOne(e => e.TrustDomain)
+                .WithMany(td => td.IssuedCredentials)
+                .HasForeignKey(e => e.TrustDomainId)
+                .OnDelete(DeleteBehavior.Cascade);
+
+            entity.HasOne(e => e.Schema)
+                .WithMany(s => s.IssuedCredentials)
+                .HasForeignKey(e => e.CredentialSchemaId)
+                .OnDelete(DeleteBehavior.Restrict);
+
+            entity.HasOne(e => e.IssuerDid)
+                .WithMany(d => d.IssuedCredentials)
+                .HasForeignKey(e => e.IssuerDidDocumentId)
+                .OnDelete(DeleteBehavior.Restrict);
+        });
     }
 }
