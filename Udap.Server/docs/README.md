@@ -14,6 +14,7 @@ This package adds UDAP Dynamic Client Registration (DCR) and metadata capabiliti
 - Dynamic Client Registration (create, update, cancel)
 - Multi-community trust anchor support
 - Authorization Extension Object (AEO) enforcement via `IUdapAuthorizationExtensionValidator`
+- Optional `udap_community` access-token claim (see [Community Claim](#community-claim))
 - Tiered OAuth support
 
 ### Profile-Specific Validation
@@ -159,6 +160,7 @@ When a client registers via UDAP Dynamic Client Registration, the server creates
 | Client Secret | `ClientSecret` | `X509CertificateBase64` (`UDAP_X509_CERTIFICATE`) | Base64 DER-encoded public certificate from the client's x5c chain — stored for admin visibility (expiration monitoring, revocation checking) | Certificate `NotAfter` |
 | Client Property | `ClientProperty` | `org` | Organization identifier from the registration endpoint query parameters | — |
 | Client Property | `ClientProperty` | `data_holder` | Data holder identifier from the registration endpoint query parameters | — |
+| Client Property | `ClientProperty` | `community` | The community name (URI) the client registered under — written only when `ServerSettings.IncludeCommunityClaim` is enabled (see [Community Claim](#community-claim)) | — |
 
 Standard Duende `Client` fields are also populated: `ClientId` (generated), `ClientName`, `AllowedGrantTypes`, `AllowedScopes`, `RedirectUris`, `LogoUri`, `RequirePkce`, `RequireDPoP`, `Created`.
 
@@ -180,6 +182,46 @@ Rollover only occurs if the new certificate is currently valid (`NotBefore < now
 - The client's **private key** — only the public certificate is stored
 - The full **certificate chain** — intermediates and anchors are managed separately in the UDAP trust store
 - **Certificate thumbprint** — not stored as a separate field (can be derived from the stored certificate)
+
+## Community Claim
+
+UDAP clients register under a specific trust community, but by default nothing surfaces that
+community to a resource server. Enabling the `IncludeCommunityClaim` setting on `ServerSettings`
+turns this on, with two effects:
+
+1. **At registration** — the community **name** (URI) is written to the client's `community`
+   property (see the [storage table](#what-is-stored) above) for admin visibility.
+2. **At token time** — a `udap_community` claim is added to issued access tokens for UDAP
+   clients, on both the `client_credentials` and `authorization_code` flows.
+
+The claim value is resolved from the client's stored community **id** at token time rather than
+from the registration-time property, so if a community is later renamed the claim automatically
+reflects the new name without re-registering the client.
+
+```csharp
+builder.Services.AddUdapServer(
+    options =>
+    {
+        var udapServerOptions = builder.Configuration.GetOption<ServerSettings>("ServerSettings");
+        options.DefaultSystemScopes = udapServerOptions.DefaultSystemScopes;
+        options.DefaultUserScopes = udapServerOptions.DefaultUserScopes;
+        options.IncludeCommunityClaim = udapServerOptions.IncludeCommunityClaim; // default false
+    },
+    /* ... */);
+```
+
+Or via configuration:
+
+```json
+{
+  "ServerSettings": {
+    "IncludeCommunityClaim": true
+  }
+}
+```
+
+The setting defaults to `false`, so existing tokens are unchanged unless it is explicitly enabled.
+The emitted claim is unprefixed (`udap_community`, not `client_udap_community`).
 
 ## Database Configuration
 
