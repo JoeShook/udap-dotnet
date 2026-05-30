@@ -158,15 +158,68 @@ When a client registers via UDAP Dynamic Client Registration, the server creates
 | Client Secret | `ClientSecret` | `UDAP_SAN_URI_ISS_NAME` | The URI Subject Alternative Name (SAN) from the client's X.509 certificate — used as the issuer identity | Certificate `NotAfter` |
 | Client Secret | `ClientSecret` | `UDAP_COMMUNITY` | The community ID (integer as string) the client registered under | Certificate `NotAfter` |
 | Client Secret | `ClientSecret` | `X509CertificateBase64` (`UDAP_X509_CERTIFICATE`) | Base64 DER-encoded public certificate from the client's x5c chain — stored for admin visibility (expiration monitoring, revocation checking) | Certificate `NotAfter` |
-| Client Property | `ClientProperty` | `org` | Organization identifier from the registration endpoint query parameters | — |
-| Client Property | `ClientProperty` | `data_holder` | Data holder identifier from the registration endpoint query parameters | — |
+| Client Property | `ClientProperty` | `org` | Organization identifier — the query parameter **name** on the registration endpoint (see [Organization / Data Holder scoping](#organization--data-holder-scoping)) | — |
+| Client Property | `ClientProperty` | `data_holder` | Data holder identifier — the query parameter **value** on the registration endpoint (see [Organization / Data Holder scoping](#organization--data-holder-scoping)) | — |
 | Client Property | `ClientProperty` | `community` | The community name (URI) the client registered under — written only when `ServerSettings.IncludeCommunityClaim` is enabled (see [Community Claim](#community-claim)) | — |
 
 Standard Duende `Client` fields are also populated: `ClientId` (generated), `ClientName`, `AllowedGrantTypes`, `AllowedScopes`, `RedirectUris`, `LogoUri`, `RequirePkce`, `RequireDPoP`, `Created`.
 
 ### Client identity matching
 
-A client is uniquely identified by the combination of four values: SAN URI (`UDAP_SAN_URI_ISS_NAME`), community (`UDAP_COMMUNITY`), organization (`org`), and data holder (`data_holder`). When a registration request matches an existing client on all four, the server performs an **upsert** — updating scopes, grant types, redirect URIs, and the stored certificate rather than creating a new client.
+A client is uniquely identified by the combination of four values: SAN URI (`UDAP_SAN_URI_ISS_NAME`), community (`UDAP_COMMUNITY`), organization (`org`), and data holder (`data_holder`). When a registration request matches an existing client on all four, the server performs an **upsert** — updating scopes, grant types, redirect URIs, and the stored certificate rather than creating a new client. When any of the four differ, a **new** client (new `client_id`) is created.
+
+### Organization / Data Holder scoping
+
+The `org` and `data_holder` properties are how a deployer controls whether multiple
+registrations collapse into one `client_id` or stay separate. They come from a single
+query parameter on the registration endpoint, using an unusual encoding:
+
+> The query parameter **name** becomes `org`; its **value** becomes `data_holder`.
+
+```
+https://as.example.com/connect/register?SurescriptsDirectory=BobsClinic
+                                         └──── org ────┘ └ data_holder ┘
+   → org = "SurescriptsDirectory", data_holder = "BobsClinic"
+```
+
+**Where the value comes from.** The server reads this query string first from the
+registration software statement's `aud` claim, then falls back to the actual POST URL
+(`UdapDynamicClientRegistrationValidator.ResolveOrgAndDataHolder`). Because a conformant
+client sets `aud` equal to the `registration_endpoint` it discovered in your metadata,
+**whatever query string you publish in `registration_endpoint` is what gets stored** as
+`org`/`data_holder`.
+
+**Default.** If no query parameter is present, both `org` and `data_holder` default to
+`empty` (`DefaultOrgMap`), so all such clients share the same org/data-holder pair.
+
+**Scope.** This query parameter is read **only** at `/connect/register`. It is ignored at
+`/connect/token` and `/connect/authorize`, where the client is identified by its issued
+`client_id` and authenticated by the signed `private_key_jwt` client assertion.
+
+#### Choosing one `client_id` vs. many
+
+Because `org` + `data_holder` are part of the [identity 4-tuple](#client-identity-matching),
+they are the lever for sharing or splitting registrations across endpoints (e.g. a client
+that discovers two FHIR base URLs served by the **same** authorization server and community):
+
+- **One `client_id`, one set of scopes (per org name).** If a client should resolve to a
+  single registration across endpoints that belong to the same organization, publish the
+  **identical** `org` (=`data_holder`) query string in the `registration_endpoint` of every
+  one of those endpoints' `.well-known/udap` documents (or omit it everywhere, so all
+  default to `empty`). The four values then match, the server upserts, and the original
+  `client_id` is returned — so the client ends up with **one** registration and **one**
+  `AllowedScopes` set keyed to that org name, no matter how many endpoints it discovered.
+
+- **Different scopes → register again under a different key.** If an endpoint needs a
+  distinct scope set (or any distinct registration), publish a **different** `org=data_holder`
+  query string for it. The differing key produces a separate `client_id` with its own
+  `AllowedScopes`, independent of the first.
+
+In short: **same `org=data_holder` key ⇒ one shared `client_id` and one scope set; a
+different key ⇒ a separate `client_id` you can scope independently.** If clients are
+registering more times than you expect, diff the `registration_endpoint` query strings
+across your metadata documents — a mismatch (including "present at one endpoint, absent at
+another") is the usual cause.
 
 ### Certificate rollover
 
