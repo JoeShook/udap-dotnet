@@ -2,9 +2,9 @@
 
 ![UDAP logo](https://avatars.githubusercontent.com/u/77421324?s=48&v=4)
 
-## 📦 Nuget Package: [Udap.Server](https://www.nuget.org/packages/Udap.Server)
+## 📦 NuGet Package: [Udap.Server](https://www.nuget.org/packages/Udap.Server)
 
-This package adds UDAP Dynamic Client Registration (DCR) and metadata capabilities to an authorization server built on Duende IdentityServer. It provides the `.well-known/udap` metadata endpoint and the `/connect/register` DCR endpoint as extensions to the IdentityServer pipeline.
+This package adds UDAP Dynamic Client Registration (DCR) and metadata capabilities to authorization servers built on Duende IdentityServer. It provides the `.well-known/udap` metadata endpoint and the `/connect/register` DCR endpoint as extensions to the IdentityServer pipeline.
 
 > **Note:** Duende IdentityServer requires a [license](https://duendesoftware.com/products/identityserver) for production use above $1M annual revenue.
 
@@ -26,7 +26,7 @@ For SSRAA or TEFCA community-specific validation rules, add the corresponding pa
 
 ## Full Example
 
-Below is a full example. See also the [Udap.Auth.Server](../../examples/Udap.Auth.Server/) example project.
+The example below shows a typical setup. See also the [Udap.Auth.Server](../../examples/Udap.Auth.Server/) example project.
 
 ```csharp
 var builder = WebApplication.CreateBuilder(args);
@@ -91,7 +91,7 @@ Two profile packages are available:
 
 ### Registering community validators
 
-Add the profile packages and map communities to their validation pipelines:
+Install the profile packages and map communities to their validation pipelines:
 
 ```csharp
 // SSRAA rules for standard UDAP communities
@@ -112,7 +112,7 @@ builder.Services.AddUdapTefcaValidation(options =>
 
 1. A client requests a token with authorization extensions (e.g., `hl7-b2b` with `purpose_of_use`)
 2. `DefaultUdapAuthorizationExtensionValidator` resolves the client's community from the registration store
-3. Iterates through registered `ICommunityTokenValidator` implementations until one matches via `AppliesToCommunity()`
+3. The validator iterates through registered `ICommunityTokenValidator` implementations until one matches via `AppliesToCommunity()`
 4. The matching validator returns `CommunityValidationRules` specifying required extensions, allowed POU codes, and max POU count
 5. The framework enforces those rules, then calls the validator's `ValidateAsync()` for any domain-specific checks
 
@@ -148,32 +148,32 @@ See the [`Udap.Ssraa.Server`](../../Udap.Ssraa.Server/docs/README.md) and [`Udap
 
 ## Client Storage During Registration
 
-When a client registers via UDAP Dynamic Client Registration, the server creates a Duende IdentityServer `Client` entity with UDAP-specific secrets and properties. Understanding what is stored and when it is updated is important for admin tooling and certificate lifecycle management.
+When a client registers via UDAP Dynamic Client Registration, the server creates a Duende IdentityServer `Client` entity with UDAP-specific secrets and properties. Knowing what is stored (and when it is updated) helps with admin tooling and certificate lifecycle management.
 
 ### What is stored
 
 | Storage Type | Duende Type | Key / Type Field | Value | Expiration |
 |-------------|-------------|-----------------|-------|-----------|
-| Client Secret | `ClientSecret` | `UDAP_SAN_URI_ISS_NAME` | The URI Subject Alternative Name (SAN) from the client's X.509 certificate — used as the issuer identity | Certificate `NotAfter` |
+| Client Secret | `ClientSecret` | `UDAP_SAN_URI_ISS_NAME` | The URI Subject Alternative Name (SAN) from the client's X.509 certificate, used as the issuer identity | Certificate `NotAfter` |
 | Client Secret | `ClientSecret` | `UDAP_COMMUNITY` | The community ID (integer as string) the client registered under | Certificate `NotAfter` |
-| Client Secret | `ClientSecret` | `X509CertificateBase64` (`UDAP_X509_CERTIFICATE`) | Base64 DER-encoded public certificate from the client's x5c chain — stored for admin visibility (expiration monitoring, revocation checking) | Certificate `NotAfter` |
-| Client Property | `ClientProperty` | `org` | Organization identifier from the registration endpoint query parameters | — |
-| Client Property | `ClientProperty` | `data_holder` | Data holder identifier from the registration endpoint query parameters | — |
+| Client Secret | `ClientSecret` | `X509CertificateBase64` (`UDAP_X509_CERTIFICATE`) | Base64 DER-encoded public certificate from the client's x5c chain, stored for admin visibility (expiration monitoring and revocation checks) | Certificate `NotAfter` |
+| Client Property | `ClientProperty` | `org` | Organization identifier from the registration endpoint query string parameters | — |
+| Client Property | `ClientProperty` | `data_holder` | Data holder identifier from the registration endpoint query string parameters | — |
 
-Standard Duende `Client` fields are also populated: `ClientId` (generated), `ClientName`, `AllowedGrantTypes`, `AllowedScopes`, `RedirectUris`, `LogoUri`, `RequirePkce`, `RequireDPoP`, `Created`.
+Other standard Duende `Client` fields are also populated: `ClientId` (generated), `ClientName`, `AllowedGrantTypes`, `AllowedScopes`, `RedirectUris`, `LogoUri`, `RequirePkce`, `RequireDPoP`, and `Created`.
 
 ### Client identity matching
 
-A client is uniquely identified by the combination of four values: SAN URI (`UDAP_SAN_URI_ISS_NAME`), community (`UDAP_COMMUNITY`), organization (`org`), and data holder (`data_holder`). When a registration request matches an existing client on all four, the server performs an **upsert** — updating scopes, grant types, redirect URIs, and the stored certificate rather than creating a new client.
+A client is uniquely identified by the combination of four values: SAN URI (`UDAP_SAN_URI_ISS_NAME`), community (`UDAP_COMMUNITY`), organization (`org`), and data holder (`data_holder`). When a registration request matches an existing client on all four values, the server performs an **upsert**: it updates scopes, grant types, redirect URIs, and the stored certificate instead of creating a new client.
 
 ### Certificate rollover
 
-UDAP allows certificate rotation without re-registration. When a client authenticates at the token endpoint with a new certificate (different from the one used at registration), the `RolloverClientSecrets` method is invoked by `UdapJwtSecretValidator`. This updates:
+UDAP allows certificate rotation without re-registration. When a client authenticates at the token endpoint with a new certificate (different from the one used at registration), `UdapJwtSecretValidator` invokes `RolloverClientSecrets`. This updates:
 
 - The `Expiration` on the `UDAP_SAN_URI_ISS_NAME` and `UDAP_COMMUNITY` secrets to match the new certificate's `NotAfter`
 - The `Value` and `Expiration` on the `X509CertificateBase64` secret to reflect the new certificate
 
-Rollover only occurs if the new certificate is currently valid (`NotBefore < now < NotAfter`). The existing PKI chain validation against community trust anchors is unchanged — rollover is purely a metadata update.
+Rollover only occurs if the new certificate is currently valid (`NotBefore < now < NotAfter`). Existing PKI chain validation against community trust anchors is unchanged; rollover is purely a metadata update.
 
 ### What is NOT stored
 
@@ -188,7 +188,7 @@ EF Core migration projects are available for both database providers:
 - [UdapDb.SqlServer](../../migrations/UdapDb.SqlServer/) — SQL Server migrations
 - [UdapDb.Postgres](../../migrations/UdapDb.Postgres/) — PostgreSQL migrations
 
-These projects create all UDAP and Duende IdentityServer tables and seed data needed for running local tests. See `SeedData.cs` for details.
+These projects create all UDAP and Duende IdentityServer tables and seed data required to run local tests. See `SeedData.cs` for details.
 
 ## Examples
 
