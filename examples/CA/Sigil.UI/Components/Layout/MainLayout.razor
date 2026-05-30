@@ -126,11 +126,17 @@
     <div style="display: flex; height: calc(100vh - 50px); overflow: hidden;">
         <FluentNavMenu Width="220" Collapsible="true" Title="Navigation">
             <FluentNavLink Href="/" Match="NavLinkMatch.All" Icon="@(new Icons.Regular.Size20.Home())">Dashboard</FluentNavLink>
-            <FluentNavLink Href="/trust-domains" Icon="@(new Icons.Regular.Size20.Organization())">Trust Domains</FluentNavLink>
+            <FluentNavLink Href="/trust-domains" Icon="@(new Icons.Regular.Size20.Organization())" Tooltip="X509 Trust Domains">Trust Domains</FluentNavLink>
             <FluentNavLink Href="/explorer" Icon="@(new Icons.Regular.Size20.Certificate())">Certificate Explorer</FluentNavLink>
             <FluentNavGroup Title="Templates" Icon="@(new Icons.Regular.Size20.DocumentBulletList())">
                 <FluentNavLink Href="/templates" Icon="@(new Icons.Regular.Size20.DocumentBulletList())">X509 Templates</FluentNavLink>
                 <FluentNavLink Href="/san-lists" Icon="@(new Icons.Regular.Size20.TextBulletListTree())">SAN Lists</FluentNavLink>
+            </FluentNavGroup>
+            <FluentNavGroup Title="DID &amp; VC" Tooltip="Decentralized Identity &amp; Verifiable Credentials" Icon="@(new Icons.Regular.Size20.Key())">
+                <FluentNavLink Href="/dids" Icon="@(new Icons.Regular.Size20.PersonAccounts())">DIDs</FluentNavLink>
+                <FluentNavLink Href="/did-templates" Icon="@(new Icons.Regular.Size20.DocumentBulletList())">DID Templates</FluentNavLink>
+                <FluentNavLink Href="/credentials" Icon="@(new Icons.Regular.Size20.Certificate())">Credentials</FluentNavLink>
+                <FluentNavLink Href="/credential-schemas" Icon="@(new Icons.Regular.Size20.DocumentBulletList())">Credential Schemas</FluentNavLink>
             </FluentNavGroup>
             <FluentNavLink Href="/jobs" Icon="@(new Icons.Regular.Size20.Timer())">Jobs</FluentNavLink>
             <FluentNavLink Href="/import" Icon="@(new Icons.Regular.Size20.ArrowImport())">Import</FluentNavLink>
@@ -211,6 +217,10 @@
             }
             catch { }
         }
+
+        // Fluent's column resize is unreliable when GridTemplateColumns uses minmax/fr/auto;
+        // freeze grids to all-pixel widths so handles work from first render.
+        try { await JS.InvokeVoidAsync("sigilFreezeResizableGrids"); } catch { }
     }
 
     private async Task ToggleTimeZone()

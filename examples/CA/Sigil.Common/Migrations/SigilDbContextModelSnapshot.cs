@@ -274,6 +274,52 @@ namespace Sigil.Common.Migrations
                     b.ToTable("CertificateTemplates", "sigil");
                 });
 
+            modelBuilder.Entity("Sigil.Common.Data.Entities.CredentialSchema", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
+
+                    b.Property<string>("ClaimsSchemaJson")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<int?>("DefaultValidityDays")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("Description")
+                        .HasColumnType("text");
+
+                    b.Property<string>("Format")
+                        .IsRequired()
+                        .HasMaxLength(50)
+                        .HasColumnType("character varying(50)");
+
+                    b.Property<bool>("IsPreset")
+                        .HasColumnType("boolean");
+
+                    b.Property<string>("Name")
+                        .IsRequired()
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)");
+
+                    b.Property<string>("TypeUri")
+                        .HasMaxLength(500)
+                        .HasColumnType("character varying(500)");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("Name")
+                        .IsUnique();
+
+                    b.ToTable("CredentialSchemas", "sigil");
+                });
+
             modelBuilder.Entity("Sigil.Common.Data.Entities.Crl", b =>
                 {
                     b.Property<int>("Id")
@@ -324,6 +370,100 @@ namespace Sigil.Common.Migrations
                     b.HasIndex("CaCertificateId");
 
                     b.ToTable("Crls", "sigil");
+                });
+
+            modelBuilder.Entity("Sigil.Common.Data.Entities.DidDocument", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<bool>("Deactivated")
+                        .HasColumnType("boolean");
+
+                    b.Property<DateTime?>("DeactivatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("Did")
+                        .IsRequired()
+                        .HasMaxLength(500)
+                        .HasColumnType("character varying(500)");
+
+                    b.Property<int?>("DidTemplateId")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("Method")
+                        .IsRequired()
+                        .HasMaxLength(50)
+                        .HasColumnType("character varying(50)");
+
+                    b.Property<int>("TrustDomainId")
+                        .HasColumnType("integer");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("Did")
+                        .IsUnique();
+
+                    b.HasIndex("DidTemplateId");
+
+                    b.HasIndex("TrustDomainId");
+
+                    b.ToTable("DidDocuments", "sigil");
+                });
+
+            modelBuilder.Entity("Sigil.Common.Data.Entities.DidTemplate", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("DefaultPurposes")
+                        .IsRequired()
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)");
+
+                    b.Property<string>("Description")
+                        .HasColumnType("text");
+
+                    b.Property<string>("EcdsaCurve")
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)");
+
+                    b.Property<bool>("IsPreset")
+                        .HasColumnType("boolean");
+
+                    b.Property<string>("KeyAlgorithm")
+                        .IsRequired()
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)");
+
+                    b.Property<string>("Method")
+                        .IsRequired()
+                        .HasMaxLength(50)
+                        .HasColumnType("character varying(50)");
+
+                    b.Property<string>("Name")
+                        .IsRequired()
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("Name")
+                        .IsUnique();
+
+                    b.ToTable("DidTemplates", "sigil");
                 });
 
             modelBuilder.Entity("Sigil.Common.Data.Entities.IssuedCertificate", b =>
@@ -430,6 +570,72 @@ namespace Sigil.Common.Migrations
                     b.ToTable("IssuedCertificates", "sigil");
                 });
 
+            modelBuilder.Entity("Sigil.Common.Data.Entities.IssuedCredential", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
+
+                    b.Property<string>("ClaimsJson")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<string>("CredentialId")
+                        .IsRequired()
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)");
+
+                    b.Property<int>("CredentialSchemaId")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("Format")
+                        .IsRequired()
+                        .HasMaxLength(50)
+                        .HasColumnType("character varying(50)");
+
+                    b.Property<DateTime>("IssuedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<int>("IssuerDidDocumentId")
+                        .HasColumnType("integer");
+
+                    b.Property<bool>("Revoked")
+                        .HasColumnType("boolean");
+
+                    b.Property<DateTime?>("RevokedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("SignedCredential")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<string>("SubjectDid")
+                        .IsRequired()
+                        .HasMaxLength(500)
+                        .HasColumnType("character varying(500)");
+
+                    b.Property<int>("TrustDomainId")
+                        .HasColumnType("integer");
+
+                    b.Property<DateTime?>("ValidUntil")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("CredentialId")
+                        .IsUnique();
+
+                    b.HasIndex("CredentialSchemaId");
+
+                    b.HasIndex("IssuerDidDocumentId");
+
+                    b.HasIndex("TrustDomainId");
+
+                    b.ToTable("IssuedCredentials", "sigil");
+                });
+
             modelBuilder.Entity("Sigil.Common.Data.Entities.SanList", b =>
                 {
                     b.Property<int>("Id")
@@ -524,6 +730,62 @@ namespace Sigil.Common.Migrations
                     b.ToTable("TrustDomainBaseUrls", "sigil");
                 });
 
+            modelBuilder.Entity("Sigil.Common.Data.Entities.VerificationMethod", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<int>("DidDocumentId")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("KeyAlgorithm")
+                        .IsRequired()
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)");
+
+                    b.Property<string>("KeyIdentifier")
+                        .IsRequired()
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)");
+
+                    b.Property<int>("KeySize")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("MethodId")
+                        .IsRequired()
+                        .HasMaxLength(500)
+                        .HasColumnType("character varying(500)");
+
+                    b.Property<string>("Provider")
+                        .IsRequired()
+                        .HasMaxLength(50)
+                        .HasColumnType("character varying(50)");
+
+                    b.Property<string>("PublicKeyMultibase")
+                        .IsRequired()
+                        .HasMaxLength(500)
+                        .HasColumnType("character varying(500)");
+
+                    b.Property<string>("Purposes")
+                        .IsRequired()
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("DidDocumentId");
+
+                    b.HasIndex("MethodId");
+
+                    b.ToTable("VerificationMethods", "sigil");
+                });
+
             modelBuilder.Entity("CertificateTemplateSanList", b =>
                 {
                     b.HasOne("Sigil.Common.Data.Entities.SanList", null)
@@ -579,6 +841,24 @@ namespace Sigil.Common.Migrations
                     b.Navigation("CaCertificate");
                 });
 
+            modelBuilder.Entity("Sigil.Common.Data.Entities.DidDocument", b =>
+                {
+                    b.HasOne("Sigil.Common.Data.Entities.DidTemplate", "Template")
+                        .WithMany("DidDocuments")
+                        .HasForeignKey("DidTemplateId")
+                        .OnDelete(DeleteBehavior.SetNull);
+
+                    b.HasOne("Sigil.Common.Data.Entities.TrustDomain", "TrustDomain")
+                        .WithMany("DidDocuments")
+                        .HasForeignKey("TrustDomainId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("Template");
+
+                    b.Navigation("TrustDomain");
+                });
+
             modelBuilder.Entity("Sigil.Common.Data.Entities.IssuedCertificate", b =>
                 {
                     b.HasOne("Sigil.Common.Data.Entities.CaCertificate", "IssuingCaCertificate")
@@ -597,6 +877,33 @@ namespace Sigil.Common.Migrations
                     b.Navigation("Template");
                 });
 
+            modelBuilder.Entity("Sigil.Common.Data.Entities.IssuedCredential", b =>
+                {
+                    b.HasOne("Sigil.Common.Data.Entities.CredentialSchema", "Schema")
+                        .WithMany("IssuedCredentials")
+                        .HasForeignKey("CredentialSchemaId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("Sigil.Common.Data.Entities.DidDocument", "IssuerDid")
+                        .WithMany("IssuedCredentials")
+                        .HasForeignKey("IssuerDidDocumentId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("Sigil.Common.Data.Entities.TrustDomain", "TrustDomain")
+                        .WithMany("IssuedCredentials")
+                        .HasForeignKey("TrustDomainId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("IssuerDid");
+
+                    b.Navigation("Schema");
+
+                    b.Navigation("TrustDomain");
+                });
+
             modelBuilder.Entity("Sigil.Common.Data.Entities.TrustDomainBaseUrl", b =>
                 {
                     b.HasOne("Sigil.Common.Data.Entities.TrustDomain", "TrustDomain")
@@ -606,6 +913,17 @@ namespace Sigil.Common.Migrations
                         .IsRequired();
 
                     b.Navigation("TrustDomain");
+                });
+
+            modelBuilder.Entity("Sigil.Common.Data.Entities.VerificationMethod", b =>
+                {
+                    b.HasOne("Sigil.Common.Data.Entities.DidDocument", "DidDocument")
+                        .WithMany("VerificationMethods")
+                        .HasForeignKey("DidDocumentId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("DidDocument");
                 });
 
             modelBuilder.Entity("Sigil.Common.Data.Entities.CaCertificate", b =>
@@ -622,9 +940,26 @@ namespace Sigil.Common.Migrations
                     b.Navigation("IssuedCertificates");
                 });
 
+            modelBuilder.Entity("Sigil.Common.Data.Entities.CredentialSchema", b =>
+                {
+                    b.Navigation("IssuedCredentials");
+                });
+
             modelBuilder.Entity("Sigil.Common.Data.Entities.Crl", b =>
                 {
                     b.Navigation("Revocations");
+                });
+
+            modelBuilder.Entity("Sigil.Common.Data.Entities.DidDocument", b =>
+                {
+                    b.Navigation("IssuedCredentials");
+
+                    b.Navigation("VerificationMethods");
+                });
+
+            modelBuilder.Entity("Sigil.Common.Data.Entities.DidTemplate", b =>
+                {
+                    b.Navigation("DidDocuments");
                 });
 
             modelBuilder.Entity("Sigil.Common.Data.Entities.TrustDomain", b =>
@@ -632,6 +967,10 @@ namespace Sigil.Common.Migrations
                     b.Navigation("BaseUrls");
 
                     b.Navigation("CaCertificates");
+
+                    b.Navigation("DidDocuments");
+
+                    b.Navigation("IssuedCredentials");
                 });
 #pragma warning restore 612, 618
         }

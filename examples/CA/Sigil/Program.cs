@@ -26,9 +26,11 @@ using Sigil.Common.Services;
 using Sigil.Common.Services.Jobs;
 using Sigil.Common.Services.Signing;
 using Sigil.Common.Validators;
+using Sigil.Did.Services;
 using Sigil.Gcp;
 using Sigil.Services;
 using Sigil.Vault;
+using Sigil.Vc.Services;
 
 Log.Logger = new LoggerConfiguration()
     .WriteTo.Console()
@@ -93,6 +95,15 @@ try
         };
     });
     builder.Services.AddScoped<CertificateIssuanceService>();
+
+    // DID + VC services (Phase A + D)
+    builder.Services.AddScoped<DidTemplateService>();
+    builder.Services.AddScoped<DidIssuanceService>();
+    builder.Services.AddSingleton<IDidMethodProvider, DidKeyMethodProvider>();
+    builder.Services.AddScoped<CredentialSchemaService>();
+    builder.Services.AddScoped<CredentialIssuanceService>();
+    builder.Services.AddScoped<CredentialVerifier>();
+
     builder.Services.AddScoped<CrlGenerationService>();
     builder.Services.AddScoped<CrlAutoRenewalJob>();
     builder.Services.AddScoped<Sigil.UI.Services.TimeDisplayService>();
@@ -136,6 +147,8 @@ try
         var db = scope.ServiceProvider.GetRequiredService<SigilDbContext>();
         await db.Database.MigrateAsync();
         await SeedTemplatesAsync(db);
+        await SeedDidTemplatesAsync(db);
+        await SeedCredentialSchemasAsync(db);
     }
 
     app.UseSerilogRequestLogging(options =>
@@ -351,6 +364,58 @@ static async Task SeedTemplatesAsync(SigilDbContext db)
             IsPreset = true,
         }
     );
+
+    await db.SaveChangesAsync();
+}
+
+static async Task SeedDidTemplatesAsync(SigilDbContext db)
+{
+    if (await db.DidTemplates.AnyAsync(t => t.IsPreset))
+        return;
+
+    db.DidTemplates.Add(new DidTemplate
+    {
+        Name = "did:key (Ed25519)",
+        Description = "Minimal did:key template using Ed25519. Mints a self-describing DID whose " +
+                      "identifier IS the public key (multicodec + multibase). No publishing required.",
+        Method = "key",
+        KeyAlgorithm = "Ed25519",
+        DefaultPurposes = "assertionMethod;authentication",
+        IsPreset = true,
+    });
+
+    await db.SaveChangesAsync();
+}
+
+static async Task SeedCredentialSchemasAsync(SigilDbContext db)
+{
+    if (await db.CredentialSchemas.AnyAsync(s => s.IsPreset))
+        return;
+
+    const string memberCredentialSchema = """
+        {
+          "$schema": "https://json-schema.org/draft/2020-12/schema",
+          "type": "object",
+          "required": ["name", "role"],
+          "properties": {
+            "name":         { "type": "string", "minLength": 1 },
+            "role":         { "type": "string", "minLength": 1 },
+            "organization": { "type": "string" }
+          },
+          "additionalProperties": false
+        }
+        """;
+
+    db.CredentialSchemas.Add(new CredentialSchema
+    {
+        Name = "MemberCredential",
+        Description = "Minimal example credential — claims a subject has a named role within an organization.",
+        TypeUri = "MemberCredential",
+        Format = "jwt_vc",
+        ClaimsSchemaJson = memberCredentialSchema,
+        DefaultValidityDays = 365,
+        IsPreset = true,
+    });
 
     await db.SaveChangesAsync();
 }

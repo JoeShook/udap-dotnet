@@ -26,6 +26,37 @@
             return navigator.clipboard.writeText(text).then(function() { return true; }, function() { return false; });
         };
 
+        // FluentDataGrid v4 quirk: when GridTemplateColumns uses minmax/fr/auto and
+        // ResizableColumns="true", the resize handles only become reliably grabbable
+        // after the first drag — Fluent's own moveHandler converts every minmax track
+        // to a fixed pixel width and sets tableLayout: fixed at that point. We do the
+        // same conversion at init so handles work from first render. Idempotent via
+        // data-sigil-frozen flag.
+        window.sigilFreezeResizableGrids = function() {
+            requestAnimationFrame(function() {
+                document.querySelectorAll('table.fluent-data-grid').forEach(function(grid) {
+                    if (grid.dataset.sigilFrozen === '1') return;
+                    if (grid.querySelectorAll('.actual-resize-handle').length === 0) return;
+                    var template = grid.style.gridTemplateColumns || '';
+                    if (!/minmax\(|fr\b|\bauto\b/.test(template)) {
+                        grid.dataset.sigilFrozen = '1';
+                        return;
+                    }
+                    var headers = grid.querySelectorAll('thead .column-header');
+                    if (headers.length === 0) return;
+                    var widths = [];
+                    for (var i = 0; i < headers.length; i++) {
+                        var w = headers[i].clientWidth;
+                        if (w === 0) return; // grid not laid out yet; try next render
+                        widths.push(w + 'px');
+                    }
+                    grid.style.tableLayout = 'fixed';
+                    grid.style.gridTemplateColumns = widths.join(' ');
+                    grid.dataset.sigilFrozen = '1';
+                });
+            });
+        };
+
         // Tree right-click → call back into Blazor to open the FluentMenu at the cursor.
         // Done in JS because Blazor's contextmenu directive on FluentTreeItem (a web component
         // with shadow DOM) doesn't fire reliably from inside the shadow content.

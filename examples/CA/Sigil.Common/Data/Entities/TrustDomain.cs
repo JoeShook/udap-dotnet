@@ -23,4 +23,6 @@ public class TrustDomain
 
     public ICollection<TrustDomainBaseUrl> BaseUrls { get; set; } = new List<TrustDomainBaseUrl>();
     public ICollection<CaCertificate> CaCertificates { get; set; } = new List<CaCertificate>();
+    public ICollection<DidDocument> DidDocuments { get; set; } = new List<DidDocument>();
+    public ICollection<IssuedCredential> IssuedCredentials { get; set; } = new List<IssuedCredential>();
 }

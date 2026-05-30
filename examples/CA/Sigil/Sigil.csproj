@@ -27,6 +27,8 @@
 
   <ItemGroup>
     <ProjectReference Include="..\Sigil.Common\Sigil.Common.csproj" />
+    <ProjectReference Include="..\Sigil.Did\Sigil.Did.csproj" />
+    <ProjectReference Include="..\Sigil.Vc\Sigil.Vc.csproj" />
     <ProjectReference Include="..\Sigil.FileSystem\Sigil.FileSystem.csproj" />
     <ProjectReference Include="..\Sigil.Gcp\Sigil.Gcp.csproj" />
     <ProjectReference Include="..\Sigil.ServiceDefaults\Sigil.ServiceDefaults.csproj" />

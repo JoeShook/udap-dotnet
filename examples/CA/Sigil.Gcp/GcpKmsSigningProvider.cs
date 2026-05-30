@@ -45,6 +45,13 @@ public sealed class GcpKmsSigningProvider : ISigningProvider
         string keyAlgorithm, int keySize, string? ecdsaCurve = null,
         CancellationToken ct = default)
     {
+        if (keyAlgorithm.Equals("Ed25519", StringComparison.OrdinalIgnoreCase))
+        {
+            throw new NotSupportedException(
+                "Ed25519 via GCP KMS is not wired in Phase A. Use the local signing provider for DID/VC keys, " +
+                "or wait for Phase C. GCP KMS does support Ed25519 in principle.");
+        }
+
         var client = _client.Value;
         var keyRingName = new KeyRingName(_options.ProjectId, _options.LocationId, _options.KeyRingId);
 
@@ -70,6 +77,14 @@ public sealed class GcpKmsSigningProvider : ISigningProvider
             cryptoKeyId, algorithm, keyRingName);
 
         return new SigningKeyReference("gcp-kms", cryptoKeyId, keyAlgorithm, keySize);
+    }
+
+    public Task<RawPublicKey> GetRawPublicKeyAsync(
+        SigningKeyReference keyRef, CancellationToken ct = default)
+    {
+        throw new NotSupportedException(
+            "Raw public key extraction from GCP KMS is not wired in Phase A. " +
+            "DID/VC code currently uses the local signing provider only.");
     }
 
     public async Task<AsymmetricAlgorithm> GetPublicKeyAsync(

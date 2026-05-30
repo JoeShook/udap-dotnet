@@ -24,6 +24,8 @@
 
   <ItemGroup>
     <ProjectReference Include="..\..\Sigil.Common\Sigil.Common.csproj" />
+    <ProjectReference Include="..\..\Sigil.Did\Sigil.Did.csproj" />
+    <ProjectReference Include="..\..\Sigil.Vc\Sigil.Vc.csproj" />
     <ProjectReference Include="..\..\Sigil.Vault\Sigil.Vault.csproj" />
     <ProjectReference Include="..\..\Sigil.Gcp\Sigil.Gcp.csproj" />
   </ItemGroup>
