@@ -70,6 +70,12 @@ public class UdapClientOptions
     [JsonPropertyName("Contacts")]
     public HashSet<string>? Contacts { get; set; }
 
+    /// <summary>
+    /// Custom HTTP headers added to every outbound UDAP request (discovery, registration,
+    /// and token calls) by <see cref="HeaderAugmentationHandler"/>. Include a
+    /// <c>User-Agent</c> here to identify your application to the servers you call so your
+    /// traffic is visible in their logs and dashboards.
+    /// </summary>
     [JsonPropertyName("Headers")]
     public Dictionary<string, string>? Headers { get; set; }
 

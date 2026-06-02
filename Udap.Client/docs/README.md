@@ -51,6 +51,76 @@ Example command line run: ```dotnet run  --baseUrl https://fhirlabs.net/fhir/r4 
 
 ---
 
+## Identifying your application (User-Agent and custom headers)
+
+Every UDAP exchange this library performs — metadata discovery, dynamic client
+registration, and token requests — is an outbound HTTP call. By default those
+calls carry no `User-Agent`, so the servers you connect to cannot tell which
+application is talking to them. Sending a `User-Agent` (and, optionally, other
+identifying headers) makes your traffic visible in the server's logs and
+dashboards, which helps operators and support teams on the other side correlate
+and troubleshoot requests.
+
+The header is **your application's responsibility**: the library forwards
+whatever headers are configured on the `HttpClient` it is given. How you set it
+depends on whether you use the high-level `IUdapClient` or call the low-level
+`HttpClient` extension methods directly.
+
+### High-level `IUdapClient`
+
+`AddUdapClient()` returns an `IHttpClientBuilder`, so you can configure the
+underlying typed `HttpClient` directly:
+
+```csharp
+services.AddUdapClient()
+    .ConfigureHttpClient(client =>
+        client.DefaultRequestHeaders.UserAgent.ParseAdd("my-ehr/1.0"));
+```
+
+Alternatively, drive it from configuration with the built-in
+`HeaderAugmentationHandler`, which copies every entry in
+`UdapClientOptions.Headers` onto each outgoing request:
+
+```csharp
+services.Configure<UdapClientOptions>(configuration.GetSection("UdapClientOptions"));
+services.AddTransient<HeaderAugmentationHandler>();
+
+services.AddUdapClient()
+    .AddHttpMessageHandler<HeaderAugmentationHandler>();
+```
+
+```json
+"UdapClientOptions": {
+  "ClientName": "my-ehr",
+  "Headers": {
+    "User-Agent": "my-ehr/1.0"
+  }
+}
+```
+
+### Low-level `HttpClient` extension methods
+
+If you call the extension methods on your own `HttpClient` — for example
+`GetUdapDiscoveryDocument(...)` or `UdapRequestClientCredentialsTokenAsync(...)` —
+set the header on that client before invoking them. Anything on
+`DefaultRequestHeaders` flows through to the request the library sends:
+
+```csharp
+var client = httpClientFactory.CreateClient("udap");
+client.DefaultRequestHeaders.UserAgent.ParseAdd("my-ehr/1.0");
+
+var disco = await client.GetUdapDiscoveryDocument(
+    new UdapDiscoveryDocumentRequest { Address = baseUrl }, cancellationToken);
+```
+
+Configuring it once on a named or typed `HttpClient` registered with
+`IHttpClientFactory` ensures discovery, registration, and token calls all
+identify your application consistently. A `User-Agent` value should follow the
+HTTP product-token form (`product/version`, e.g. `my-ehr/1.0`); a bare token
+such as `my-ehr` is also accepted.
+
+---
+
 ## Udap.Client configuration with a ITrustAnchorStore implementation
 
 Implement the ITrustAnchorStore to load trust anchors from a store.  Below is dependency injection example of a file system store implementation.  Note the CertStore folder in this project with anchors and intermediates folders.  Also take note of the ```appsettings.json``` configuration.  Notice each community has an Anchors and Intermediates collection of file references.  In accompanying example project all communities issue certificates through a sub-certificate authority, yet the configuration only configured one Intermediate.  Why is this?  If the published certificate at the resource ```./well-known/udap``` endpoint contains a AIA extension then the .NET ```X509Chain.Build``` method will follow the URL in the extension.  This is true on Windows and Linux.  Some Certificate Authorities may not follow this practice and you will have to configure for the intermediate certificate.  

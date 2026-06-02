@@ -38,6 +38,14 @@ public static class HttpClientTokenRequestExtensions
     /// <param name="request">The request.</param>
     /// <param name="cancellationToken">The cancellation token.</param>
     /// <returns></returns>
+    /// <remarks>
+    /// The request is sent on the supplied <paramref name="client"/>, so any headers
+    /// configured on it flow through to the token endpoint — in particular a
+    /// <c>User-Agent</c> identifying your application. Setting a <c>User-Agent</c> (e.g.
+    /// <c>client.DefaultRequestHeaders.UserAgent.ParseAdd("my-app/1.0")</c>) lets the
+    /// authorization server see which application is requesting a token. See the
+    /// Udap.Client README section "Identifying your application (User-Agent and custom headers)".
+    /// </remarks>
     public static Task<TokenResponse> UdapRequestClientCredentialsTokenAsync(
         this HttpMessageInvoker client,
         UdapClientCredentialsTokenRequest request, 
