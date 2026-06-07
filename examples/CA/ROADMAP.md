@@ -108,7 +108,16 @@
 **Sequencing**: Build the authenticated request portal first (manual / RA-driven issuance), then layer ACME automation on top once the issuance + approval flows are proven. The portal establishes the vetted trust relationship that ACME (via EAB) automates.
 
 ### 12a: Certificate Request Portal (authenticated)
-- [ ] User authentication / login (OIDC — reuse Duende IdentityServer, or external IdP)
+- [ ] **Authentication: ASP.NET Core Identity (.NET 10) with passkeys (WebAuthn/FIDO2)** as the primary, phishing-resistant login — built-in support via `SignInManager.MakePasskeyCreationOptionsAsync` / `PerformPasskeyAttestationAsync` / `PasskeySignInAsync` and `IdentityPasskeyOptions`. The Blazor Web App template ships passkey management + login UI out of the box.
+  - [ ] Explicitly set `IdentityPasskeyOptions.ServerDomain` (Relying Party ID) — don't rely on the host header for a CA
+  - [ ] Cross-device (hybrid) flow supported automatically by the browser/authenticator (scan QR with phone → biometric → done)
+  - [ ] External OIDC login as a fallback/alternative (reuse Duende IdentityServer, or external IdP)
+  - [ ] *Note: passkeys prove key possession (authentication), NOT that the requester is a real, vetted person/org — see identity proofing below*
+- [ ] **Identity proofing ("real person / real org")** — a separate layer from authentication, since a CA must not issue to an imposter:
+  - [ ] Third-party proofing for individuals (Persona / Stripe Identity / Onfido / ID.me) for higher assurance (NIST IAL2-ish: gov-ID + liveness)
+  - [ ] Organizational vetting for orgs: domain control + business validation, surfaced to the RA
+  - [ ] Optional phone/SMS OTP for phone-number ownership (weaker; SIM-swap risk — not a substitute for the above)
+  - [ ] **The proofing gate is what mints the EAB credential consumed by ACME in 12b** — one-time human vetting enables later automation
 - [ ] Self-service "Request a Certificate" wizard: pick community/trust domain → template → subject/SANs → submit (upload CSR or generate key pair)
 - [ ] Request queue + RA approval workflow (request → review → approve/reject → issue) — ties into Phase 9 RA roles
 - [ ] CSR upload, parse, and validation against the selected template profile
