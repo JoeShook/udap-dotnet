@@ -55,7 +55,7 @@
 - [ ] **EST (RFC 7030)** — Enrollment over Secure Transport (simpleenroll, simplereenroll, cacerts, csrattrs)
 - [ ] **SCEP** — Simple Certificate Enrollment Protocol (legacy device support)
 - [ ] **CMP (RFC 4210)** — Certificate Management Protocol (cert requests, revocation, key update)
-- [ ] **ACME (RFC 8555)** — Automated Certificate Management Environment (Let's Encrypt-style)
+- [ ] **ACME (RFC 8555)** — Automated Certificate Management Environment (Let's Encrypt-style) — see **Phase 12** for the full breakdown (portal-first sequencing, EAB, ARI) and UDAP applicability analysis
 - [ ] **REST API** — Full CRUD for certs, CRLs, templates, communities, jobs
 - [ ] API authentication (API keys, mTLS, OAuth2)
 
@@ -103,6 +103,36 @@
 - [x] Certificate archival (soft delete with retention)
 - [ ] Subordinate CA provisioning (issue sub-CA certs for external CAs)
 - [ ] Multi-algorithm support (RSA, ECDSA, Ed25519, Ed448)
+
+## Phase 12: Certificate Request Portal & ACME Automation
+**Sequencing**: Build the authenticated request portal first (manual / RA-driven issuance), then layer ACME automation on top once the issuance + approval flows are proven. The portal establishes the vetted trust relationship that ACME (via EAB) automates.
+
+### 12a: Certificate Request Portal (authenticated)
+- [ ] User authentication / login (OIDC — reuse Duende IdentityServer, or external IdP)
+- [ ] Self-service "Request a Certificate" wizard: pick community/trust domain → template → subject/SANs → submit (upload CSR or generate key pair)
+- [ ] Request queue + RA approval workflow (request → review → approve/reject → issue) — ties into Phase 9 RA roles
+- [ ] CSR upload, parse, and validation against the selected template profile
+- [ ] Requester dashboard: track request status, download issued certs, view expiry
+- [ ] Email notifications on request state changes
+- [ ] Account scoping: a logged-in user may only request under authorized communities/trust domains
+
+### 12b: ACME Server (RFC 8555)
+- [ ] ACME directory + newNonce endpoints
+- [ ] Account management (newAccount, JWS-signed requests, key rollover)
+- [ ] Order flow: newOrder → authz → challenge → finalize → certificate
+- [ ] Challenge validation: http-01, dns-01, tls-alpn-01 (RFC 8737)
+- [ ] CSR-driven issuance applying Sigil certificate templates/profiles
+- [ ] Revocation (revokeCert)
+- [ ] **External Account Binding (EAB)** (RFC 8555 §7.3.4) — bind ACME accounts to portal-vetted accounts so automated issuance stays scoped to vetted identities
+- [ ] **ARI (RFC 9773)** — renewalInfo endpoint advising clients on renewal windows / load staggering
+- [ ] ACME profiles (draft-ietf-acme-profiles) — let clients request a named cert profile (e.g. `udap-server`)
+- [ ] Test against Certes / certbot
+
+### UDAP applicability (analysis)
+- **UDAP server certs — good fit.** The URI SAN authority is a reachable FHIR host, so domain-control challenges (http-01/dns-01/tls-alpn-01) are meaningful. Sigil issues with the UDAP profile (URI SAN + KU/EKU) under the community anchor. Renewal automation is high-value for long-running servers.
+- **UDAP client certs — pure ACME DV is a poor fit.** Client identifiers aren't necessarily web-reachable, and UDAP communities require organizational vetting that ACME's unattended domain-validation model doesn't provide.
+- **EAB is the bridge.** The portal/RA performs the one-time vetting and issues EAB credentials; ACME then automates (re)issuance + renewal scoped to that vetted account's authorized identifiers — for both server and client certs. This is *why the portal comes first*.
+- **No standardized "ACME-for-UDAP" profile exists today** — this would be a Sigil / UDAP-community design effort (likely building on draft-ietf-acme-profiles).
 
 ## Upcoming: Rename "Community" to "Trust Domain"
 - [ ] Rename entity `Community` → `TrustDomain` and `CommunityBaseUrl` → `TrustDomainBaseUrl`
