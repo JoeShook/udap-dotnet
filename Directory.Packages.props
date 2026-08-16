@@ -7,7 +7,7 @@
   <ItemGroup>
     <!-- https://learn.microsoft.com/en-us/nuget/concepts/package-versioning#version-ranges -->
     <PackageVersion Include="BouncyCastle.Cryptography" Version="2.6.2" />
-    <PackageVersion Include="Duende.IdentityServer.Storage" Version="8.0.4" />
+    <PackageVersion Include="Duende.IdentityServer.Storage" Version="8.0.6" />
     <PackageVersion Include="Google.Apis.Auth" Version="1.73.0" />
     <PackageVersion Include="Google.Cloud.Storage.Control.V2" Version="1.7.0" />
     <PackageVersion Include="Google.Cloud.Storage.V1" Version="4.14.0" />
@@ -23,9 +23,9 @@
     <PackageVersion Include="MSTest.TestAdapter" Version="4.1.0" />
     <PackageVersion Include="MSTest.TestFramework" Version="4.1.0" />
     <PackageVersion Include="Duende.IdentityModel" Version="8.1.0" />
-    <PackageVersion Include="Duende.IdentityServer" Version="8.0.4" />
-    <PackageVersion Include="Duende.IdentityServer.AspNetIdentity" Version="8.0.4" />
-    <PackageVersion Include="Duende.IdentityServer.EntityFramework.Storage" Version="8.0.4" />
+    <PackageVersion Include="Duende.IdentityServer" Version="8.0.6" />
+    <PackageVersion Include="Duende.IdentityServer.AspNetIdentity" Version="8.0.6" />
+    <PackageVersion Include="Duende.IdentityServer.EntityFramework.Storage" Version="8.0.6" />
     <PackageVersion Include="OpenTelemetry" Version="1.15.3" />
     <PackageVersion Include="OpenTelemetry.Exporter.Console" Version="1.15.3" />
     <PackageVersion Include="OpenTelemetry.Exporter.OpenTelemetryProtocol" Version="1.15.3" />
