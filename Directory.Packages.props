@@ -63,7 +63,7 @@
     <PackageVersion Include="Microsoft.Extensions.Logging.Abstractions" Version="10.0.11" />
     <PackageVersion Include="Microsoft.Extensions.Options" Version="10.0.11" />
     <PackageVersion Include="Microsoft.Extensions.Options.ConfigurationExtensions" Version="10.0.11" />
-    <PackageVersion Include="Microsoft.Bcl.Memory" Version="10.0.11" />
+    <PackageVersion Include="Microsoft.Bcl.Memory" Version="10.0.12" />
   </ItemGroup>
   <!-- net8.0 ASP.NET Core framework-versioned packages -->
   <ItemGroup Condition="'$(TargetFramework)' == 'net8.0'">
