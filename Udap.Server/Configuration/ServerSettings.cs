@@ -102,7 +102,16 @@ public class ServerSettings
     /// </summary>
     public bool IncludeCommunityClaim { get; set; }
 
-
+    /// <summary>
+    /// When true (the default), after a client's authorization extensions have been validated
+    /// at the token endpoint, every purpose-of-use code they declare is copied into the access
+    /// token as a repeated <c>purpose_of_use</c> claim (one claim per code, value verbatim as
+    /// declared), and the <c>hl7-b2b</c> <c>organization_id</c> / <c>organization_name</c> are
+    /// copied as claims of the same name. Without this the purpose is validated at issuance and
+    /// then discarded, leaving resource servers unable to enforce purpose of use per request or
+    /// forward it downstream. Set to false to keep the pre-0.9.7 token shape.
+    /// </summary>
+    public bool IncludePurposeOfUseClaims { get; set; } = true;
 }
 
 
