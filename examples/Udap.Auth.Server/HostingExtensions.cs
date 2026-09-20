@@ -27,6 +27,7 @@ using Udap.Server.Security.Authentication.TieredOAuth;
 using Udap.Server.Storage.DbContexts;
 using Udap.Tefca.Model;
 using Udap.Tefca.Server;
+using Udap.UI.Pages.Account.Login;
 
 namespace Udap.Auth.Server;
 
@@ -64,6 +65,9 @@ internal static class HostingExtensions
         builder.Services.AddInMemoryRateLimiting();
         builder.Services.AddHttpContextAccessor();
         builder.Services.AddRazorPages();
+
+        // Login page helper: one fill-in button per test user (alice, bob) so testers need not remember credentials.
+        builder.Services.AddLoginTestAccounts(TestUsers.Users);
 
         
         

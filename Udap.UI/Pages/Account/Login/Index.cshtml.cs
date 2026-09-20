@@ -9,6 +9,7 @@ using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Mvc.RazorPages;
+using Microsoft.Extensions.Options;
 
 namespace Udap.UI.Pages.Account.Login;
 
@@ -21,26 +22,29 @@ public class Index : PageModel
     private readonly IEventService _events;
     private readonly IAuthenticationSchemeProvider _schemeProvider;
     private readonly IIdentityProviderStore _identityProviderStore;
+    private readonly IReadOnlyList<TestAccount> _testAccounts;
 
     public ViewModel View { get; set; }
-        
+
     [BindProperty]
     public InputModel Input { get; set; }
-        
+
     public Index(
         IIdentityServerInteractionService interaction,
         IAuthenticationSchemeProvider schemeProvider,
         IIdentityProviderStore identityProviderStore,
         IEventService events,
-        TestUserStore users = null)
+        TestUserStore users = null,
+        IOptions<TestAccountOptions> testAccounts = null)
     {
         // this is where you would plug in your own custom identity management library (e.g. ASP.NET Identity)
         _users = users ?? throw new Exception("Please call 'AddTestUsers(TestUsers.Users)' on the IIdentityServerBuilder in Startup or remove the TestUserStore from the AccountController.");
-            
+
         _interaction = interaction;
         _schemeProvider = schemeProvider;
         _identityProviderStore = identityProviderStore;
         _events = events;
+        _testAccounts = testAccounts?.Value?.Accounts ?? new List<TestAccount>();
     }
 
     public async Task<IActionResult> OnGet(string returnUrl)
@@ -170,6 +174,7 @@ public class Index : PageModel
             View = new ViewModel
             {
                 EnableLocalLogin = local,
+                TestAccounts = _testAccounts
             };
 
             Input.Username = context?.LoginHint;
@@ -217,7 +222,8 @@ public class Index : PageModel
         {
             AllowRememberLogin = LoginOptions.AllowRememberLogin,
             EnableLocalLogin = allowLocal && LoginOptions.AllowLocalLogin,
-            ExternalProviders = providers.ToArray()
+            ExternalProviders = providers.ToArray(),
+            TestAccounts = _testAccounts
         };
     }
 }
