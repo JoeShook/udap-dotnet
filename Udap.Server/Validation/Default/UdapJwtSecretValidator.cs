@@ -175,36 +175,75 @@ public class UdapJwtSecretValidator : ISecretValidator
             await _replayCache.AddAsync(Purpose, jti, exp.AddMinutes(5), ct);
         }
 
+        var udapSecret = parsedSecret.ToModel();
+        var endCertificate = udapSecret.GetUdapEndCert();
+
+        if (endCertificate == null)
+        {
+            _logger.LogError("Client assertion x5c header does not contain a certificate for client_id: {ClientId}", parsedSecret.Id);
+            SetErrorDescription("Client assertion x5c header does not contain a certificate");
+            return fail;
+        }
+
+        // Give a precise reason before chain building would otherwise report a generic failure.
+        var now = DateTime.UtcNow;
+        if (endCertificate.NotAfter.ToUniversalTime() < now || endCertificate.NotBefore.ToUniversalTime() > now)
+        {
+            _logger.LogError(
+                "Client certificate is outside its validity period (NotBefore: {NotBefore:u}, NotAfter: {NotAfter:u}) for client_id: {ClientId}",
+                endCertificate.NotBefore.ToUniversalTime(), endCertificate.NotAfter.ToUniversalTime(), parsedSecret.Id);
+            SetErrorDescription(
+                $"Client certificate is outside its validity period (NotBefore: {endCertificate.NotBefore.ToUniversalTime():u}, " +
+                $"NotAfter: {endCertificate.NotAfter.ToUniversalTime():u}). Register again with a current certificate");
+            return fail;
+        }
+
         IList<X509Certificate2>? certChainList;
+        // Duende removes expired secrets before calling this validator, so this list may be
+        // missing the UDAP_SAN_URI_ISS_NAME / UDAP_COMMUNITY secrets even though they exist.
+        var secretList = secrets.ToList();
 
         try
         {
-            var secretList = secrets.ToList();
             certChainList = await secretList.GetUdapChainsAsync(_clientStore);
 
-            if (certChainList == null && secretList.Count == 0)
+            if (certChainList == null || certChainList.Count == 0)
             {
-                var rolledSecrets = await _clientStore.RolloverClientSecrets(parsedSecret.ToModel());
+                //
+                // Self-heal: the client's UDAP identity secrets have expired (typically the client
+                // certificate was renewed and the registration was updated or never re-registered).
+                // Roll the stored secrets forward to the certificate presented in this assertion.
+                // The presented certificate is fully chain-validated below before success is returned.
+                //
+                _logger.LogInformation(
+                    "UDAP identity secrets are missing or expired for client_id: {ClientId}. Attempting secret rollover.",
+                    parsedSecret.Id);
+
+                var rolledSecrets = await _clientStore.RolloverClientSecrets(udapSecret, ct);
+
                 if (rolledSecrets == null || rolledSecrets.Count == 0)
                 {
-                    _logger.LogWarning("Could not roll secret for client id: {ClientId}", parsedSecret.Id);
+                    _logger.LogWarning("Could not roll secrets for client_id: {ClientId}", parsedSecret.Id);
                 }
                 else
                 {
-                    certChainList = await rolledSecrets.GetUdapChainsAsync(_clientStore);
+                    secretList = rolledSecrets.ToList();
+                    certChainList = await secretList.GetUdapChainsAsync(_clientStore);
                 }
             }
         }
         catch (Exception e)
         {
-            _logger.LogError(e, "Could not resolve secrets");
+            _logger.LogError(e, "Could not resolve secrets for client_id: {ClientId}", parsedSecret.Id);
+            SetErrorDescription("Could not resolve client registration secrets");
             return fail;
         }
 
-        if (certChainList == null || !certChainList.Any())
+        if (certChainList == null || certChainList.Count == 0)
         {
-            _logger.LogError("There are no anchors available to validate client assertion for client_id: {ClientId}", parsedSecret.Id);
-            SetErrorDescription("No trust anchors available to validate client assertion");
+            var description = DescribeMissingTrustAnchors(secretList);
+            _logger.LogError("{Description} for client_id: {ClientId}", description, parsedSecret.Id);
+            SetErrorDescription(description);
             return fail;
         }
 
@@ -213,7 +252,7 @@ public class UdapJwtSecretValidator : ISecretValidator
         //
         if (!await _trustChainValidator.IsTrustedCertificateAsync(
                 parsedSecret.Id,
-                parsedSecret.ToModel().GetUdapEndCert()!,
+                endCertificate,
                 new X509Certificate2Collection(certChainList.ToArray()),
                 new X509Certificate2Collection(certChainList.ToRootCertArray())))
         {
@@ -222,6 +261,24 @@ public class UdapJwtSecretValidator : ISecretValidator
         }
 
         return success;
+    }
+
+    /// <summary>
+    /// Explains why no trust anchors could be resolved, so the client can act on the error_description.
+    /// </summary>
+    private static string DescribeMissingTrustAnchors(IReadOnlyCollection<Secret> secretList)
+    {
+        var hasIssuer = secretList.Any(s => s.Type == UdapServerConstants.SecretTypes.UDAP_SAN_URI_ISS_NAME);
+        var community = secretList.FirstOrDefault(s => s.Type == UdapServerConstants.SecretTypes.UDAP_COMMUNITY)?.Value;
+
+        if (!hasIssuer || community == null)
+        {
+            return "Client registration has no valid UDAP community secrets (missing or expired) and they could not be " +
+                   "rolled forward. Cancel the registration and register again with the current client certificate";
+        }
+
+        return $"No trust anchors are configured for the client's community (community id {community}). " +
+               "Contact the authorization server administrator";
     }
 
     private void SetErrorDescription(string description)

@@ -115,6 +115,23 @@ namespace Udap.Server.Storage.Stores
                     }
                 }
 
+                // Re-registration with a renewed certificate: roll the UDAP identity secrets forward
+                // to the new certificate's expiration. Duende drops expired secrets before secret
+                // validation, so stale expirations here make the client unable to authenticate.
+                var newIdentityExpiration = client.ClientSecrets
+                    .FirstOrDefault(cs => cs.Type == UdapServerConstants.SecretTypes.UDAP_SAN_URI_ISS_NAME)
+                    ?.Expiration;
+
+                if (newIdentityExpiration.HasValue)
+                {
+                    foreach (var identitySecret in existingClient.ClientSecrets.Where(cs =>
+                                 cs.Type == UdapServerConstants.SecretTypes.UDAP_SAN_URI_ISS_NAME ||
+                                 cs.Type == UdapServerConstants.SecretTypes.UDAP_COMMUNITY))
+                    {
+                        identitySecret.Expiration = newIdentityExpiration;
+                    }
+                }
+
                 await _dbContext.SaveChangesAsync(token);
                 _logger.LogInformation("Updated client: {Id}", existingClient.Id);
                 return true;
@@ -266,9 +283,9 @@ namespace Udap.Server.Storage.Stores
 
             foreach (var intCert in encodedCerts.SelectMany(anchor => anchor.Intermediates))
             {
-                _ = certificates.Append(X509Certificate2.CreateFromPem(intCert.X509Certificate));
+                certificates.Add(X509Certificate2.CreateFromPem(intCert.X509Certificate));
             }
-           
+
             return certificates;
         }
 
@@ -373,7 +390,7 @@ namespace Udap.Server.Storage.Stores
             }
 
             activity?.SetTag("Rolled", rolled);
-            return entity.ToModel().ClientSecrets;
+            return entity?.ToModel().ClientSecrets;
         }
 
         private static string ShowSummary(IEnumerable<Anchor> anchors)

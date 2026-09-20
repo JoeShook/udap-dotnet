@@ -34,6 +34,7 @@ using Udap.Model.Registration;
 using Udap.Model.Statement;
 using Udap.Model.UdapAuthenticationExtensions;
 using Udap.Server.Configuration;
+using Udap.Server.Storage;
 using Udap.Server.Validation;
 using UdapServer.Tests.Common;
 using Xunit.Abstractions;
@@ -273,6 +274,63 @@ public class ClientCredentialsUdapModeTests
         foreach (var secret in client.ClientSecrets)
         {
             _testOutputHelper.WriteLine(secret.Expiration.ToString());
+        }
+    }
+
+    /// <summary>
+    /// Regression: only the UDAP_SAN_URI_ISS_NAME and UDAP_COMMUNITY secrets are expired while the
+    /// UDAP_X509_CERTIFICATE secret is still current. Duende filters the expired secrets before the
+    /// secret validator runs, so the validator sees a non-empty list with no community. It must still
+    /// roll the identity secrets forward instead of failing with "No trust anchors available".
+    /// </summary>
+    [Fact]
+    public async Task GetAccessToken_Rollover_Expired_Identity_Secrets_With_Current_Certificate_Secret()
+    {
+#if NET9_0_OR_GREATER
+        var clientCert = X509CertificateLoader.LoadPkcs12FromFile("CertStore/issued/fhirlabs.net.client.pfx", "udap-test");
+#else
+        var clientCert = new X509Certificate2("CertStore/issued/fhirlabs.net.client.pfx", "udap-test");
+#endif
+
+        var udapClient = _mockPipeline.Resolve<IUdapClient>();
+
+        udapClient.UdapServerMetadata = new UdapMetadata(Substitute.For<UdapMetadataOptions>())
+        { RegistrationEndpoint = UdapAuthServerPipeline.RegistrationEndpoint };
+
+        var regDocumentResult = await udapClient.RegisterClientCredentialsClient(
+            clientCert,
+            "system/Patient.rs");
+
+        Assert.Null(regDocumentResult.GetError());
+
+        var client = _mockPipeline.Clients.Single(c => c.ClientId == regDocumentResult.ClientId);
+        Assert.Contains(client.ClientSecrets, s => s.Type == UdapServerConstants.SecretTypes.UDAP_X509_CERTIFICATE);
+
+        foreach (var secret in client.ClientSecrets.Where(s =>
+                     s.Type == UdapServerConstants.SecretTypes.UDAP_SAN_URI_ISS_NAME ||
+                     s.Type == UdapServerConstants.SecretTypes.UDAP_COMMUNITY))
+        {
+            secret.Expiration = DateTime.UtcNow.AddDays(-1);
+        }
+
+        var clientRequest = AccessTokenRequestForClientCredentialsBuilder.Create(
+                regDocumentResult.ClientId,
+                IdentityServerPipeline.TokenEndpoint,
+                clientCert)
+            .WithScope("system/Patient.rs")
+            .Build("RS384");
+
+        var tokenResponse = await _mockPipeline.BackChannelClient.UdapRequestClientCredentialsTokenAsync(clientRequest);
+
+        Assert.False(tokenResponse.IsError, tokenResponse.Error + " " + tokenResponse.ErrorDescription);
+        Assert.Equal("system/Patient.rs", tokenResponse.Scope);
+
+        client = _mockPipeline.Clients.Single(c => c.ClientId == regDocumentResult.ClientId);
+        foreach (var secret in client.ClientSecrets.Where(s =>
+                     s.Type == UdapServerConstants.SecretTypes.UDAP_SAN_URI_ISS_NAME ||
+                     s.Type == UdapServerConstants.SecretTypes.UDAP_COMMUNITY))
+        {
+            Assert.Equal(clientCert.NotAfter.ToUniversalTime(), secret.Expiration);
         }
     }
 

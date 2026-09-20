@@ -122,6 +122,22 @@ public class InMemoryUdapClientRegistrationStore : IUdapClientRegistrationStore
                 }
             }
 
+            // Re-registration with a renewed certificate: roll the UDAP identity secrets forward
+            // to the new certificate's expiration (see UdapClientRegistrationStore.UpsertClient).
+            var newIdentityExpiration = client.ClientSecrets
+                .FirstOrDefault(cs => cs.Type == UdapServerConstants.SecretTypes.UDAP_SAN_URI_ISS_NAME)
+                ?.Expiration;
+
+            if (newIdentityExpiration.HasValue)
+            {
+                foreach (var identitySecret in existingClient.ClientSecrets.Where(cs =>
+                             cs.Type == UdapServerConstants.SecretTypes.UDAP_SAN_URI_ISS_NAME ||
+                             cs.Type == UdapServerConstants.SecretTypes.UDAP_COMMUNITY))
+                {
+                    identitySecret.Expiration = newIdentityExpiration;
+                }
+            }
+
             //TODO update Certifications
             //TODO update others?
             return Task.FromResult(true);
