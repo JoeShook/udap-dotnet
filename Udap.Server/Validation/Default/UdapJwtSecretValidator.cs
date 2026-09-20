@@ -22,6 +22,7 @@ using System.Text.Json;
 using Udap.Common.Certificates;
 using Udap.Common.Extensions;
 using Udap.Model;
+using Udap.Server.Configuration;
 using Udap.Server.Extensions;
 using Udap.Server.Storage;
 using Udap.Server.Storage.Extensions;
@@ -42,6 +43,7 @@ public class UdapJwtSecretValidator : ISecretValidator
     private readonly TrustChainValidator _trustChainValidator;
     private readonly IUdapClientRegistrationStore _clientStore;
     private readonly IHttpContextAccessor _httpContextAccessor;
+    private readonly ServerSettings _serverSettings;
     private readonly ILogger _logger;
 
     private const string Purpose = nameof(UdapJwtSecretValidator);
@@ -54,6 +56,7 @@ public class UdapJwtSecretValidator : ISecretValidator
         TrustChainValidator trustChainValidator,
         IUdapClientRegistrationStore clientStore,
         IHttpContextAccessor httpContextAccessor,
+        ServerSettings serverSettings,
         ILogger<UdapJwtSecretValidator> logger)
     {
         _issuerNameService = issuerNameService;
@@ -63,6 +66,7 @@ public class UdapJwtSecretValidator : ISecretValidator
         _trustChainValidator = trustChainValidator;
         _clientStore = clientStore;
         _httpContextAccessor = httpContextAccessor;
+        _serverSettings = serverSettings;
 
         _logger = logger;
     }
@@ -153,6 +157,19 @@ public class UdapJwtSecretValidator : ISecretValidator
         {
             _logger.LogError("exp is missing.");
             SetErrorDescription("exp claim is missing from client assertion");
+            return fail;
+        }
+
+        // UDAP JWT-Based Client Authentication section 6.3: a maximum AnT lifetime of 5 minutes is RECOMMENDED.
+        // TokenValidationParameters only checks that exp has not already passed, so bound exp against iat here.
+        var iat = jwtToken.IssuedAt;
+        if (_serverSettings.ClientAssertionMaxLifetimeSeconds > 0
+            && iat != DateTime.MinValue
+            && exp > iat.AddSeconds(_serverSettings.ClientAssertionMaxLifetimeSeconds))
+        {
+            _logger.LogError("Client assertion exp exceeds the maximum lifetime of {MaxLifetimeSeconds} seconds from iat for client_id: {ClientId}. iat={Iat:O} exp={Exp:O}",
+                _serverSettings.ClientAssertionMaxLifetimeSeconds, parsedSecret.Id, iat, exp);
+            SetErrorDescription($"Client assertion exp exceeds the maximum lifetime of {_serverSettings.ClientAssertionMaxLifetimeSeconds} seconds from iat");
             return fail;
         }
 

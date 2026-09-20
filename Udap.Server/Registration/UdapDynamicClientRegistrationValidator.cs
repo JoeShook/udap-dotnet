@@ -293,6 +293,30 @@ public class UdapDynamicClientRegistrationValidator : IUdapDynamicClientRegistra
                 UdapDynamicClientRegistrationErrorDescriptions.IssuedAtInFuture));
         }
 
+        // UDAP DCR section 4.3: a maximum software statement lifetime of 5 minutes is RECOMMENDED.
+        // JsonWebTokenHandler only checks that exp has not already passed, so bound exp against iat here.
+        if (_serverSettings.SoftwareStatementMaxLifetimeSeconds > 0)
+        {
+            var exp = EpochTime.DateTime(document.Expiration.GetValueOrDefault()).ToUniversalTime();
+
+            if (exp > iat.AddSeconds(_serverSettings.SoftwareStatementMaxLifetimeSeconds))
+            {
+                var errorDescription = string.Format(
+                    UdapDynamicClientRegistrationErrorDescriptions.ExpExceedsMaxLifetime,
+                    _serverSettings.SoftwareStatementMaxLifetimeSeconds);
+
+                _logger.LogWarning("{Error}::{Description}: iat={Iat:O} exp={Exp:O}",
+                    UdapDynamicClientRegistrationErrors.InvalidSoftwareStatement,
+                    errorDescription,
+                    iat,
+                    exp);
+
+                return await Task.FromResult(new UdapDynamicClientRegistrationValidationResult(
+                    UdapDynamicClientRegistrationErrors.InvalidSoftwareStatement,
+                    errorDescription));
+            }
+        }
+
         if (string.IsNullOrEmpty(document.ClientName))
         {
             _logger.LogWarning("{Error}::{Description}",
