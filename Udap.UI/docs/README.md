@@ -36,3 +36,13 @@ Service calls return a `UdapInteractionResult` (redirect, native-client redirect
 with an error); `this.ToActionResult(result)` converts the redirecting kinds in a `PageModel`.
 
 The built-in pages use these services too, and still work when `AddUdapUI()` is not called.
+
+## Plain-language permissions
+
+`UdapScopeLanguage.Describe(scope)` words an OIDC, SMART App Launch (v1/v2) or UDAP scope for the person
+granting consent, e.g. `patient/MedicationDispense.rs` reads "Your filled prescriptions: The app can look
+at and search the medicines pharmacies have filled for you." It builds the wording from the scope's parts
+(context, FHIR resource type, permissions), so a whole SMART scope catalog reads well without per-scope
+descriptions, and flags scopes that can change records or reach beyond the patient's own records. Its
+`Technical` text gives the breakdown for a "Plain language" / "Technical" switch. The example servers
+(SecuredControls Auth, SecuredControls Identity) show both.

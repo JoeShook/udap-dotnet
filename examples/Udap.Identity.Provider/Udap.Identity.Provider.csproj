@@ -50,11 +50,13 @@
   <ItemGroup Condition="'$(GCPDeploy)' == 'true'">
     <PackageReference Include="Udap.Server" Version="0.9.*" />
     <PackageReference Include="Udap.Metadata.Server" Version="0.9.*" />
+    <PackageReference Include="Udap.UI" Version="0.9.*" />
   </ItemGroup>
 
   <ItemGroup Condition="'$(GCPDeploy)' == '' OR '$(GCPDeploy)' != 'true' ">
     <ProjectReference Include="../../Udap.Server/Udap.Server.csproj" />
     <ProjectReference Include="../../Udap.Metadata.Server/Udap.Metadata.Server.csproj" />
+    <ProjectReference Include="../../Udap.UI/Udap.UI.csproj" />
   </ItemGroup>
 
   <ItemGroup>
