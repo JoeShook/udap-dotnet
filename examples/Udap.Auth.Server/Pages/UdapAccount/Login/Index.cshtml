@@ -76,8 +76,9 @@
 
             @if (Model.TestAccounts.Count > 0)
             {
-                <details class="sc-disclosure">
-                    <summary>Test accounts</summary>
+                <section class="sc-quick" aria-labelledby="quick-title">
+                    <h2 id="quick-title" class="sc-quick-title">Sign in with a test account</h2>
+                    <p class="sc-small sc-muted">One click signs you in as that person. No password to type.</p>
                     <ul role="list" class="sc-accounts">
                         @foreach (var account in Model.TestAccounts)
                         {
@@ -86,15 +87,18 @@
                                     <input type="hidden" name="Input.ReturnUrl" value="@Model.Input.ReturnUrl" />
                                     <input type="hidden" name="Input.Username" value="@account.Username" />
                                     <input type="hidden" name="Input.Password" value="@account.Password" />
-                                    <button class="sc-account" name="Input.Button" value="login">
-                                        <span class="sc-account-name">@account.DisplayName</span>
-                                        <span class="sc-account-user">@account.Username</span>
+                                    <button class="sc-account" name="Input.Button" value="login" aria-label="Sign in as @account.DisplayName (@account.Username)">
+                                        <span class="sc-account-who">
+                                            <span class="sc-account-name">@account.DisplayName</span>
+                                            <span class="sc-account-user">@account.Username</span>
+                                        </span>
+                                        <span class="sc-account-go" aria-hidden="true">Sign in</span>
                                     </button>
                                 </form>
                             </li>
                         }
                     </ul>
-                </details>
+                </section>
             }
         }
 

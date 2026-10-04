@@ -239,6 +239,15 @@
     .sc-account:hover { background: var(--sc-accent-wash); }
     .sc-account-name { font-weight: 600; }
     .sc-account-user { color: var(--sc-ink-soft); font-size: var(--sc-text-sm); font-family: var(--sc-mono); }
+    /* Test accounts: an open, explained panel; each row signs in with one click */
+    .sc-quick { display: grid; gap: var(--sc-2); padding-top: var(--sc-4); border-top: 1px solid var(--sc-line); }
+    .sc-quick-title { font-size: var(--sc-text-lg); }
+    .sc-account-who { display: grid; }
+    .sc-account-go {
+        flex: none; padding: 0.15rem var(--sc-3); border-radius: var(--sc-radius-sm);
+        background: var(--sc-accent-wash); color: var(--sc-accent-strong); font-weight: 600; font-size: var(--sc-text-sm);
+    }
+    .sc-account:hover .sc-account-go { background: var(--sc-accent); color: var(--sc-on-accent); }
 
     .sc-disclosure > summary { display: flex; align-items: center; justify-content: space-between; min-height: var(--sc-target); cursor: pointer; font-weight: 600; list-style: none; }
     .sc-disclosure > summary::-webkit-details-marker { display: none; }
