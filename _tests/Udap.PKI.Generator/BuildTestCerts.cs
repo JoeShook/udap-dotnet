@@ -620,6 +620,15 @@ public partial class BuildTestCerts : CertificateBase
         File.Copy($"{SureFhirLabsSslIdentityServer}/host.docker.internal.pfx",
             $"{BaseDir}/../../examples/Udap.Auth.Server.Admin/host.docker.internal.pfx",
             true);
+
+        // The identity providers serve HTTPS with the same certificate (appsettings.json Kestrel:Certificates:Default).
+        File.Copy($"{SureFhirLabsSslIdentityServer}/host.docker.internal.pfx",
+            $"{BaseDir}/../../examples/Udap.Identity.Provider/host.docker.internal.pfx",
+            true);
+
+        File.Copy($"{SureFhirLabsSslIdentityServer}/host.docker.internal.pfx",
+            $"{BaseDir}/../../examples/Udap.Identity.Provider.2/host.docker.internal.pfx",
+            true);
     }
 
     [Fact]
