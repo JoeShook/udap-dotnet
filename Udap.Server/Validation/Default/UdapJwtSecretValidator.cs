@@ -94,6 +94,16 @@ public class UdapJwtSecretValidator : ISecretValidator
             return fail;
         }
 
+        // Without an x5c header this is not a UDAP client assertion (e.g. private_key_jwt against a
+        // registered JWKS). Decline quietly so the next secret validator decides: recording an error
+        // description here would leave it on the request, where the token response middleware would
+        // attach it to an unrelated error once another validator has authenticated the client.
+        if (!HasX5cHeader(clientAssertion))
+        {
+            _logger.LogDebug("Client assertion for client_id {ClientId} has no x5c header; not a UDAP client assertion", parsedSecret.Id);
+            return fail;
+        }
+
         var tokenHandler = new JsonWebTokenHandler() { MaximumTokenSizeInBytes = _options.InputLengthRestrictions.Jwt };
 
         var tokenValidationParameters = new TokenValidationParameters
@@ -296,6 +306,29 @@ public class UdapJwtSecretValidator : ISecretValidator
 
         return $"No trust anchors are configured for the client's community (community id {community}). " +
                "Contact the authorization server administrator";
+    }
+
+    // Reads the JOSE header directly so a header the token handler cannot parse, or an x5c of any JSON
+    // shape, never throws here; the full validation below reports anything malformed.
+    private static bool HasX5cHeader(string clientAssertion)
+    {
+        var dot = clientAssertion.IndexOf('.');
+        if (dot <= 0)
+        {
+            return false;
+        }
+
+        try
+        {
+            var header = Base64UrlEncoder.DecodeBytes(clientAssertion[..dot]);
+            using var doc = JsonDocument.Parse(header);
+            return doc.RootElement.ValueKind == JsonValueKind.Object
+                   && doc.RootElement.TryGetProperty(JwtHeaderParameterNames.X5c, out _);
+        }
+        catch (Exception)
+        {
+            return false;
+        }
     }
 
     private void SetErrorDescription(string description)
