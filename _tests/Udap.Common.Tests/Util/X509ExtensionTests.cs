@@ -22,12 +22,12 @@ public class X509ExtensionTests
         // The C# code cannot generated a SAN without the trailing slash on a URI without a path.
         // TODO: Need to consider issuing a PR to correct MS code base.  I think asp.net is the place.
         // But regardless I think Postels law applies here.
-        Assert.Equal("https://localhost:5055/", certificate.ResolveUriSubjAltName("https://localhost:5055"));
-        Assert.Equal("https://localhost:5055/", certificate.ResolveUriSubjAltName("https://localhost:5055/"));
+        Assert.Equal("https://udap-idp1.dev.localhost:5055/", certificate.ResolveUriSubjAltName("https://udap-idp1.dev.localhost:5055"));
+        Assert.Equal("https://udap-idp1.dev.localhost:5055/", certificate.ResolveUriSubjAltName("https://udap-idp1.dev.localhost:5055/"));
 
 
-        Assert.Equal("https://localhost:7016/fhir/r4", certificate.ResolveUriSubjAltName("https://localhost:7016/fhir/r4"));
-        Assert.Equal("https://localhost:7016/fhir/r4", certificate.ResolveUriSubjAltName("https://localhost:7016/fhir/r4/"));
+        Assert.Equal("https://udap-fhirlabs-api.dev.localhost:7016/fhir/r4", certificate.ResolveUriSubjAltName("https://udap-fhirlabs-api.dev.localhost:7016/fhir/r4"));
+        Assert.Equal("https://udap-fhirlabs-api.dev.localhost:7016/fhir/r4", certificate.ResolveUriSubjAltName("https://udap-fhirlabs-api.dev.localhost:7016/fhir/r4/"));
     }
 
     [Fact]
