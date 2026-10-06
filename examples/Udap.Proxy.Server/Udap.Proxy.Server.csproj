@@ -133,9 +133,6 @@
     <None Update="CertStore\issued\WeatherApiClient.pfx">
       <CopyToOutputDirectory>Always</CopyToOutputDirectory>
     </None>
-    <None Update="host.docker.internal.pfx">
-      <CopyToOutputDirectory>Always</CopyToOutputDirectory>
-    </None>
     <None Update="IDIPatientMatch\Packages\hl7.fhir.r4b.core-4.3.0.tgz">
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
     </None>

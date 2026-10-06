@@ -70,9 +70,6 @@
     <None Update="CertStore\issued\idp2.securedcontrols.net.server.pfx">
       <CopyToOutputDirectory>Always</CopyToOutputDirectory>
     </None>
-    <None Update="host.docker.internal.pfx">
-      <CopyToOutputDirectory>Always</CopyToOutputDirectory>
-    </None>
   </ItemGroup>
 
 

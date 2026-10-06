@@ -17,8 +17,6 @@
     ASPNETCORE_Kestrel__Certificates__Default__Password="udap-test" -e
     ASPNETCORE_Kestrel__Certificates__Default__Path=/https/aspnetapp_exported.pfx -v
     $(UserProfile)\.aspnet\https:/https/</DockerfileRunArguments> -->
-    <!-- I am going to just go ahead and use the host.docker.internal certificate I created and am
-    also using in Udap.Idp for testing. -->
     <DockerfileRunArguments>-p "5016:8080" -p "7016:8081" -e ASPNETCORE_HTTPS_PORT=7016</DockerfileRunArguments>
     <!-- <UserSecretsId>760b2cec-9a64-4067-92b5-4d378e5f7a5a</UserSecretsId> -->
 
@@ -145,9 +143,6 @@
       <CopyToOutputDirectory>Always</CopyToOutputDirectory>
     </None>
     <None Update="fhirlabs.net.pfx">
-      <CopyToOutputDirectory>Always</CopyToOutputDirectory>
-    </None>
-    <None Update="host.docker.internal.pfx">
       <CopyToOutputDirectory>Always</CopyToOutputDirectory>
     </None>
     <None Update="specification.zip">
