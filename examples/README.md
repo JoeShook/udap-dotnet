@@ -36,7 +36,48 @@ The console prints the dashboard login link. The AppHost creates the databases, 
 
 There is no hosts file to edit. Browsers, curl and .NET resolve any `*.localhost` name to the loopback address themselves. If a name ever stops resolving (some VPN clients, or macOS resolvers), the AppHost logs which one and the hosts-file line that fixes it.
 
-You can still run a single server with `dotnet run --project examples/<Server>`. Its default launch profile uses the same name and port, but it needs a Postgres with its seeded database (see the `Local_*_Migrate` profiles in `migrations/UdapDb.Postgres`).
+Under the AppHost there are no connection strings to set up: it hands each server and seeder its database's connection string.
+
+### Running a server on its own
+
+You can run any server with `dotnet run --project examples/<Server>`. Its default launch profile uses the same name and port as under the AppHost. A server that uses a database then needs a Postgres you provide, with its database seeded. Put the connection strings in each project's `secrets.json`, which overrides `appsettings*.json` in Development. Open it with **Manage User Secrets** in Visual Studio, or set values with `dotnet user-secrets`.
+
+**The seeder** (`migrations/UdapDb.Postgres`) needs all three. Each `Local_*_Migrate` launch profile picks one by name:
+
+```json
+{
+  "ConnectionStrings": {
+    "DefaultConnection": "Host=localhost;Port=5432;Database=Udap.Auth.db;Username=<user>;Password=<password>",
+    "db_identity_provider": "Host=localhost;Port=5432;Database=Udap.Identity.Provider.db;Username=<user>;Password=<password>",
+    "db_identity_provider2": "Host=localhost;Port=5432;Database=Udap.Identity.Provider2.db;Username=<user>;Password=<password>"
+  }
+}
+```
+
+Run the profile for each database you need. The user must be allowed to create the database:
+
+```bash
+dotnet run --project migrations/UdapDb.Postgres --launch-profile Local_Auth_Migrate
+dotnet run --project migrations/UdapDb.Postgres --launch-profile Local_Idp1_Migrate
+dotnet run --project migrations/UdapDb.Postgres --launch-profile Local_Idp2_Migrate
+```
+
+**Each server** reads `DefaultConnection`:
+
+| Project | Database |
+|:---|:---|
+| Udap.Auth.Server | Udap.Auth.db |
+| Udap.Auth.Server.Admin | Udap.Auth.db |
+| Udap.Identity.Provider | Udap.Identity.Provider.db |
+| Udap.Identity.Provider.2 | Udap.Identity.Provider2.db |
+
+```bash
+dotnet user-secrets set "ConnectionStrings:DefaultConnection" "Host=localhost;Port=5432;Database=Udap.Auth.db;Username=<user>;Password=<password>" --project examples/Udap.Auth.Server
+```
+
+Without secrets, the servers fall back to `udap_user` / `udap_password1` on `localhost:5432` (their `appsettings.Development.json`). The seeder falls back to `admin` / `admin1234` (its `appsettings.json`).
+
+FhirLabsApi, the certificate server and the proxies use no database.
 
 ### Sharing an existing Postgres and pgAdmin
 
