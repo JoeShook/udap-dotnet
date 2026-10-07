@@ -20,9 +20,8 @@ public class AccessTokenService : IAccessTokenService
         {
             var googleCredentials = await GoogleCredential.GetApplicationDefaultAsync(cancellationToken);
             var token = await googleCredentials.UnderlyingCredential.GetAccessTokenForRequestAsync(cancellationToken: cancellationToken);
-#if DEBUG
-                logger.LogDebug($"Backend token: {token}");
-#endif
+            // Never log the token itself: it is a live Google Cloud credential.
+            logger.LogDebug("Backend token acquired from Google application default credentials");
             return token;
         }
         catch (Exception ex)
