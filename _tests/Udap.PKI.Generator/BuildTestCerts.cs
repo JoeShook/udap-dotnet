@@ -1436,6 +1436,48 @@ public partial class BuildTestCerts : CertificateBase
             true);
     }
 
+    /// <summary>
+    /// Udap.Proxy.Server's metadata signing cert for local runs, issued by the existing localhost community 1
+    /// intermediate, so it chains to caLocalhostCert like FhirLabsApi's cert and nothing else changes.
+    /// Run MakeCaWithIntermediateUdapForLocalhostCommunity first; rerun this after it, since that replaces the intermediate.
+    /// </summary>
+    [Fact]
+    public void MakeUdapProxyLocalhostCert()
+    {
+        var communityStorePath = $"{LocalhostCertStore}localhost_fhirlabs_community1";
+        const string intermediateName = "intermediateLocalhostCert";
+        const string issuedName = "udapProxyLocalhostCert";
+
+        if (!File.Exists($"{communityStorePath}/intermediates/{intermediateName}.pfx"))
+        {
+            _testOutputHelper.WriteLine($"No {intermediateName} yet. Run MakeCaWithIntermediateUdapForLocalhostCommunity, then this test.");
+            return;
+        }
+
+#if NET9_0_OR_GREATER
+        using var caCert = X509CertificateLoader.LoadPkcs12FromFile($"{communityStorePath}/caLocalhostCert.pfx", "udap-test");
+        using var intermediateCert = X509CertificateLoader.LoadPkcs12FromFile($"{communityStorePath}/intermediates/{intermediateName}.pfx", "udap-test");
+#else
+        using var caCert = new X509Certificate2($"{communityStorePath}/caLocalhostCert.pfx", "udap-test");
+        using var intermediateCert = new X509Certificate2($"{communityStorePath}/intermediates/{intermediateName}.pfx", "udap-test");
+#endif
+
+        BuildUdapClientCertificate(
+            intermediateCert,
+            caCert,
+            intermediateCert.GetRSAPrivateKey()!,
+            "CN=udap-proxy, OU=fhirlabs.net, O=Fhir Coding, L=Portland, S=Oregon, C=US",
+            new List<string> { "https://udap-proxy.dev.localhost:7074/fhir/r4" },
+            $"{communityStorePath}/issued/{issuedName}",
+            $"{LocalCertServer}/crl/{intermediateName}.crl",
+            $"{LocalCertServer}/certs/{intermediateName}.cer"
+        );
+
+        File.Copy($"{communityStorePath}/issued/{issuedName}.pfx",
+            $"{BaseDir}/../../examples/Udap.Proxy.Server/CertStore/issued/{issuedName}.pfx",
+            true);
+    }
+
     [Fact(Skip = "Enabled on desktop when needed.")]
     public void BuildOptumClientCertificateForBrett()
     {

@@ -112,6 +112,9 @@
     <None Update="CertStore\issued\gfhirlabs.healthcare.client.pfx">
       <CopyToOutputDirectory>Always</CopyToOutputDirectory>
     </None>
+    <None Update="CertStore\issued\udapProxyLocalhostCert.pfx">
+      <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+    </None>
     <None Update="CertStore\issued\idp1.securedcontrols.net.server.pfx">
       <CopyToOutputDirectory>Always</CopyToOutputDirectory>
     </None>

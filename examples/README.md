@@ -82,6 +82,16 @@ Without secrets, the servers fall back to `udap_user` / `udap_password1` on `loc
 
 FhirLabsApi, the certificate server and the proxies use no database.
 
+### Udap.Proxy.Server and Google Cloud
+
+In Development, Udap.Proxy.Server forwards FHIR calls to a Google Cloud Healthcare FHIR store and calls it with a Google access token. By default it uses Google application default credentials, the account from `gcloud auth application-default login`, shared by every tool on the machine. To give the proxy its own credentials, point `GoogleCredentialsFile` in its user secrets at a credential file that can read the store, either a service account key or a user's `application_default_credentials.json`:
+
+```bash
+dotnet user-secrets set GoogleCredentialsFile "<path to the credential file>" --project examples/Udap.Proxy.Server
+```
+
+Keep the credential file outside the repo.
+
 ### Sharing an existing Postgres and pgAdmin
 
 Postgres and pgAdmin are persistent containers, by default `udap-postgres` and `udap-pgadmin`. Their names, volumes and image tags come from [`appsettings.json`](./Udap.AppHost/appsettings.json). To use a Postgres and pgAdmin you already run for other projects, override them in the AppHost's user secrets. Aspire reuses a container whose name and spec match, rather than creating a new one:
@@ -112,6 +122,12 @@ To regenerate only the local communities, after changing a host name for example
 
 ```bash
 dotnet test _tests/Udap.PKI.Generator --filter "FullyQualifiedName~MakeCaWithIntermediateUdapForLocalhostCommunity|FullyQualifiedName~MakeNegativeTestCerts|FullyQualifiedName~MakeMultiDomainCertsForSureFhirLabs|FullyQualifiedName~BuildTefcaTestPkiDesk"
+```
+
+Then, as a separate run, reissue Udap.Proxy.Server's local cert from the new community 1 intermediate:
+
+```bash
+dotnet test _tests/Udap.PKI.Generator --filter "FullyQualifiedName~MakeUdapProxyLocalhostCert"
 ```
 
 The SureFhirLabs CA is never replaced once it exists, because deployed servers trust it. Regenerated anchors change what the auth server and identity providers trust, so re-seed their databases afterwards: drop the `Udap.*` databases and start the AppHost again.
