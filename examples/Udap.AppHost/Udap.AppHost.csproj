@@ -9,6 +9,8 @@
     <ImplicitUsings>enable</ImplicitUsings>
     <ManagePackageVersionsCentrally>false</ManagePackageVersionsCentrally>
     <UserSecretsId>udap-dotnet-apphost</UserSecretsId>
+    <!-- UdapEd serves HTTPS with the dev cert through Aspire's certificate APIs, still marked experimental. -->
+    <NoWarn>$(NoWarn);ASPIRECERTIFICATES001</NoWarn>
   </PropertyGroup>
 
   <ItemGroup>

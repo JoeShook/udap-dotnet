@@ -32,11 +32,14 @@ The console prints the dashboard login link. The AppHost creates the databases, 
 | Tefca.Proxy.Server | https://udap-tefca-proxy.dev.localhost:7075 | from the dashboard |
 | mTLS.Proxy.Server | https://udap-mtls-proxy.dev.localhost:7057 | from the dashboard |
 | Udap.Auth.Server.Admin | http://udap-auth-admin.dev.localhost:5253 | from the dashboard |
+| UdapEd (container) | https://udaped.dev.localhost:7041 | automatically |
 | pgAdmin | http://localhost:5050 | automatically |
 
 There is no hosts file to edit. Browsers, curl and .NET resolve any `*.localhost` name to the loopback address themselves. If a name ever stops resolving (some VPN clients, or macOS resolvers), the AppHost logs which one and the hosts-file line that fixes it.
 
 Under the AppHost there are no connection strings to set up: it hands each server and seeder its database's connection string.
+
+[UdapEd](https://github.com/JoeShook/UdapEd) runs from its published image, `ghcr.io/joeshook/udaped`. It serves the dev certificate, trusts it, and reaches the servers by the same names as your browser, so you can point it straight at `https://udap-fhirlabs-api.dev.localhost:7016/fhir/r4`. To skip it, or to pin an image tag, set `UdapEd:Enabled` or `UdapEd:ImageTag` in the AppHost's user secrets.
 
 ### Running a server on its own
 

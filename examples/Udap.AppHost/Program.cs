@@ -97,4 +97,14 @@ builder.AddProject<Projects.Udap_Auth_Server_Admin>("udap-auth-admin", "Udap.Idp
     .WaitForCompletion(authSeed)
     .WithExplicitStart();
 
+// ── UdapEd ──────────────────────────────────────────────────────────────────
+// The UDAP test client (https://github.com/JoeShook/UdapEd), from its published container image, for
+// discovery, registration, tokens and Tiered OAuth against the servers above.
+var udapEdConfig = builder.Configuration.GetSection("UdapEd");
+if (udapEdConfig.GetValue("Enabled", true))
+{
+    builder.AddUdapEd(udapEdConfig)
+        .WaitFor(authServer);
+}
+
 builder.Build().Run();

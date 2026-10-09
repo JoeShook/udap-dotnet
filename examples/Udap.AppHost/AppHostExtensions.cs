@@ -18,6 +18,9 @@ namespace Udap.AppHost;
 
 internal static class AppHostExtensions
 {
+    // Every *.dev.localhost name registered with WithDevHost, for containers that call those servers.
+    private static readonly HashSet<string> DevHosts = new(StringComparer.OrdinalIgnoreCase);
+
     /// <summary>
     /// pgAdmin as a plain persistent container rather than <c>WithPgAdmin()</c>.
     /// </summary>
@@ -105,6 +108,8 @@ internal static class AppHostExtensions
     public static IResourceBuilder<T> WithDevHost<T>(this IResourceBuilder<T> resource, string host)
         where T : IResourceWithEndpoints
     {
+        DevHosts.Add(host);
+
         resource.ApplicationBuilder.Eventing.Subscribe<BeforeStartEvent>(async (@event, ct) =>
         {
             IPAddress[] addresses;
@@ -136,6 +141,49 @@ internal static class AppHostExtensions
                 }
             }
         });
+    }
+
+    /// <summary>
+    /// UdapEd, the UDAP test client, from its published container image, served at
+    /// https://udaped.dev.localhost with the ASP.NET dev cert.
+    /// </summary>
+    /// <remarks>
+    /// UdapEd's server side makes the UDAP calls, from inside the container. There every *.localhost name means the
+    /// container itself, so each server name registered with <see cref="WithDevHost{T}"/> is mapped to the Docker
+    /// host instead (--add-host name:host-gateway). The UDAP metadata, issuers and audiences then match exactly what
+    /// the browser sees. The container trusts the dev cert, so those HTTPS calls validate.
+    /// UdapEd/udap_urls.json replaces the image's base URL and IdP dropdown lists, which UdapEd reads from both
+    /// paths below, so the local servers are listed first.
+    /// </remarks>
+    public static IResourceBuilder<ContainerResource> AddUdapEd(
+        this IDistributedApplicationBuilder builder,
+        IConfigurationSection config)
+    {
+        var urls = Path.Combine(builder.AppHostDirectory, "UdapEd", "udap_urls.json");
+
+        return builder.AddContainer("udaped", config["Image"] ?? "ghcr.io/joeshook/udaped", config["ImageTag"] ?? "latest")
+            .WithBindMount(urls, "/app/wwwroot/Packages/udap_urls.json", isReadOnly: true)
+            .WithBindMount(urls, "/app/wwwroot/_content/UdapEd.Shared/Packages/udap_urls.json", isReadOnly: true)
+            .WithImagePullPolicy(ImagePullPolicy.Always)
+            .WithHttpsEndpoint(port: config.GetValue("Port", 7041), targetPort: 8181)
+            .WithEnvironment("ASPNETCORE_HTTPS_PORTS", "8181")
+            .WithHttpsDeveloperCertificate()
+            .WithHttpsCertificateConfiguration(context =>
+            {
+                context.EnvironmentVariables["ASPNETCORE_Kestrel__Certificates__Default__Path"] = context.CertificatePath;
+                context.EnvironmentVariables["ASPNETCORE_Kestrel__Certificates__Default__KeyPath"] = context.KeyPath;
+                return Task.CompletedTask;
+            })
+            .WithDeveloperCertificateTrust(true)
+            .WithContainerRuntimeArgs(context =>
+            {
+                foreach (var host in DevHosts)
+                {
+                    context.Args.Add("--add-host");
+                    context.Args.Add($"{host}:host-gateway");
+                }
+            })
+            .WithDevHost("udaped.dev.localhost");
     }
 
     private static string ExpandHome(string path) =>
