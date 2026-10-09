@@ -79,8 +79,10 @@ builder.AddProject<Projects.FhirLabsApi>("udap-fhirlabs-api", "FhirLabsApi_Local
 
 // Started from the dashboard when needed. The proxies front backends that are not part of this AppHost
 // (see each project's appsettings), and the admin UI is only needed to edit the auth server's data.
+// Its Google login is kept apart from the machine's usual gcloud login: see WithSeparateGcloudLogin.
 builder.AddProject<Projects.Udap_Proxy_Server>("udap-proxy", "https")
     .WithDevHost("udap-proxy.dev.localhost")
+    .WithSeparateGcloudLogin(builder.Configuration.GetSection("UdapProxy"))
     .WithExplicitStart();
 
 builder.AddProject<Projects.Tefca_Proxy_Server>("udap-tefca-proxy", "https")

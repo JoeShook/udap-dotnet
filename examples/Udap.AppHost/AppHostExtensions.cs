@@ -186,6 +186,43 @@ internal static class AppHostExtensions
             .WithDevHost("udaped.dev.localhost");
     }
 
+    /// <summary>
+    /// Google credentials for the proxy from a gcloud config folder of its own, so the Google account it uses
+    /// never touches the machine's usual gcloud login. Adds a "gcloud-login" resource, started from the dashboard,
+    /// that runs <c>gcloud auth application-default login</c> against that folder, and points the proxy's
+    /// GoogleCredentialsFile at the resulting credentials file whenever the proxy starts.
+    /// </summary>
+    public static IResourceBuilder<ProjectResource> WithSeparateGcloudLogin(
+        this IResourceBuilder<ProjectResource> proxy,
+        IConfigurationSection config)
+    {
+        var configDir = Path.GetFullPath(ExpandHome(config["GcloudConfigDir"] ?? "~/.udap-gcloud"));
+        var credentialsFile = Path.Combine(configDir, "application_default_credentials.json");
+
+        // gcloud is a .cmd script on Windows, so run it through cmd there.
+        var login = OperatingSystem.IsWindows()
+            ? proxy.ApplicationBuilder.AddExecutable("gcloud-login", "cmd", configDir,
+                "/c", "gcloud", "auth", "application-default", "login")
+            : proxy.ApplicationBuilder.AddExecutable("gcloud-login", "gcloud", configDir,
+                "auth", "application-default", "login");
+
+        Directory.CreateDirectory(configDir);
+
+        login
+            .WithEnvironment("CLOUDSDK_CONFIG", configDir)
+            .WithExplicitStart()
+            .WithParentRelationship(proxy);
+
+        return proxy.WithEnvironment(context =>
+        {
+            // Checked at each proxy start, so a login made after the AppHost started is picked up.
+            if (File.Exists(credentialsFile))
+            {
+                context.EnvironmentVariables["GoogleCredentialsFile"] = credentialsFile;
+            }
+        });
+    }
+
     private static string ExpandHome(string path) =>
         path.StartsWith('~')
             ? Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.UserProfile), path[1..].TrimStart('/', '\\'))

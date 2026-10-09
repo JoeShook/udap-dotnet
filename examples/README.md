@@ -84,7 +84,11 @@ FhirLabsApi, the certificate server and the proxies use no database.
 
 ### Udap.Proxy.Server and Google Cloud
 
-In Development, Udap.Proxy.Server forwards FHIR calls to a Google Cloud Healthcare FHIR store and calls it with a Google access token. By default it uses Google application default credentials, the account from `gcloud auth application-default login`, shared by every tool on the machine. To give the proxy its own credentials, point `GoogleCredentialsFile` in its user secrets at a credential file that can read the store, either a service account key or a user's `application_default_credentials.json`:
+In Development, Udap.Proxy.Server forwards FHIR calls to a Google Cloud Healthcare FHIR store and calls it with a Google access token.
+
+Under the AppHost, the proxy has a Google login of its own, kept in a separate gcloud config folder (`~/.udap-gcloud`, set by `UdapProxy:GcloudConfigDir`). Your usual gcloud login, and every other tool on the machine, never sees it. To sign in, start **gcloud-login** under udap-proxy on the dashboard and sign in with the Google account that can read the FHIR store. Then start or restart udap-proxy. The AppHost hands the proxy that login's credentials file at each start. Sign in again the same way to switch accounts.
+
+Run on its own, the proxy uses Google application default credentials, the account from `gcloud auth application-default login`, shared by every tool on the machine. To give it other credentials, point `GoogleCredentialsFile` in its user secrets at a credential file that can read the store, either a service account key or a user's `application_default_credentials.json`:
 
 ```bash
 dotnet user-secrets set GoogleCredentialsFile "<path to the credential file>" --project examples/Udap.Proxy.Server
