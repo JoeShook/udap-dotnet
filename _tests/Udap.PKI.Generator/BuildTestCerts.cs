@@ -1473,9 +1473,10 @@ public partial class BuildTestCerts : CertificateBase
             $"{LocalCertServer}/certs/{intermediateName}.cer"
         );
 
-        File.Copy($"{communityStorePath}/issued/{issuedName}.pfx",
-            $"{BaseDir}/../../examples/Udap.Proxy.Server/CertStore/issued/{issuedName}.pfx",
-            true);
+        // CertStore is not in git, so the folder is missing on a clean checkout.
+        var proxyIssued = $"{BaseDir}/../../examples/Udap.Proxy.Server/CertStore/issued";
+        proxyIssued.EnsureDirectoryExists();
+        File.Copy($"{communityStorePath}/issued/{issuedName}.pfx", $"{proxyIssued}/{issuedName}.pfx", true);
     }
 
     [Fact(Skip = "Enabled on desktop when needed.")]
