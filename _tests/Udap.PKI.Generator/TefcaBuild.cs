@@ -332,12 +332,7 @@ public class TefcaBuild : CertificateBase
         AddAuthorityKeyIdentifier(intermediateCert, clientReq, _testOutputHelper);
         clientReq.CertificateExtensions.Add(MakeCdp(cdpUrl));
 
-        var subAltNameBuilder = new SubjectAlternativeNameBuilder();
-        foreach (var san in subjectAltNames)
-        {
-            subAltNameBuilder.AddUri(new Uri(san));
-        }
-        clientReq.CertificateExtensions.Add(subAltNameBuilder.Build());
+        clientReq.CertificateExtensions.Add(SubjectAltName.FromUris(subjectAltNames));
 
         var aiaBuilder = new AuthorityInformationAccessBuilder();
         aiaBuilder.AddCertificateAuthorityIssuerUri(new Uri(aiaUrl));

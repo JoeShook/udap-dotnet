@@ -95,6 +95,12 @@ dotnet run --project examples/Udap.AppHost
   `dotnet test _tests/Udap.PKI.Generator --filter "FullyQualifiedName~MakeCaWithIntermediateUdapForLocalhostCommunity|FullyQualifiedName~MakeNegativeTestCerts|FullyQualifiedName~MakeMultiDomainCertsForSureFhirLabs|FullyQualifiedName~BuildTefcaTestPkiDesk"`
 - New anchors leave UdapServer.Tests' SQLite files (`bin/Debug/net10.0/Udap.Idp.db.*`) seeded with the old
   ones; delete them before rerunning those tests.
+- SAN URIs are written verbatim through `SubjectAltName.FromUris` (BouncyCastle), never through .NET's
+  `SubjectAlternativeNameBuilder.AddUri`, which canonicalizes a path-less URI to end in `/`. SSRAA requires the
+  JWT `iss` to match the SAN exactly, so a SAN never ends in a trailing slash; the helper throws if one does.
+- The desktop-only generators (`MakeEndCertsForDefaultCommunity`, `MakeIdentityProviderCertificates`) reissue
+  end-entity certs from the on-disk SureFhirLabs CA. `MakeEndCertsForDefaultCommunity` also overwrites the
+  tracked `examples/Udap.Auth.Server/SureFhirLabs_CA.cer`; run `git restore` on it afterwards.
 
 ## Architecture
 

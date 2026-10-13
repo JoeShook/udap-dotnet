@@ -194,10 +194,8 @@ public partial class BuildTestCerts : CertificateBase
 
 
 
-            var subAltNameBuilder = new SubjectAlternativeNameBuilder();
-            subAltNameBuilder.AddUri(new Uri("udap://fhirlabs.net")); // embedding a community uri in intermediate cert
-            var x509Extension = subAltNameBuilder.Build();
-            intermediateReq.CertificateExtensions.Add(x509Extension);
+            // embedding a community uri in intermediate cert
+            intermediateReq.CertificateExtensions.Add(SubjectAltName.FromUris(["udap://fhirlabs.net"]));
 
             var authorityInfoAccessBuilder = new AuthorityInformationAccessBuilder();
             authorityInfoAccessBuilder.AddCertificateAuthorityIssuerUri(new Uri(SureFhirLabsCaPublicCertHosted));
@@ -961,7 +959,7 @@ public partial class BuildTestCerts : CertificateBase
             "CN=localhost, OU=WeatherApi, O=Fhir Coding, L=Portland, S=Oregon, C=US",   //issuedDistinguishedName
             new List<string>
             {
-                "http://localhost/",
+                "http://localhost",
                 "https://localhost:5021"
             },                                                                          //SubjAltNames
             null!,                                                                      //deliveryProjectPath    
@@ -977,7 +975,7 @@ public partial class BuildTestCerts : CertificateBase
             "CN=localhost2, OU=WeatherApi, O=Fhir Coding, L=Portland, S=Oregon, C=US",  //issuedDistinguishedName
             new List<string>
             {
-                "http://localhost/",
+                "http://localhost",
                 "https://localhost:5021"
             },
             null!,                                                                      //deliveryProjectPath    
@@ -1075,10 +1073,7 @@ public partial class BuildTestCerts : CertificateBase
             intermediateReq.CertificateExtensions.Add(
                 MakeCdp($"{LocalhostCdp}/{anchorName}.crl"));
 
-            var subAltNameBuilder = new SubjectAlternativeNameBuilder();
-            subAltNameBuilder.AddUri(new Uri(LocalCertServerHost));
-            var x509Extension = subAltNameBuilder.Build();
-            intermediateReq.CertificateExtensions.Add(x509Extension);
+            intermediateReq.CertificateExtensions.Add(SubjectAltName.FromUris([LocalCertServerHost]));
 
             using var intermediateCert = intermediateReq.Create(
                 caCert,
@@ -1365,23 +1360,6 @@ public partial class BuildTestCerts : CertificateBase
             "http://crl.fhircerts.net/crl/surefhirlabsIntermediateCrl.crl",
             "http://crl.fhircerts.net/certs/intermediates/SureFhirLabs_Intermediate.cer"
         );
-
-        //
-        // Build a client cert for the ss UdapLabsFhirStore 
-        //
-        // BuildClientCertificate(
-        //     subCA_localhost,
-        //     rootCA_localhost,
-        //     subCA_localhost.GetRSAPrivateKey()!,
-        //     "CN=proxy for sandbox, OU=UDAP, O=Fhir Coding, L=Portland, S=Oregon, C=US",
-        //     new List<string>
-        //     {
-        //         "https://localhost:7074/sandbox/fhir/"
-        //     },
-        //     $"{LocalhostCertStore}surefhirlabs_community/issued/sandbox.UdapLabsFhirStore.healthcare.client",
-        //     "http://localhost:5033/crl/intermediateLocalhostCert.crl",
-        //     "http://localhost:5033/certs/intermediateLocalhostCert.cer"
-        // );
     }
 
 
@@ -1574,14 +1552,7 @@ public partial class BuildTestCerts : CertificateBase
             clientCertRequest.CertificateExtensions.Add(MakeCdp(crl));
         }
 
-        var subAltNameBuilder = new SubjectAlternativeNameBuilder();
-        foreach (var subjectAltName in subjectAltNames)
-        {
-            subAltNameBuilder.AddUri(new Uri(subjectAltName)); //Same as iss claim
-        }
-
-        var x509Extension = subAltNameBuilder.Build();
-        clientCertRequest.CertificateExtensions.Add(x509Extension);
+        clientCertRequest.CertificateExtensions.Add(SubjectAltName.FromUris(subjectAltNames)); //Same as iss claim
 
         if (buildAIAExtensionsPath != null)
         {
@@ -1672,14 +1643,7 @@ public partial class BuildTestCerts : CertificateBase
             clientCertRequest.CertificateExtensions.Add(MakeCdp(crl));
         }
 
-        var subAltNameBuilder = new SubjectAlternativeNameBuilder();
-        foreach (var subjectAltName in subjectAltNames)
-        {
-            subAltNameBuilder.AddUri(new Uri(subjectAltName)); //Same as iss claim
-        }
-
-        var x509Extension = subAltNameBuilder.Build();
-        clientCertRequest.CertificateExtensions.Add(x509Extension);
+        clientCertRequest.CertificateExtensions.Add(SubjectAltName.FromUris(subjectAltNames)); //Same as iss claim
 
         if (buildAIAExtensionsPath != null)
         {

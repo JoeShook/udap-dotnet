@@ -104,8 +104,8 @@ public class UdapDcrValidatorTests
         var expires = now.AddMinutes(1).ToUniversalTime();
         var document = new UdapDynamicClientRegistrationDocument
         {
-            Issuer = "http://localhost/",
-            Subject = "http://localhost/",
+            Issuer = "http://localhost",
+            Subject = "http://localhost",
             Audience = "https://localhost/connect/register",
             Expiration = EpochTime.GetIntDate(expires),
             IssuedAt = EpochTime.GetIntDate(now.ToUniversalTime()),
@@ -205,8 +205,8 @@ public class UdapDcrValidatorTests
 
         var document = new UdapDynamicClientRegistrationDocument
         {
-            Issuer = "http://localhost/",
-            Subject = "http://localhost/",
+            Issuer = "http://localhost",
+            Subject = "http://localhost",
             Audience = "https://localhost/connect/register",
             Expiration = EpochTime.GetIntDate(now.AddMinutes(1).ToUniversalTime()),
             IssuedAt = EpochTime.GetIntDate(now.ToUniversalTime()),

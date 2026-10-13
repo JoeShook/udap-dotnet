@@ -290,7 +290,10 @@ public static class X509Extensions
 
         foreach (var san in sans.Select(s => s.Item2))
         {
+            // Exact match first (SSRAA says iss must match the SAN exactly); then tolerate a
+            // trailing slash on either side, which callers often add to a base URL.
             if (baseUrl == san ||
+                baseUrl.TrimEnd('/') == san.TrimEnd('/') ||
                 new Uri(baseUrl.TrimEnd('/')).AbsoluteUri == san)
             {
                 return san;
