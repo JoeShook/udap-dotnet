@@ -63,26 +63,3 @@ updates:
       actions:
         patterns:
           - "*"
-
-  # Base images of the example servers and migration containers.
-  - package-ecosystem: "docker"
-    directories:
-      - "/"
-      - "/examples/FhirLabsApi"
-      - "/examples/mTLS.Proxy.Server"
-      - "/examples/Tefca.Proxy.Server"
-      - "/examples/Udap.Auth.Server"
-      - "/examples/Udap.Auth.Server.Admin"
-      - "/examples/Udap.Identity.Provider"
-      - "/examples/Udap.Identity.Provider.2"
-      - "/examples/Udap.Pki.Cli"
-      - "/examples/Udap.Proxy.Server"
-      - "/migrations/UdapDb.Postgres"
-      - "/migrations/UdapDb.SqlServer"
-    schedule:
-      interval: "weekly"
-    target-branch: "develop"
-    groups:
-      dotnet-images:
-        patterns:
-          - "dotnet/*"
