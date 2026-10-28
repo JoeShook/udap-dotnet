@@ -30,6 +30,8 @@
 			<PrivateAssets>all</PrivateAssets>
 			<IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
 		</PackageReference>
+		<PackageReference Include="System.Security.Cryptography.Pkcs" Version="10.0.14" />
+		<PackageReference Include="System.Security.Cryptography.Xml" Version="10.0.14" />
 		<PackageReference Include="System.IdentityModel.Tokens.Jwt" Version="8.23.0" />
 		<None Include="docs\README.md" Pack="true" PackagePath="\" />
 		<None Include="../artwork/UDAP_Ecosystem_Gears 48X48.jpg" Pack="true" PackagePath="\" />

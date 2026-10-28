@@ -45,6 +45,7 @@
     <PackageReference Include="OpenTelemetry.Instrumentation.Http" Version="1.19.0" />
     <PackageReference Include="OpenTelemetry.Instrumentation.SqlClient" Version="1.19.0" />
     <PackageReference Include="Serilog.AspNetCore" version="10.0.0" />
+    <PackageReference Include="System.Security.Cryptography.Pkcs" Version="10.0.14" />
   </ItemGroup>
 
   <ItemGroup Condition="'$(GCPDeploy)' == 'true'">
