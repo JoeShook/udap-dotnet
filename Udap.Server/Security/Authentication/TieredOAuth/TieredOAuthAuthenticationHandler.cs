@@ -411,8 +411,8 @@ public class TieredOAuthAuthenticationHandler : OAuthHandler<TieredOAuthAuthenti
     {
         Logger.LogInformation("UDAP exchanging authorization code.");
         Logger.LogDebug("{ReturnUrl}", context.Properties.Items["returnUrl"] ?? "~/");
-        var sanitizedQueryString = Context.Request.QueryString.Value?.Replace(Environment.NewLine, "").Replace("\n", "").Replace("\r", "");
-        Logger.LogDebug("{QueryString}", sanitizedQueryString);
+        // Parameter names only: the callback query carries the authorization code.
+        Logger.LogDebug("Callback query parameters: {QueryParameters}", string.Join(", ", Context.Request.Query.Keys));
 
         var originalRequestParams = HttpUtility.ParseQueryString(context.Properties.Items["returnUrl"] ?? "~/");
         var idp = (originalRequestParams.GetValues("idp") ?? throw new InvalidOperationException()).Last();

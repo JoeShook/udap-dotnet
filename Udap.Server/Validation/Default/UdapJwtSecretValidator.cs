@@ -81,7 +81,8 @@ public class UdapJwtSecretValidator : ISecretValidator
         var fail = new SecretValidationResult { Success = false };
         var success = new SecretValidationResult { Success = true };
         
-        _logger.LogDebug("Parsed secret: {ParsedSecret}", JsonSerializer.Serialize(parsedSecret));
+        // Never the credential itself: it is the client assertion.
+        _logger.LogDebug("Parsed secret of type {SecretType} for client_id: {ClientId}", parsedSecret.Type, parsedSecret.Id);
 
         if (parsedSecret.Type != IdentityServerConstants.ParsedSecretTypes.JwtBearer)
         {
