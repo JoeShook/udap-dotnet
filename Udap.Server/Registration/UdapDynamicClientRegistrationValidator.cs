@@ -449,14 +449,15 @@ public class UdapDynamicClientRegistrationValidator : IUdapDynamicClientRegistra
             {
                 foreach (var requestRedirectUri in document.RedirectUris)
                 {
-                    //TODO add tests and decide how to handle invalid Uri exception
-                    var uri = new Uri(requestRedirectUri);
+                    var redirectUriError = ValidateRedirectUri(requestRedirectUri);
 
-                    if (!uri.IsAbsoluteUri)
+                    if (redirectUriError != null)
                     {
-                        return await Task.FromResult(new UdapDynamicClientRegistrationValidationResult(
+                        _logger.LogWarning("{Error}: {RedirectUri}", redirectUriError, requestRedirectUri);
+
+                        return new UdapDynamicClientRegistrationValidationResult(
                             UdapDynamicClientRegistrationErrors.InvalidClientMetadata,
-                            UdapDynamicClientRegistrationErrorDescriptions.MalformedRedirectUri));
+                            redirectUriError);
                     }
                 }
             }
@@ -604,6 +605,39 @@ public class UdapDynamicClientRegistrationValidator : IUdapDynamicClientRegistra
         return false;
     }
 
+    /// <summary>
+    /// A registered redirect URI must be an absolute https URI (SSRAA), fully specified without wildcards
+    /// (UDAP Certifications and Endorsements) and without a fragment (RFC 6749 section 3.1.2).
+    /// http on a loopback host is accepted only when <see cref="ServerSettings.AllowLoopbackHttpRedirectUris"/> is set.
+    /// </summary>
+    /// <returns>The error description, or null when the URI is acceptable.</returns>
+    internal string? ValidateRedirectUri(string? redirectUri)
+    {
+        if (string.IsNullOrWhiteSpace(redirectUri) || !Uri.TryCreate(redirectUri, UriKind.Absolute, out var uri))
+        {
+            return UdapDynamicClientRegistrationErrorDescriptions.MalformedRedirectUri;
+        }
+
+        var isHttps = uri.Scheme == Uri.UriSchemeHttps;
+        var isLoopbackHttp = uri.Scheme == Uri.UriSchemeHttp && uri.IsLoopback && _serverSettings.AllowLoopbackHttpRedirectUris;
+
+        if (!isHttps && !isLoopbackHttp)
+        {
+            return UdapDynamicClientRegistrationErrorDescriptions.RedirectUriSchemeNotHttps;
+        }
+
+        if (redirectUri.Contains('#'))
+        {
+            return UdapDynamicClientRegistrationErrorDescriptions.RedirectUriHasFragment;
+        }
+
+        if (redirectUri.Contains('*'))
+        {
+            return UdapDynamicClientRegistrationErrorDescriptions.RedirectUriHasWildcard;
+        }
+
+        return null;
+    }
 
     public async Task<(bool, UdapDynamicClientRegistrationValidationResult?)> ValidateLogoUri(UdapDynamicClientRegistrationDocument document)
     {

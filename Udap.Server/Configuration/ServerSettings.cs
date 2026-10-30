@@ -68,6 +68,12 @@ public class ServerSettings
     public bool LogoRequired { get; set; } = true;
 
     /// <summary>
+    /// Accept http redirect URIs on a loopback host (localhost, 127.0.0.1, [::1]) at registration, as native apps
+    /// use them (RFC 8252 section 7.3). Off by default: SSRAA requires every redirect URI to use the https scheme.
+    /// </summary>
+    public bool AllowLoopbackHttpRedirectUris { get; set; }
+
+    /// <summary>
     /// By default the jti claim is required on registration requests.  And replay attacks are monitored.
     /// </summary>
     public bool RegistrationJtiRequired { get; set; } = true;

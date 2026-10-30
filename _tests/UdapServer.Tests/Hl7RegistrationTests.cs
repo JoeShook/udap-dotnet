@@ -203,7 +203,7 @@ public class Hl7RegistrationTests : IClassFixture<Hl7ApiTestFixture>
             Contacts = new HashSet<string> { "FhirJoe@BridgeTown.lab", "FhirJoe@test.lab" },
             GrantTypes = new HashSet<string> { "authorization_code", "refresh_token" },
             ResponseTypes = new HashSet<string> { "code" },
-            RedirectUris = new List<string>(){ "http://localhost/signin-oidc" },
+            RedirectUris = new List<string>(){ "https://localhost/signin-oidc" },
             TokenEndpointAuthMethod = UdapConstants.RegistrationDocumentValues.TokenEndpointAuthMethodValue,
             Scope = "user/Patient.read"
         };
@@ -263,7 +263,7 @@ public class Hl7RegistrationTests : IClassFixture<Hl7ApiTestFixture>
             .Single(c => c.ClientId == responseUdapDocument.ClientId);
         Assert.False(clientEntity.RequirePkce);
 
-        Assert.Equal("http://localhost/signin-oidc", clientEntity.RedirectUris.Single().RedirectUri);
+        Assert.Equal("https://localhost/signin-oidc", clientEntity.RedirectUris.Single().RedirectUri);
         Assert.True(clientEntity.AllowOfflineAccess);
     }
 
