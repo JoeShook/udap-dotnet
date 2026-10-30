@@ -492,9 +492,10 @@ public class TieredOAuthAuthenticationHandler : OAuthHandler<TieredOAuthAuthenti
             }
         }
         
-        _udapClient.Problem += element => properties.Parameters.Add("Problem", element.Problems.Summarize(TrustChainValidator.DefaultProblemFlags));
-        _udapClient.Untrusted += certificate2 => properties.Parameters.Add("Untrusted", certificate2.Subject);
-        _udapClient.TokenError += message => properties.Parameters.Add("TokenError", message);
+        // Assign rather than Add: one validation can report the same kind of event more than once.
+        _udapClient.Problem += element => properties.Parameters["Problem"] = element.Problems.Summarize(TrustChainValidator.DefaultProblemFlags);
+        _udapClient.Untrusted += certificate2 => properties.Parameters["Untrusted"] = certificate2.Subject;
+        _udapClient.TokenError += message => properties.Parameters["TokenError"] = message;
         
         var response = await _udapClient.ValidateResource(idp, communityParam, cancellationToken: Context.RequestAborted);
         
