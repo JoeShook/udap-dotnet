@@ -613,7 +613,10 @@ public class UdapDynamicClientRegistrationValidator : IUdapDynamicClientRegistra
     /// <returns>The error description, or null when the URI is acceptable.</returns>
     internal string? ValidateRedirectUri(string? redirectUri)
     {
-        if (string.IsNullOrWhiteSpace(redirectUri) || !Uri.TryCreate(redirectUri, UriKind.Absolute, out var uri))
+        // A bare path is malformed: on Unix, Uri.TryCreate would otherwise accept "/path" as file:///path.
+        if (string.IsNullOrWhiteSpace(redirectUri)
+            || redirectUri.StartsWith('/')
+            || !Uri.TryCreate(redirectUri, UriKind.Absolute, out var uri))
         {
             return UdapDynamicClientRegistrationErrorDescriptions.MalformedRedirectUri;
         }
