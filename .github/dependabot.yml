@@ -22,6 +22,10 @@ updates:
         patterns:
           - "Microsoft.IdentityModel.*"
           - "System.IdentityModel.Tokens.Jwt"
+      # The OpenTelemetry packages share the core OpenTelemetry dependency; separate PRs conflict on it.
+      opentelemetry:
+        patterns:
+          - "OpenTelemetry*"
       # One PR per .NET servicing release instead of one per package and project.
       # A new major version stays its own PR: it is a target framework decision.
       dotnet-servicing:
