@@ -274,6 +274,23 @@ public class UdapJwtSecretValidator : ISecretValidator
             return fail;
         }
 
+        // The certificate must be this client's: UDAP JWT-Based Client Authentication section 6.3 requires
+        // a uniformResourceIdentifier SAN equal to the issuer the client registered with. A certificate that
+        // only chains to the same community belongs to some other client.
+        var registeredIssuer = secretList
+            .FirstOrDefault(s => s.Type == UdapServerConstants.SecretTypes.UDAP_SAN_URI_ISS_NAME)
+            ?.Value;
+
+        if (registeredIssuer == null || !endCertificate.HasUriSubjectAltName(registeredIssuer))
+        {
+            _logger.LogError(
+                "Client certificate URI SANs [{CertificateSans}] do not include the registered issuer {RegisteredIssuer} for client_id: {ClientId}",
+                string.Join(", ", endCertificate.GetSubjectAltNames(n => n.TagNo == (int)X509Extensions.GeneralNameType.URI).Select(san => san.Item2)),
+                registeredIssuer, parsedSecret.Id);
+            SetErrorDescription("Client certificate does not match the certificate the client registered with");
+            return fail;
+        }
+
         //
         // PKI chain validation, including CRL checking
         //

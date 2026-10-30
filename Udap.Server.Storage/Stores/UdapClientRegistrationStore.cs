@@ -18,6 +18,7 @@ using Udap.Common.Models;
 using Udap.Server.Storage.DbContexts;
 using Udap.Server.Storage.Extensions;
 using Udap.Server.Storage.Mappers;
+using Udap.Util.Extensions;
 using Secret = Duende.IdentityServer.Models.Secret;
 
 namespace Udap.Server.Storage.Stores
@@ -365,9 +366,15 @@ namespace Udap.Server.Storage.Stores
             if (entity != null)
             {
                 var endCertificate = secret.GetUdapEndCert();
+                var registeredIssuer = entity.ClientSecrets
+                    .FirstOrDefault(cs => cs.Type == UdapServerConstants.SecretTypes.UDAP_SAN_URI_ISS_NAME)
+                    ?.Value;
 
+                // Only a renewal of the client's own certificate rolls forward: it must carry the registered issuer as a URI SAN.
                 if(endCertificate != null && endCertificate.NotBefore < DateTime.Now.ToUniversalTime()
-                                          && endCertificate.NotAfter > DateTime.Now.ToUniversalTime())
+                                          && endCertificate.NotAfter > DateTime.Now.ToUniversalTime()
+                                          && registeredIssuer != null
+                                          && endCertificate.HasUriSubjectAltName(registeredIssuer))
                 {
                     foreach (var clientSecret in entity.ClientSecrets.Where(cs =>
                                               cs.Type == UdapServerConstants.SecretTypes.UDAP_SAN_URI_ISS_NAME ||

@@ -284,6 +284,15 @@ public static class X509Extensions
         return names;
     }
 
+    /// <summary>
+    /// True when the certificate carries <paramref name="uri"/> as a uniformResourceIdentifier SAN, compared exactly.
+    /// </summary>
+    public static bool HasUriSubjectAltName(this X509Certificate2 cert, string uri)
+    {
+        return cert.GetSubjectAltNames(n => n.TagNo == (int)GeneralNameType.URI)
+            .Any(san => string.Equals(san.Item2, uri, StringComparison.Ordinal));
+    }
+
     public static string ResolveUriSubjAltName(this X509Certificate2 cert, string baseUrl)
     {
         var sans = cert.GetSubjectAltNames(n => n.TagNo == (int)GeneralNameType.URI);

@@ -22,6 +22,7 @@ using System.Net;
 using System.Net.Http.Headers;
 using System.Net.Http.Json;
 using System.Security.Claims;
+using System.Security.Cryptography;
 using System.Security.Cryptography.X509Certificates;
 using System.Text.Json;
 using Udap.Client;
@@ -1626,5 +1627,142 @@ public class ClientCredentialsUdapModeTests
 
         Assert.False(tokenResponse.IsError, tokenResponse.Error);
         Assert.Equal("system/Patient.rs", tokenResponse.Scope);
+    }
+
+    /// <summary>
+    /// The client assertion must be signed by x5c[0], the certificate whose trust chain is validated
+    /// (UDAP JWT-Based Client Authentication section 6.1). Here x5c[0] is the registered client's own
+    /// certificate and a self-signed certificate follows it; an assertion signed with the self-signed
+    /// key must not authenticate the client.
+    /// </summary>
+    [Fact]
+    public async Task GetAccessToken_Signed_By_Another_x5c_Certificate_Is_Rejected()
+    {
+        var clientCert = LoadPfx("CertStore/issued/fhirlabs.net.client.pfx");
+        var regDocumentResult = await RegisterClientCredentialsClient(clientCert);
+
+        using var otherKey = RSA.Create(2048);
+        var otherCertRequest = new CertificateRequest("CN=Not The Client", otherKey, HashAlgorithmName.SHA256, RSASignaturePadding.Pkcs1);
+        using var otherCert = otherCertRequest.CreateSelfSigned(DateTimeOffset.UtcNow.AddMinutes(-5), DateTimeOffset.UtcNow.AddDays(1));
+
+        var now = DateTime.UtcNow;
+        var tokenDescriptor = new SecurityTokenDescriptor
+        {
+            Issuer = regDocumentResult.ClientId,
+            Audience = IdentityServerPipeline.TokenEndpoint,
+            IssuedAt = now,
+            NotBefore = now,
+            Expires = now.AddMinutes(5),
+            Claims = new Dictionary<string, object>
+            {
+                { JwtClaimTypes.Subject, regDocumentResult.ClientId! },
+                { JwtClaimTypes.JwtId, CryptoRandom.CreateUniqueId() }
+            },
+            AdditionalHeaderClaims = new Dictionary<string, object>
+            {
+                { JwtHeaderParameterNames.X5c, new[] { Convert.ToBase64String(clientCert.RawData), Convert.ToBase64String(otherCert.RawData) } }
+            },
+            SigningCredentials = new SigningCredentials(new RsaSecurityKey(otherKey), SecurityAlgorithms.RsaSha384)
+        };
+
+        var clientRequest = new UdapClientCredentialsTokenRequest
+        {
+            Address = IdentityServerPipeline.TokenEndpoint,
+            ClientAssertion = new ClientAssertion
+            {
+                Type = OidcConstants.ClientAssertionTypes.JwtBearer,
+                Value = new JsonWebTokenHandler().CreateToken(tokenDescriptor)
+            },
+            Udap = UdapConstants.UdapVersionsSupportedValue,
+            Scope = "system/Patient.rs"
+        };
+
+        var tokenResponse = await _mockPipeline.BackChannelClient.UdapRequestClientCredentialsTokenAsync(clientRequest);
+
+        Assert.True(tokenResponse.IsError, "a key from a certificate other than x5c[0] authenticated the client");
+        Assert.Equal("invalid_client", tokenResponse.Error);
+    }
+
+    /// <summary>
+    /// A certificate that chains to the client's community but belongs to another member must not
+    /// authenticate the client: x5c[0] must carry the URI SAN the client registered with
+    /// (UDAP JWT-Based Client Authentication section 6.3).
+    /// </summary>
+    [Fact]
+    public async Task GetAccessToken_With_Another_Community_Members_Certificate_Is_Rejected()
+    {
+        var clientCert = LoadPfx("CertStore/issued/fhirLabsApiClientLocalhostCert2.pfx");
+        var regDocumentResult = await RegisterClientCredentialsClient(clientCert);
+
+        // Same community intermediate, different URI SAN (https://idpserver2).
+        var otherMemberCert = LoadPfx("CertStore/issued/idpserver2.pfx");
+
+        var clientRequest = AccessTokenRequestForClientCredentialsBuilder.Create(
+                regDocumentResult.ClientId,
+                IdentityServerPipeline.TokenEndpoint,
+                otherMemberCert)
+            .WithScope("system/Patient.rs")
+            .Build("RS384");
+
+        var tokenResponse = await _mockPipeline.BackChannelClient.UdapRequestClientCredentialsTokenAsync(clientRequest);
+
+        Assert.True(tokenResponse.IsError, "another community member's certificate authenticated the client");
+        Assert.Equal("invalid_client", tokenResponse.Error);
+    }
+
+    /// <summary>
+    /// Secret rollover only accepts a renewal of the client's own certificate. Another community
+    /// member's certificate must neither authenticate the client nor replace its stored certificate.
+    /// </summary>
+    [Fact]
+    public async Task GetAccessToken_Rollover_With_Another_Community_Members_Certificate_Is_Rejected()
+    {
+        var clientCert = LoadPfx("CertStore/issued/fhirLabsApiClientLocalhostCert2.pfx");
+        var regDocumentResult = await RegisterClientCredentialsClient(clientCert);
+
+        var client = _mockPipeline.Clients.Single(c => c.ClientId == regDocumentResult.ClientId);
+        foreach (var secret in client.ClientSecrets)
+        {
+            secret.Expiration = DateTime.Now + TimeSpan.FromDays(-1);
+        }
+
+        var otherMemberCert = LoadPfx("CertStore/issued/idpserver2.pfx");
+
+        var clientRequest = AccessTokenRequestForClientCredentialsBuilder.Create(
+                regDocumentResult.ClientId,
+                IdentityServerPipeline.TokenEndpoint,
+                otherMemberCert)
+            .WithScope("system/Patient.rs")
+            .Build("RS384");
+
+        var tokenResponse = await _mockPipeline.BackChannelClient.UdapRequestClientCredentialsTokenAsync(clientRequest);
+
+        Assert.True(tokenResponse.IsError, "another community member's certificate authenticated the client through rollover");
+        Assert.Equal("invalid_client", tokenResponse.Error);
+
+        var storedCertificate = client.ClientSecrets
+            .Single(s => s.Type == UdapServerConstants.SecretTypes.UDAP_X509_CERTIFICATE).Value;
+        Assert.Equal(Convert.ToBase64String(clientCert.Export(X509ContentType.Cert)), storedCertificate);
+    }
+
+    private async Task<UdapDynamicClientRegistrationDocument> RegisterClientCredentialsClient(X509Certificate2 clientCert)
+    {
+        var udapClient = _mockPipeline.Resolve<IUdapClient>();
+        udapClient.UdapServerMetadata = new UdapMetadata(Substitute.For<UdapMetadataOptions>())
+            { RegistrationEndpoint = UdapAuthServerPipeline.RegistrationEndpoint };
+
+        var regDocumentResult = await udapClient.RegisterClientCredentialsClient(clientCert, "system/Patient.rs");
+        Assert.Null(regDocumentResult.GetError());
+
+        return regDocumentResult;
+    }
+
+    private static X509Certificate2 LoadPfx(string path)
+    {
+#if NET9_0_OR_GREATER
+        return X509CertificateLoader.LoadPkcs12FromFile(path, "udap-test");
+#else
+        return new X509Certificate2(path, "udap-test");
+#endif
     }
 }
