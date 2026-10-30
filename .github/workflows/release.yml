@@ -6,6 +6,7 @@
 # the packages and SBOMs also get a build provenance attestation and are attached to a GitHub release.
 
 name: Release to Nuget.org
+run-name: "Release ${{ github.ref_name }} to nuget.org"
 
 on:
   push:

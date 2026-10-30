@@ -1,10 +1,12 @@
 # Builds and tests every branch and every pull request into main or develop.
+# Version tags are left to release.yml; the tagged commit was already built on its branch.
 # For more information see: https://docs.github.com/en/actions/automating-builds-and-tests/building-and-testing-net
 
 name: .NET
 
 on:
   push:
+    branches: [ "**" ]
   pull_request:
     branches: [ "main", "develop" ]
 
