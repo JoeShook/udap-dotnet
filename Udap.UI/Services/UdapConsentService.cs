@@ -230,7 +230,9 @@ public class UdapConsentService : IUdapConsentService
         var request = await _interaction.GetAuthorizationContextAsync(returnUrl, httpContext.RequestAborted);
         if (request == null)
         {
-            _logger.LogError("No consent request matching request: {ReturnUrl}", returnUrl);
+            // returnUrl comes from the request: strip line breaks so it cannot forge log lines.
+            _logger.LogError("No consent request matching request: {ReturnUrl}",
+                returnUrl?.Replace("\r", "").Replace("\n", ""));
             return null;
         }
 

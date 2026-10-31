@@ -40,7 +40,9 @@ public class Challenge : PageModel
         }
         catch (Exception ex)
         {
-            _logger.LogWarning(ex, "Failed Tiered OAuth for returnUrl: {ReturnUrl}", returnUrl);
+            // returnUrl comes from the query string: strip line breaks so it cannot forge log lines.
+            _logger.LogWarning(ex, "Failed Tiered OAuth for returnUrl: {ReturnUrl}",
+                returnUrl?.Replace("\r", "").Replace("\n", ""));
         }
 
         return Page();
