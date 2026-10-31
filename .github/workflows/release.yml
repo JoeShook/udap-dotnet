@@ -27,6 +27,9 @@ env:
 
 jobs:
   release:
+    # Packages are published only from JoeShook/udap-dotnet. In any other copy of this repository,
+    # such as udap-tools/udap-dotnet, a v* tag skips the job instead of attempting a release.
+    if: github.repository == 'JoeShook/udap-dotnet'
     runs-on: ubuntu-latest
     timeout-minutes: 30
     # The release environment only deploys from v* tags and holds the nuget.org publishing secret.
