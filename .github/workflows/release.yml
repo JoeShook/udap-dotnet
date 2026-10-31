@@ -29,6 +29,8 @@ jobs:
   release:
     runs-on: ubuntu-latest
     timeout-minutes: 30
+    # The release environment only deploys from v* tags and holds the nuget.org publishing secret.
+    environment: release
     permissions:
       contents: write       # create the GitHub release
       id-token: write       # sign the provenance attestation
