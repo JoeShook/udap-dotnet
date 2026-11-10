@@ -66,9 +66,24 @@ public static class UdapConfigurationServiceCollectionExtensions
     }
 
 
+    /// <summary>
+    /// Adds the issued certificates of the <see cref="IPrivateCertificateStore"/> as IdentityServer signing credentials and
+    /// validation keys (token signing and the JWKS endpoint), with the algorithms each community's
+    /// <c>UdapMetadataOptions:UdapMetadataConfigs</c> entry names. <typeparamref name="TUdapMetadataOptions"/> is bound from
+    /// the <c>UdapMetadataOptions</c> configuration section. Every issued certificate's community needs an entry there.
+    /// <para>
+    /// Opt in only when the UDAP PKI certificates should also be IdentityServer's token signing keys and appear on its JWKS
+    /// endpoint. Most servers keep the two apart: IdentityServer's own keys for tokens and the JWKS, the UDAP certificates for
+    /// UDAP artifacts such as signed metadata, which use the certificate store directly.
+    /// </para>
+    /// </summary>
     public static IUdapServiceBuilder AddUdapSigningCredentials<TUdapMetadataOptions>(this IUdapServiceBuilder builder)
         where TUdapMetadataOptions : UdapMetadataOptions
     {
+        // The section the credentials' algorithms come from. Binding it here keeps this method self-contained: the metadata
+        // document is read from its own file (UdapMetadataOptionsFile), so nothing else binds these options.
+        builder.Services.AddOptions<TUdapMetadataOptions>().BindConfiguration(Udap.Common.Constants.UdapMetadataOptionsSectionName);
+
         builder.Services.AddSingleton<IEnumerable<ISigningCredentialStore>>(resolver =>
         {
             var udapMetadataOptions = resolver.GetRequiredService<IOptionsMonitor<TUdapMetadataOptions>>().CurrentValue;
@@ -76,17 +91,7 @@ public static class UdapConfigurationServiceCollectionExtensions
             var certStore = resolver.GetRequiredService<IPrivateCertificateStore>();
             var timeout = TimeSpan.FromSeconds(udapMetadataOptions.CertificateResolveTimeoutSeconds);
 
-            using (var cts = new CancellationTokenSource(timeout))
-            {
-                try
-                {
-                    certStore.Resolve(cts.Token);
-                }
-                catch (OperationCanceledException)
-                {
-                    throw new InvalidOperationException($"Certificate store resolution timed out after {timeout.TotalSeconds} seconds.");
-                }
-            }
+            ResolveCertificates(certStore, timeout);
 
             foreach (var issued in certStore.IssuedCertificates)
             {
@@ -110,17 +115,7 @@ public static class UdapConfigurationServiceCollectionExtensions
             var certStore = resolver.GetRequiredService<IPrivateCertificateStore>();
             var timeout = TimeSpan.FromSeconds(udapMetadataOptions.CertificateResolveTimeoutSeconds);
 
-            using (var cts = new CancellationTokenSource(timeout))
-            {
-                try
-                {
-                    certStore.Resolve(cts.Token);
-                }
-                catch (OperationCanceledException)
-                {
-                    throw new InvalidOperationException($"Certificate store resolution timed out after {timeout.TotalSeconds} seconds.");
-                }
-            }
+            ResolveCertificates(certStore, timeout);
 
             foreach (var issued in certStore.IssuedCertificates)
             {
@@ -140,11 +135,36 @@ public static class UdapConfigurationServiceCollectionExtensions
         return builder;
     }
 
+    /// <summary>
+    /// Waits for the certificate store to load. <see cref="IPrivateCertificateStore.Resolve"/> is asynchronous; reading
+    /// <see cref="IPrivateCertificateStore.IssuedCertificates"/> before it completes sees an empty or partial set, which made
+    /// the registered credentials depend on whether something else had loaded the store first.
+    /// </summary>
+    private static void ResolveCertificates(IPrivateCertificateStore certStore, TimeSpan timeout)
+    {
+        using var cts = new CancellationTokenSource(timeout);
+        try
+        {
+            certStore.Resolve(cts.Token).GetAwaiter().GetResult();
+        }
+        catch (OperationCanceledException) when (cts.IsCancellationRequested)
+        {
+            throw new InvalidOperationException($"Certificate store resolution timed out after {timeout.TotalSeconds} seconds.");
+        }
+    }
+
+    /// <summary>The metadata configuration for an issued certificate's community, or a clear error naming what is missing.</summary>
+    internal static UdapMetadataConfig ConfigFor(UdapMetadataOptions udapMetadataOptions, IssuedCertificate issued) =>
+        udapMetadataOptions.UdapMetadataConfigs.FirstOrDefault(c => c.Community == issued.Community)
+        ?? throw new InvalidOperationException(
+            $"The issued certificate {issued.Certificate.Thumbprint} is for community '{issued.Community}', which has no " +
+            $"{Udap.Common.Constants.UdapMetadataOptionsSectionName}:UdapMetadataConfigs entry. Add one, or do not register " +
+            "UDAP signing credentials.");
+
     private static void AddRsaValidationKeysStore(IssuedCertificate issued, UdapMetadataOptions udapMetadataOptions,
         List<IValidationKeysStore> validationKeyStore)
     {
-        var supportedAlgs = udapMetadataOptions.UdapMetadataConfigs
-            .Single(c => c.Community == issued.Community).SignedMetadataConfig.TokenSigningAlgorithms;
+        var supportedAlgs = ConfigFor(udapMetadataOptions, issued).SignedMetadataConfig.TokenSigningAlgorithms;
 
         if (supportedAlgs != null && supportedAlgs.Count == 0)
         {
@@ -174,8 +194,7 @@ public static class UdapConfigurationServiceCollectionExtensions
     private static void AddEcdsaValidationKeysStore(IssuedCertificate issued, UdapMetadataOptions udapMetadataOptions,
         List<IValidationKeysStore> validationKeyStore)
     {
-        var supportedAlgs = udapMetadataOptions.UdapMetadataConfigs
-            .Single(c => c.Community == issued.Community).SignedMetadataConfig.TokenSigningAlgorithms;
+        var supportedAlgs = ConfigFor(udapMetadataOptions, issued).SignedMetadataConfig.TokenSigningAlgorithms;
 
         if (supportedAlgs != null && supportedAlgs.Count == 0)
         {
@@ -235,8 +254,7 @@ public static class UdapConfigurationServiceCollectionExtensions
     private static void AddRsaSigningCredentialStore(IssuedCertificate issued, UdapMetadataOptions udapMetadataOptions,
         List<ISigningCredentialStore> signingCredentialStore)
     {
-        var supportedAlgs = udapMetadataOptions.UdapMetadataConfigs
-            .Single(c => c.Community == issued.Community).SignedMetadataConfig.TokenSigningAlgorithms;
+        var supportedAlgs = ConfigFor(udapMetadataOptions, issued).SignedMetadataConfig.TokenSigningAlgorithms;
 
         if (supportedAlgs != null && supportedAlgs.Count == 0)
         {
@@ -258,8 +276,7 @@ public static class UdapConfigurationServiceCollectionExtensions
     private static void AddEcdsaSigningCredentialStore(IssuedCertificate issued, UdapMetadataOptions udapMetadataOptions,
         List<ISigningCredentialStore> signingCredentialStore)
     {
-        var supportedAlgs = udapMetadataOptions.UdapMetadataConfigs
-            .Single(c => c.Community == issued.Community).SignedMetadataConfig.TokenSigningAlgorithms;
+        var supportedAlgs = ConfigFor(udapMetadataOptions, issued).SignedMetadataConfig.TokenSigningAlgorithms;
 
         if (supportedAlgs != null && supportedAlgs.Count == 0)
         {

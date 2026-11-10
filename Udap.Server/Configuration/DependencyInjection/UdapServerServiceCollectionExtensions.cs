@@ -164,7 +164,9 @@ public static class UdapServerServiceCollectionExtensions
         }
 
         builder.Services.TryAddSingleton<IPostConfigureOptions<ServerSettings>, TieredIdpServerSettings>();
-        builder.AddUdapSigningCredentials<UdapMetadataOptions>();
+        // No AddUdapSigningCredentials: an identity provider signs its tokens and publishes its JWKS with IdentityServer's
+        // own keys. The UDAP PKI certificates sign UDAP artifacts (signed metadata) through the certificate store, and are
+        // not IdentityServer signing keys.
         services.AddSingleton(resolver => resolver.GetRequiredService<IOptions<ServerSettings>>().Value);
         builder.AddRegistrationEndpointToOpenIdConnectMetadata(baseUrl);
         builder.AddUdapServerConfiguration();
