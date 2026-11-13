@@ -12,7 +12,7 @@
     <PackageVersion Include="Google.Cloud.Storage.Control.V2" Version="1.7.0" />
     <PackageVersion Include="Google.Cloud.Storage.V1" Version="4.14.0" />
     <PackageVersion Include="Hl7.Fhir.Base" Version="5.13.3" />
-    <PackageVersion Include="Hl7.Fhir.R4B" Version="5.13.3" />
+    <PackageVersion Include="Hl7.Fhir.R4B" Version="6.8.0" />
     <PackageVersion Include="LazyCache" Version="2.4.0" />
     <PackageVersion Include="AspNetCoreRateLimit" Version="5.0.0" />
     <PackageVersion Include="Hl7.Fhir.Specification.R4B" Version="5.13.3" />
