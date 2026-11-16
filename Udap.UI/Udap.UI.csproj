@@ -36,6 +36,7 @@
 
   <ItemGroup>
     <PackageReference Include="Duende.IdentityServer" Version="8.0.10" />
+    <PackageReference Include="Hl7.Fhir.Specification.R4B" />
     <PackageReference Include="Microsoft.Bcl.Memory" Version="10.0.14" />
     <PackageReference Include="Microsoft.AspNetCore.Authentication.OpenIdConnect" Version="10.0.14" />
     <PackageReference Include="Microsoft.AspNetCore.DataProtection.Abstractions" Version="10.0.14" />

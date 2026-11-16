@@ -40,6 +40,7 @@
   </ItemGroup>
 
   <ItemGroup Condition="'$(GCPDeploy)' == 'true'">
+    <PackageReference Include="Hl7.Fhir.Specification.R4B" />
     <PackageReference Include="Udap.Server" Version="0.9.*" />
     <PackageReference Include="Udap.Tefca.Model" Version="0.9.*" />
     <PackageReference Include="Udap.Ssraa.Server" Version="0.9.*" />
