@@ -7,6 +7,7 @@
 // */
 #endregion
 
+using System.Collections.Generic;
 using Microsoft.IdentityModel.JsonWebTokens;
 
 namespace Udap.Server.Validation;
@@ -57,4 +58,11 @@ public class UdapAuthorizationExtensionValidationContext
     /// Used by <see cref="ICommunityTokenValidator"/> implementations to determine applicability.
     /// </summary>
     public string? CommunityName { get; set; }
+
+    /// <summary>
+    /// The raw scope values of the token request (as validated by IdentityServer).
+    /// Community validators use these to enforce profile-specific scope rules.
+    /// Null if not available.
+    /// </summary>
+    public IReadOnlyCollection<string>? RequestedScopes { get; set; }
 }

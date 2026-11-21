@@ -34,6 +34,7 @@ The default community URI (`tefca://tefca`) is included automatically. Use the o
 | IAS + client_creds requires `tefca_ias` | yes | n/a |
 | `tefca_ias` must carry `id_token` | yes | yes |
 | Treatment org identifiers (opt-in) | yes | yes |
+| `user/` scopes rejected (`invalid_scope`) | yes | yes |
 
 The allowed `purpose_of_use` codes come from the [TEFCA SOP: Exchange Purposes v5.1](https://rce.sequoiaproject.org/wp-content/uploads/2026/07/Exchange-Purposes-SOP-v5.1_7.1.2026_508.pdf) Table 1 (OID: `2.16.840.1.113883.3.7204.1.5.2.1`), exposed as `TefcaConstants.ExchangePurposeCodes.All`:
 
@@ -42,6 +43,17 @@ The allowed `purpose_of_use` codes come from the [TEFCA SOP: Exchange Purposes v
 ### Registration validation
 
 At dynamic client registration time, `TefcaRegistrationValidator` validates that the client certificate's SAN URI contains a valid TEFCA Exchange Purpose code in the fragment (e.g., `https://example.com/fhir#T-TREAT`).
+
+### User scopes rejected
+
+TEFCA's B2B (`client_credentials`) and IAS (`patient/`) flows do not use `user/` scopes. Per SOP v2.0 Section 6.11 (Registration #10), a registration whose software statement requests any `user/` scope is rejected with `invalid_scope` instead of being silently corrected, and a token request carrying a `user/` scope is rejected with `invalid_scope` too. This is on by default; turn it off with:
+
+```csharp
+builder.Services.AddUdapTefcaValidation(options =>
+{
+    options.RejectUserScopes = false;
+});
+```
 
 ### IAS conditional logic
 
@@ -68,7 +80,7 @@ When enabled, token requests for clients registered with `T-TREAT` or `T-TRTMNT`
 | Allowed POU codes | 62 (HL7 v3 full set) | 17 (TEFCA XP codes, SOP v5.1) |
 | Max POU count | unlimited | 1 |
 | POU must match SAN URI | no | yes |
-| Registration validation | none | SAN URI XP code validation |
+| Registration validation | none | SAN URI XP code validation, no `user/` scopes |
 | IAS support | n/a | `tefca_ias` AEO required |
 
 ## How it works
