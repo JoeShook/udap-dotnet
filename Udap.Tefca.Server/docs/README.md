@@ -21,6 +21,19 @@ builder.Services.AddUdapTefcaValidation(options =>
 
 The default community URI (`tefca://tefca`) is included automatically. Use the options delegate to add additional communities.
 
+## SSRAA 2.0 requirements
+
+SOP v2.0 §6.2 requires SSRAA for all TEFCA Facilitated FHIR registration, authentication and authorization. `AddUdapTefcaValidation` does not apply the SSRAA rules itself, because the SSRAA 2.0 protocol rules are server-wide [`ServerSettings`](../../Udap.Server/docs/README.md#ssraa-20-in-tefca-communities) in Udap.Server and already apply to every community:
+
+- PKCE required, S256 only (`SsraaVersion = V2_0`, the default, or `RequirePkce = true`)
+- `state` required on `/connect/authorize` (`SsraaVersion = V2_0`, or `ForceStateParamOnAuthorizationCode = true`)
+- `https` redirect URIs (`AllowLoopbackHttpRedirectUris = false`, the default)
+- registration `jti` required, 5-minute software statement and client assertion lifetimes (defaults)
+
+Keep those defaults on a server that hosts a TEFCA community.
+
+Do not add a TEFCA community to `AddUdapSsraaValidation`. That call maps a community to the HL7 v3 PurposeOfUse value set, while TEFCA uses XP codes. Only the first registered validator that applies to a community supplies the allowed `purpose_of_use` codes, so an SSRAA validator registered ahead of the TEFCA validator would reject every TEFCA token request that carries a `purpose_of_use`. See [How it works at runtime](../../Udap.Server/docs/README.md#how-it-works-at-runtime).
+
 ## What it enforces
 
 ### Token request validation

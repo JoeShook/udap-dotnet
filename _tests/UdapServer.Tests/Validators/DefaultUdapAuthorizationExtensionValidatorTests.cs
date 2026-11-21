@@ -9,6 +9,7 @@
 
 using System.Text.Json;
 using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Options;
 using Microsoft.IdentityModel.JsonWebTokens;
 using NSubstitute;
 using Udap.Model;
@@ -16,7 +17,9 @@ using Udap.Model.UdapAuthenticationExtensions;
 using Udap.Server.Storage.Stores;
 using Udap.Server.Validation;
 using Udap.Server.Validation.Default;
+using Udap.Ssraa.Server;
 using Udap.Tefca.Model;
+using Udap.Tefca.Server;
 
 namespace UdapServer.Tests.Validators;
 
@@ -969,6 +972,126 @@ public class DefaultUdapAuthorizationExtensionValidatorTests
 
         Assert.True(result.IsValid);
         await communityValidator.DidNotReceive().ValidateAsync(Arg.Any<UdapAuthorizationExtensionValidationContext>());
+    }
+
+    #endregion
+
+    #region Several validators applying to one TEFCA community
+
+    private const string TefcaCommunity = "tefca://test-community";
+
+    [Fact]
+    public async Task TefcaCommunity_EveryApplicableValidator_ValidateAsyncRuns()
+    {
+        var clientStore = Substitute.For<IUdapClientRegistrationStore>();
+        clientStore.GetCommunityName("20").Returns(Task.FromResult<string?>(TefcaCommunity));
+
+        var first = Substitute.For<ICommunityTokenValidator>();
+        first.AppliesToCommunity(TefcaCommunity).Returns(true);
+        first.ValidateAsync(Arg.Any<UdapAuthorizationExtensionValidationContext>())
+            .Returns(Task.FromResult(AuthorizationExtensionValidationResult.Success()));
+
+        var second = Substitute.For<ICommunityTokenValidator>();
+        second.AppliesToCommunity(TefcaCommunity).Returns(true);
+        second.ValidateAsync(Arg.Any<UdapAuthorizationExtensionValidationContext>())
+            .Returns(Task.FromResult(AuthorizationExtensionValidationResult.Success()));
+
+        var validator = CreateValidator(clientStore, [first, second]);
+        var context = CreateContext(communityId: "20", grantType: "authorization_code");
+
+        var result = await validator.ValidateAsync(context);
+
+        Assert.True(result.IsValid);
+        await first.Received(1).ValidateAsync(Arg.Any<UdapAuthorizationExtensionValidationContext>());
+        await second.Received(1).ValidateAsync(Arg.Any<UdapAuthorizationExtensionValidationContext>());
+    }
+
+    [Fact]
+    public async Task TefcaCommunity_SecondApplicableValidatorFails_RequestFails()
+    {
+        var clientStore = Substitute.For<IUdapClientRegistrationStore>();
+        clientStore.GetCommunityName("20").Returns(Task.FromResult<string?>(TefcaCommunity));
+
+        var tefca = CreateTefcaValidator();
+
+        var extra = Substitute.For<ICommunityTokenValidator>();
+        extra.AppliesToCommunity(TefcaCommunity).Returns(true);
+        extra.ValidateAsync(Arg.Any<UdapAuthorizationExtensionValidationContext>())
+            .Returns(Task.FromResult(AuthorizationExtensionValidationResult.Failure("invalid_grant", "extra rule")));
+
+        var validator = CreateValidator(clientStore, [tefca, extra]);
+        var context = CreateTefcaContext("T-TREAT");
+
+        var result = await validator.ValidateAsync(context);
+
+        Assert.False(result.IsValid);
+        Assert.Equal("extra rule", result.ErrorDescription);
+        await extra.Received(1).ValidateAsync(Arg.Any<UdapAuthorizationExtensionValidationContext>());
+    }
+
+    [Fact]
+    public async Task TefcaCommunity_TefcaAndSsraaValidators_TefcaRegisteredFirst_TefcaRulesApply()
+    {
+        var clientStore = Substitute.For<IUdapClientRegistrationStore>();
+        clientStore.GetCommunityName("20").Returns(Task.FromResult<string?>(TefcaCommunity));
+
+        var validator = CreateValidator(clientStore, [CreateTefcaValidator(), CreateSsraaValidator()]);
+
+        var xpResult = await validator.ValidateAsync(CreateTefcaContext("T-TREAT"));
+        Assert.True(xpResult.IsValid);
+
+        var hl7Result = await validator.ValidateAsync(
+            CreateTefcaContext("T-TREAT", purposeOfUse: "urn:oid:2.16.840.1.113883.5.8#TREAT"));
+        Assert.False(hl7Result.IsValid);
+        Assert.Contains("disallowed purpose_of_use", hl7Result.ErrorDescription);
+    }
+
+    /// <summary>
+    /// Only the first registered validator that applies to a community supplies the
+    /// <see cref="CommunityValidationRules"/>. Listing a TEFCA community in
+    /// AddUdapSsraaValidation ahead of AddUdapTefcaValidation therefore rejects the TEFCA XP codes,
+    /// which is why the docs say to keep TEFCA communities out of the SSRAA validator.
+    /// </summary>
+    [Fact]
+    public async Task TefcaCommunity_TefcaAndSsraaValidators_SsraaRegisteredFirst_RejectsXpCodes()
+    {
+        var clientStore = Substitute.For<IUdapClientRegistrationStore>();
+        clientStore.GetCommunityName("20").Returns(Task.FromResult<string?>(TefcaCommunity));
+
+        var validator = CreateValidator(clientStore, [CreateSsraaValidator(), CreateTefcaValidator()]);
+
+        var result = await validator.ValidateAsync(CreateTefcaContext("T-TREAT"));
+
+        Assert.False(result.IsValid);
+        Assert.Contains("disallowed purpose_of_use", result.ErrorDescription);
+    }
+
+    private static TefcaTokenValidator CreateTefcaValidator() =>
+        new(Options.Create(new TefcaValidationOptions { Communities = { TefcaCommunity } }));
+
+    private static SsraaTokenValidator CreateSsraaValidator() =>
+        new(Options.Create(new SsraaValidationOptions { Communities = { TefcaCommunity } }));
+
+    private static UdapAuthorizationExtensionValidationContext CreateTefcaContext(
+        string registeredXp,
+        string? purposeOfUse = null)
+    {
+        var b2b = new HL7B2BAuthorizationExtension
+        {
+            OrganizationId = "https://fhirlabs.net/fhir/r4/Organization/99",
+            OrganizationName = "FhirLabs"
+        };
+        b2b.PurposeOfUse!.Add(purposeOfUse ?? $"urn:oid:{TefcaConstants.ExchangePurposeCodes.Oid}#{registeredXp}");
+
+        var context = CreateContext(
+            extensions: new Dictionary<string, object>
+            {
+                [UdapConstants.UdapAuthorizationExtensions.Hl7B2B] = b2b
+            },
+            communityId: "20");
+        context.SanUri = $"https://client.example.com/fhir#{registeredXp}";
+
+        return context;
     }
 
     #endregion
