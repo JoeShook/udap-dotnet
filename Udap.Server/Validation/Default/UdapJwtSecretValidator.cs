@@ -295,14 +295,29 @@ public class UdapJwtSecretValidator : ISecretValidator
         //
         // PKI chain validation, including CRL checking
         //
-        if (!await _trustChainValidator.IsTrustedCertificateAsync(
-                parsedSecret.Id,
-                endCertificate,
-                new X509Certificate2Collection(certChainList.ToArray()),
-                new X509Certificate2Collection(certChainList.ToRootCertArray())))
+        var chainValidationResult = await _trustChainValidator.IsTrustedCertificateAsync(
+            parsedSecret.Id,
+            endCertificate,
+            new X509Certificate2Collection(certChainList.ToArray()),
+            new X509Certificate2Collection(certChainList.ToRootCertArray()),
+            cancellationToken: ct);
+
+        if (!chainValidationResult.IsValid)
         {
             SetErrorDescription("Certificate chain validation failed");
             return fail;
+        }
+
+        if (_serverSettings.RequireIssuingIntermediateInX5c)
+        {
+            jwtToken.TryGetHeaderValue<List<string>>(JwtHeaderParameterNames.X5c, out var x5c);
+
+            if (!X5cIssuingIntermediate.IsPresent(x5c, chainValidationResult))
+            {
+                _logger.LogError("Client assertion x5c header does not contain the intermediate that issued the client certificate for client_id: {ClientId}", parsedSecret.Id);
+                SetErrorDescription("Client assertion x5c must contain the client certificate followed by the intermediate that issued it");
+                return fail;
+            }
         }
 
         return success;

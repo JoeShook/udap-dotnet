@@ -73,7 +73,8 @@ public interface IUdapClient : IUdapClientEvents
     /// To pick a different community the client can add a community query parameter to the .
     /// </summary>
     /// <param name="redirectUrl"></param>
-    /// <param name="certificates"></param>
+    /// <param name="certificates">Client certificates, each tried in turn. CA certificates in the list are not used to sign;
+    /// the intermediate that issued the signing certificate is placed after it in the x5c header.</param>
     /// <param name="scopes"></param>
     /// <param name="cancellationToken"></param>
     /// <returns></returns>
@@ -85,7 +86,8 @@ public interface IUdapClient : IUdapClientEvents
     /// <summary>
     /// Register a UdapClient in the Authorization Server with authorization_code flow.
     /// </summary>
-    /// <param name="certificates"></param>
+    /// <param name="certificates">Client certificates, each tried in turn. CA certificates in the list are not used to sign;
+    /// the intermediate that issued the signing certificate is placed after it in the x5c header.</param>
     /// <param name="scopes"></param>
     /// <param name="logo"></param>
     /// <param name="redirectUrl"></param>
@@ -121,7 +123,8 @@ public interface IUdapClient : IUdapClientEvents
     /// <summary>
     /// Register a UdapClient in the Authorization Server with client_credentials flow.
     /// </summary>
-    /// <param name="certificates"></param>
+    /// <param name="certificates">Client certificates, each tried in turn. CA certificates in the list are not used to sign;
+    /// the intermediate that issued the signing certificate is placed after it in the x5c header.</param>
     /// <param name="scopes"></param>
     /// <param name="logo"></param>
     /// <param name="issuer">If issuer is supplied it will match try to match to a valid URI based subject alternative name from the X509Certificate</param>
