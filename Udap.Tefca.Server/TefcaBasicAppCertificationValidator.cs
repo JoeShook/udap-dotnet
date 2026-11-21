@@ -51,8 +51,12 @@ public class TefcaBasicAppCertificationValidator : IUdapCertificationProfileVali
     public string CertificationUri => TefcaConstants.Certification.BasicAppCertificationUri;
 
     /// <inheritdoc />
+    public bool AppliesToCommunity(string communityName)
+        => _options.Communities.Contains(communityName);
+
+    /// <inheritdoc />
     public bool IsRequiredForCommunity(string communityName)
-        => _options.RequireBasicAppCertification && _options.Communities.Contains(communityName);
+        => _options.RequireBasicAppCertification && AppliesToCommunity(communityName);
 
     /// <inheritdoc />
     public Task<UdapDynamicClientRegistrationValidationResult?> ValidateAsync(
@@ -117,7 +121,7 @@ public class TefcaBasicAppCertificationValidator : IUdapCertificationProfileVali
         return value.Contains('#') || value.Contains(':') ? null : value;
     }
 
-    private static string? GetSanExchangePurpose(string? issuer)
+    private string? GetSanExchangePurpose(string? issuer)
     {
         if (string.IsNullOrEmpty(issuer))
         {

@@ -13,7 +13,8 @@ namespace Udap.Server.Registration;
 /// Profile-specific rules for one certification program, identified by its certification URI.
 /// Implementations are registered as a DI collection. <see cref="UdapCertificationsRequiredValidator"/>
 /// calls <see cref="ValidateAsync"/> after the certification passed the generic UDAP checks
-/// (signature, trust chain, <c>iss</c>/<c>sub</c>, <c>exp</c>, <c>certification_uris</c>).
+/// (signature, trust chain, <c>iss</c>/<c>sub</c>, <c>exp</c>, <c>certification_uris</c>),
+/// and only for communities where <see cref="AppliesToCommunity"/> returns <c>true</c>.
 /// </summary>
 public interface IUdapCertificationProfileValidator
 {
@@ -21,6 +22,13 @@ public interface IUdapCertificationProfileValidator
     /// The certification URI this validator handles.
     /// </summary>
     string CertificationUri { get; }
+
+    /// <summary>
+    /// Returns <c>true</c> if this validator's rules apply to registrations in <paramref name="communityName"/>.
+    /// In a community where it returns <c>false</c>, a required certification with <see cref="CertificationUri"/>
+    /// still gets the generic checks, but not this validator's profile rules.
+    /// </summary>
+    bool AppliesToCommunity(string communityName);
 
     /// <summary>
     /// Returns <c>true</c> if registrations in <paramref name="communityName"/> must carry this certification,

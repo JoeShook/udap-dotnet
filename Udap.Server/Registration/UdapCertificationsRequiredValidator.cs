@@ -42,7 +42,8 @@ namespace Udap.Server.Registration;
 /// <item>lists the URI in <c>certification_uris</c>, and</item>
 /// <item>chains to a trust anchor of the client's community.</item>
 /// </list>
-/// The certification is then handed to the <see cref="IUdapCertificationProfileValidator"/> for that URI, if any.
+/// The certification is then handed to each <see cref="IUdapCertificationProfileValidator"/> for that URI whose
+/// <see cref="IUdapCertificationProfileValidator.AppliesToCommunity"/> returns true for the client's community.
 ///
 /// <a href="https://www.udap.org/udap-certifications-and-endorsements-stu1.html#section-6">UDAP Certifications and Endorsements section 6</a>
 /// </summary>
@@ -178,7 +179,8 @@ public class UdapCertificationsRequiredValidator : ICommunityRegistrationValidat
             }
 
             foreach (var profileValidator in _profileValidators.Where(p =>
-                         string.Equals(p.CertificationUri, requiredUri, StringComparison.Ordinal)))
+                         string.Equals(p.CertificationUri, requiredUri, StringComparison.Ordinal) &&
+                         p.AppliesToCommunity(context.CommunityName)))
             {
                 var profileResult = await profileValidator.ValidateAsync(context, match);
 
