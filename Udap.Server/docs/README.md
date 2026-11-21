@@ -111,7 +111,9 @@ builder.Services.AddUdapSsraaValidation(options =>
     options.Communities.Add("udap://fhirlabs.net");
 });
 
-// TEFCA rules (register model extensions first)
+// TEFCA rules (register model extensions first). The SSRAA 2.0 protocol rules
+// (PKCE, state, https redirect URIs) come from ServerSettings and already apply
+// to TEFCA communities; do not add TEFCA communities to AddUdapSsraaValidation.
 builder.Services.AddUdapTefcaExtensions();
 builder.Services.AddUdapTefcaValidation(options =>
 {
@@ -123,9 +125,29 @@ builder.Services.AddUdapTefcaValidation(options =>
 
 1. A client requests a token with authorization extensions (e.g., `hl7-b2b` with `purpose_of_use`)
 2. `DefaultUdapAuthorizationExtensionValidator` resolves the client's community from the registration store
-3. The validator iterates through registered `ICommunityTokenValidator` implementations until one matches via `AppliesToCommunity()`
-4. The matching validator returns `CommunityValidationRules` specifying required extensions, allowed POU codes, and max POU count
-5. The framework enforces those rules, then calls the validator's `ValidateAsync()` for any domain-specific checks
+3. The validator iterates through registered `ICommunityTokenValidator` implementations, in registration order, until one matches via `AppliesToCommunity()` and returns non-null rules
+4. That validator's `CommunityValidationRules` specify required extensions, allowed POU codes, and max POU count
+5. The framework enforces those rules, then calls `ValidateAsync()` on **every** validator whose `AppliesToCommunity()` is true, stopping at the first failure
+
+At registration, the DCR endpoint likewise calls `ValidateAsync()` on every `ICommunityRegistrationValidator` whose `AppliesToCommunity()` is true.
+
+So more than one validator can apply to a community, but only one supplies the `CommunityValidationRules`: the first one registered. Two validators that both return rules for the same community do not merge them.
+
+### SSRAA 2.0 in TEFCA communities
+
+The [TEFCA SOP: Facilitated FHIR Implementation v2.0](https://rce.sequoiaproject.org/wp-content/uploads/2026/02/SOP-Facilitated-FHIR-Implementation-2.0-Draft-508.pdf) §6.2 requires SSRAA for TEFCA Facilitated FHIR registration, authentication and authorization. The SSRAA 2.0 protocol rules are server-wide `ServerSettings`, not a community validator, so they already apply to every community, TEFCA included:
+
+| SSRAA 2.0 rule | Setting | Default |
+|---|---|---|
+| PKCE required (S256; Duende rejects `plain`) | `RequirePkce`, else `SsraaVersion` | required (`V2_0`) |
+| `state` required on `/connect/authorize` | `ForceStateParamOnAuthorizationCode`, else `SsraaVersion` | required (`V2_0`) |
+| Redirect URIs use `https` | `AllowLoopbackHttpRedirectUris` | `false` (https only) |
+| Registration `jti` required, replay checked | `RegistrationJtiRequired` | `true` |
+| Software statement and client assertion lifetime at most 5 minutes | `SoftwareStatementMaxLifetimeSeconds`, `ClientAssertionMaxLifetimeSeconds` | `300` |
+
+Keep `SsraaVersion` at `V2_0` (the default) on a server that hosts a TEFCA community, and leave the overrides unset.
+
+`AddUdapSsraaValidation` does something else: it maps a community to the HL7 v3 PurposeOfUse value set and the SSRAA required extensions. **Do not add a TEFCA community to it.** TEFCA uses Exchange Purpose (XP) codes instead, and because the first matching validator supplies the rules, an SSRAA validator registered ahead of the TEFCA validator would reject every TEFCA `purpose_of_use`. `AddUdapTefcaValidation` sets the TEFCA rules (`hl7-b2b` required for `client_credentials`, one XP code that matches the SAN URI) and does not repeat the server-wide SSRAA rules.
 
 ### Custom community validators
 
