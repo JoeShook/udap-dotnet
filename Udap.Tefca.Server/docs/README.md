@@ -58,6 +58,8 @@ builder.Services.AddUdapTefcaValidation(options =>
 
 At registration the server learns the client is in a TEFCA community by completing the chain offline. Configure the TEFCA intermediates for the community so a leaf-only client gets the specific `x5c` error; without them the client is reported as untrusted.
 
+At the token endpoint the community comes from the client's registration. When TEFCA validation is registered, a client assertion from a client whose community cannot be resolved is rejected with `invalid_client`, whatever its community.
+
 ### IAS conditional logic
 
 When a client is registered with exchange purpose `T-IAS` and requests a `client_credentials` token, the `tefca_ias` authorization extension object must be present in the request (SOP v2.0 Section 6.11). Whenever a `tefca_ias` extension is present, it must carry an `id_token` (SOP v2.0 Table 4).
