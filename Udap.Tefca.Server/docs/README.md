@@ -46,7 +46,7 @@ At dynamic client registration time, `TefcaRegistrationValidator` validates that
 
 ### User scopes rejected
 
-TEFCA's B2B (`client_credentials`) and IAS (`patient/`) flows do not use `user/` scopes. Per SOP v2.0 Section 6.11 (Registration #10), a registration whose software statement requests any `user/` scope is rejected with `invalid_scope` instead of being silently corrected, and a token request carrying a `user/` scope is rejected with `invalid_scope` too. This is on by default; turn it off with:
+TEFCA Facilitated FHIR defines two flows: B2B client credentials and Individual Access Services, which use patient-level access (SOP v2.0 Section 6.11). Neither carries a user-level authorization, so `user/` scopes have no valid use in a TEFCA community. SOP v2.0 Section 6.11 (Registration #10) already requires `invalid_scope` rather than silently converting a user scope to a system scope; this rule applies that consistently. A registration whose software statement requests any `user/` scope is rejected with `invalid_scope`, and so is a token request carrying a `user/` scope. This is on by default; turn it off with:
 
 ```csharp
 builder.Services.AddUdapTefcaValidation(options =>
