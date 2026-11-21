@@ -156,6 +156,34 @@ public class X5cIssuingIntermediateTests
         Assert.Empty(downloads.Urls);
     }
 
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public async Task Token_CommunityCannotBeResolved_IsRejected_OnlyWhenAPolicyIsRegistered(bool addTefcaValidation)
+    {
+        var (pipeline, _) = BuildPipeline(addTefcaValidation: addTefcaValidation);
+        var leaf = LoadChain(FhirLabsPfx)[0];
+
+        var response = await Register(pipeline, [leaf]);
+        Assert.Equal(HttpStatusCode.Created, response.StatusCode);
+        var document = await response.Content.ReadFromJsonAsync<UdapDynamicClientRegistrationDocument>();
+
+        // The registration's community id no longer resolves to a community name.
+        pipeline.Communities.Single(c => c.Name == FhirLabsCommunity).Name = string.Empty;
+
+        var tokenResponse = await RequestToken(pipeline, document!.ClientId!, [leaf]);
+
+        if (addTefcaValidation)
+        {
+            Assert.True(tokenResponse.IsError);
+            Assert.Equal("invalid_client", tokenResponse.Error);
+        }
+        else
+        {
+            Assert.False(tokenResponse.IsError, tokenResponse.Error);
+        }
+    }
+
     [Fact]
     public async Task TefcaCommunity_OptOut_LeafOnly_Registers_ThroughAia()
     {
@@ -290,7 +318,8 @@ public class X5cIssuingIntermediateTests
 
     private static (UdapAuthServerPipeline Pipeline, RecordingDownloadCache Downloads) BuildPipeline(
         bool configureTefcaIntermediate = true,
-        bool requireIssuingIntermediate = true)
+        bool requireIssuingIntermediate = true,
+        bool addTefcaValidation = true)
     {
         var serverSettings = new ServerSettings
         {
@@ -315,7 +344,10 @@ public class X5cIssuingIntermediateTests
                 sp.GetRequiredService<ILogger<TrustChainValidator>>(),
                 downloads));
 
-            services.AddUdapTefcaValidation(options => options.RequireIssuingIntermediateInX5c = requireIssuingIntermediate);
+            if (addTefcaValidation)
+            {
+                services.AddUdapTefcaValidation(options => options.RequireIssuingIntermediateInX5c = requireIssuingIntermediate);
+            }
 
             services.AddSingleton<IOptionsMonitor<UdapClientOptions>>(
                 new OptionsMonitorForTests<UdapClientOptions>(

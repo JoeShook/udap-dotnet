@@ -313,6 +313,18 @@ public class UdapJwtSecretValidator : ISecretValidator
         // Communities an ICommunityX5cPolicy claims build the chain from the x5c intermediates and the
         // community's configured intermediates only, never from AIA, and x5c must carry the issuing intermediate.
         var communityName = await GetCommunityNameAsync(secretList, parsedSecret.Id, ct);
+
+        // With an x5c policy registered, a client whose community cannot be resolved might belong to a policy
+        // community, so it is rejected rather than validated without the policy. Servers without a policy skip this.
+        if (_x5cPolicies.Any() && string.IsNullOrEmpty(communityName))
+        {
+            _logger.LogError(
+                "Cannot resolve the community of client_id: {ClientId} from its registration; rejecting the client assertion because a community x5c policy is configured",
+                parsedSecret.Id);
+            SetErrorDescription("The client's community cannot be determined from its registration. Register again");
+            return fail;
+        }
+
         var issuingIntermediateRequired = X5cIssuingIntermediate.IsRequired(_x5cPolicies, communityName);
         var intermediates = new X509Certificate2Collection(certChainList.ToArray());
         List<string>? x5c = null;
@@ -374,7 +386,7 @@ public class UdapJwtSecretValidator : ISecretValidator
 
         var communityId = secretList.FirstOrDefault(s => s.Type == UdapServerConstants.SecretTypes.UDAP_COMMUNITY)?.Value;
 
-        if (communityId == null)
+        if (string.IsNullOrEmpty(communityId))
         {
             return null;
         }
