@@ -93,23 +93,95 @@ public class SigningCertificateOrganizationalUnitTests
     public async Task ValidateResource_EnforcesPolicyOu(string subject, bool expectError)
     {
         using var cert = CreateCertificate(subject);
-        var metadata = CreateMetadata(cert);
-        var metadataJson = JsonSerializer.Serialize(new Dictionary<string, object?>
-        {
-            [UdapConstants.Discovery.UdapVersionsSupported] = metadata.UdapVersionsSupported,
-            [UdapConstants.Discovery.TokenEndpoint] = metadata.TokenEndpoint,
-            [UdapConstants.Discovery.RegistrationEndpoint] = metadata.RegistrationEndpoint,
-            [UdapConstants.Discovery.SignedMetadata] = metadata.SignedMetadata
-        });
+        var udapClient = CreateClient(() => cert);
 
+        var disco = await udapClient.ValidateResource(BaseUrl, TefcaConstants.CommunityUri, TefcaPolicy());
+
+        Assert.Equal(expectError, disco.IsError);
+        if (expectError)
+        {
+            Assert.Contains("Organizational Unit", disco.Error);
+        }
+    }
+
+    [Fact]
+    public async Task ValidateResource_SameClientAndPolicy_OuEnforcedOnlyForMappedCommunity()
+    {
+        using var tefcaCertWithoutOu = CreateCertificate("CN=tefca, O=FhirLabs");
+        using var otherCommunityCert = CreateCertificate("CN=other, O=FhirLabs");
+        var current = tefcaCertWithoutOu;
+        var udapClient = CreateClient(() => current);
+        var policy = TefcaPolicy();
+
+        // TEFCA discovery: the certificate lacks RCE-FHIR, so discovery fails.
+        var tefcaDisco = await udapClient.ValidateResource(BaseUrl, TefcaConstants.CommunityUri, policy);
+        Assert.True(tefcaDisco.IsError);
+        Assert.Contains("Organizational Unit", tefcaDisco.Error);
+
+        // Same client, same policy, a different community: no OU requirement carries over.
+        current = otherCommunityCert;
+        var otherDisco = await udapClient.ValidateResource(BaseUrl, "udap://fhirlabs.net", policy);
+        Assert.False(otherDisco.IsError, otherDisco.Error);
+
+        // No community argument: no OU check either.
+        var noCommunityDisco = await udapClient.ValidateResource(BaseUrl, (string?)null, policy);
+        Assert.False(noCommunityDisco.IsError, noCommunityDisco.Error);
+
+        // The policy is kept by the client; a later TEFCA discovery is still enforced.
+        current = tefcaCertWithoutOu;
+        var tefcaAgain = await udapClient.ValidateResource(BaseUrl, TefcaConstants.CommunityUri, (DiscoveryPolicy?)null);
+        Assert.True(tefcaAgain.IsError);
+    }
+
+    [Fact]
+    public void GetRequiredSigningCertificateOrganizationalUnits_ResolvesByCommunity()
+    {
+        var policy = TefcaPolicy();
+        policy.RequiredSigningCertificateOrganizationalUnits["udap://empty"] = new List<string>();
+
+        Assert.Contains(
+            TefcaConstants.OrganizationalUnits.Production,
+            policy.GetRequiredSigningCertificateOrganizationalUnits(TefcaConstants.CommunityUri)!);
+        Assert.Null(policy.GetRequiredSigningCertificateOrganizationalUnits("udap://fhirlabs.net"));
+        Assert.Null(policy.GetRequiredSigningCertificateOrganizationalUnits("udap://empty"));
+        Assert.Null(policy.GetRequiredSigningCertificateOrganizationalUnits(null));
+    }
+
+    private static DiscoveryPolicy TefcaPolicy()
+    {
+        var policy = DiscoveryPolicy.DefaultMetadataServerPolicy();
+        policy.RequiredSigningCertificateOrganizationalUnits[TefcaConstants.CommunityUri] =
+            new List<string> { TefcaConstants.OrganizationalUnits.Production };
+
+        return policy;
+    }
+
+    /// <summary>
+    /// A UdapClient whose discovery responses are signed by whatever certificate
+    /// <paramref name="currentCertificate"/> returns at request time.
+    /// </summary>
+    private static UdapClient CreateClient(Func<X509Certificate2> currentCertificate)
+    {
         var httpClient = Substitute.For<HttpClient>();
         httpClient.SendAsync(Arg.Any<HttpRequestMessage>(), Arg.Any<CancellationToken>())
-            .Returns(_ => Task.FromResult(new HttpResponseMessage(HttpStatusCode.OK)
+            .Returns(_ =>
             {
-                Content = new StringContent(metadataJson)
-            }));
+                var metadata = CreateMetadata(currentCertificate());
+                var metadataJson = JsonSerializer.Serialize(new Dictionary<string, object?>
+                {
+                    [UdapConstants.Discovery.UdapVersionsSupported] = metadata.UdapVersionsSupported,
+                    [UdapConstants.Discovery.TokenEndpoint] = metadata.TokenEndpoint,
+                    [UdapConstants.Discovery.RegistrationEndpoint] = metadata.RegistrationEndpoint,
+                    [UdapConstants.Discovery.SignedMetadata] = metadata.SignedMetadata
+                });
 
-        // The trust chain itself is out of scope here: the in-test certificate is self-signed.
+                return Task.FromResult(new HttpResponseMessage(HttpStatusCode.OK)
+                {
+                    Content = new StringContent(metadataJson)
+                });
+            });
+
+        // The trust chain itself is out of scope here: the in-test certificates are self-signed.
         var validator = Substitute.ForPartsOf<UdapClientDiscoveryValidator>(
             new TrustChainValidator(new ChainProblemStatus(), false, NullLogger<TrustChainValidator>.Instance),
             NullLogger<UdapClientDiscoveryValidator>.Instance,
@@ -119,18 +191,7 @@ public class SigningCertificateOrganizationalUnitTests
         var options = Substitute.For<IOptionsMonitor<UdapClientOptions>>();
         options.CurrentValue.Returns(new UdapClientOptions());
 
-        var udapClient = new UdapClient(httpClient, validator, options, NullLogger<UdapClient>.Instance);
-
-        var policy = DiscoveryPolicy.DefaultMetadataServerPolicy();
-        policy.RequiredSigningCertificateOrganizationalUnits.Add(TefcaConstants.OrganizationalUnits.Production);
-
-        var disco = await udapClient.ValidateResource(BaseUrl, (string?)null, policy);
-
-        Assert.Equal(expectError, disco.IsError);
-        if (expectError)
-        {
-            Assert.Contains("Organizational Unit", disco.Error);
-        }
+        return new UdapClient(httpClient, validator, options, NullLogger<UdapClient>.Instance);
     }
 
     private static UdapClientDiscoveryValidator CreateValidator()
