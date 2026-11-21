@@ -395,7 +395,7 @@ namespace Udap.Client
                     }
 
                     if (!_clientDiscoveryValidator.ValidateSigningCertificateOrganizationalUnit(
-                            _discoveryPolicy.RequiredSigningCertificateOrganizationalUnits))
+                            _discoveryPolicy.GetRequiredSigningCertificateOrganizationalUnits(community)))
                     {
                         throw new UnauthorizedAccessException("Failed Signing Certificate Organizational Unit Validation");
                     }

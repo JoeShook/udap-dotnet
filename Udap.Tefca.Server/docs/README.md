@@ -81,7 +81,18 @@ For a community with an entry, the client certificate must carry at least one su
 - **Registration**: the software statement's `x5c[0]`; otherwise `unapproved_software_statement`.
 - **Token endpoint**: the client assertion's `x5c[0]`; otherwise `invalid_client`.
 
-Communities without an entry are not checked. On the client side, `Udap.Client` applies the same check to the server's metadata signing certificate when `DiscoveryPolicy.RequiredSigningCertificateOrganizationalUnits` is set.
+Communities without an entry are not checked. The keys must also be in `Communities`: the TEFCA validators only run for those communities, so an OU entry for a community that is not in `Communities` is ignored.
+
+On the client side, `Udap.Client` applies the same check to the server's metadata signing certificate. `DiscoveryPolicy.RequiredSigningCertificateOrganizationalUnits` is keyed by community the same way, and is checked only when the `community` passed to `ValidateResource` has an entry, so one client can discover TEFCA and non-TEFCA servers with the same policy:
+
+```csharp
+var policy = DiscoveryPolicy.DefaultMetadataServerPolicy();
+policy.RequiredSigningCertificateOrganizationalUnits[TefcaConstants.CommunityUri] =
+    new List<string> { TefcaConstants.OrganizationalUnits.Production };
+
+await udapClient.ValidateResource(baseUrl, TefcaConstants.CommunityUri, policy); // OU enforced
+await udapClient.ValidateResource(otherUrl, "udap://other-community", policy);  // not checked
+```
 
 ## SSRAA vs TEFCA comparison
 
