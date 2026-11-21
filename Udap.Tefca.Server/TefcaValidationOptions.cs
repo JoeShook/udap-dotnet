@@ -51,7 +51,10 @@ public class TefcaValidationOptions
     /// <summary>
     /// The query parameter that carries the exchange purpose code when
     /// <see cref="ExchangePurposeLocation"/> is <see cref="Server.ExchangePurposeLocation.QueryParameter"/>.
-    /// Defaults to <c>xp</c>. Matched case-sensitively.
+    /// There is no default: the TEFCA client SAN format is not settled, so the deployment must
+    /// configure the name, and startup fails options validation when it is missing.
+    /// The name is matched exactly (ordinal, case-sensitive) against the raw SAN text, and the value
+    /// is taken verbatim (no percent-decoding), per HL7 SSRAA 3.0.0 "Normalization of URI values in JWTs".
     /// </summary>
-    public string ExchangePurposeQueryParameter { get; set; } = "xp";
+    public string? ExchangePurposeQueryParameter { get; set; }
 }

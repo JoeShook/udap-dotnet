@@ -8,6 +8,8 @@
 #endregion
 
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.DependencyInjection.Extensions;
+using Microsoft.Extensions.Options;
 using Udap.Server.Registration;
 using Udap.Server.Validation;
 
@@ -42,7 +44,11 @@ public static class ServiceCollectionExtensions
         this IServiceCollection services,
         Action<TefcaValidationOptions> configure)
     {
-        services.Configure(configure);
+        services.AddOptions<TefcaValidationOptions>()
+            .Configure(configure)
+            .ValidateOnStart();
+        services.TryAddEnumerable(
+            ServiceDescriptor.Singleton<IValidateOptions<TefcaValidationOptions>, TefcaValidationOptionsValidator>());
         services.AddSingleton<ICommunityRegistrationValidator, TefcaRegistrationValidator>();
         services.AddSingleton<ICommunityTokenValidator, TefcaTokenValidator>();
 

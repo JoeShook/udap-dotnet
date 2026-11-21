@@ -53,6 +53,14 @@ public sealed record ExchangePurposeReadResult(
 /// The location is selected by <see cref="TefcaValidationOptions.ExchangePurposeLocation"/>.
 /// Codes are checked against <see cref="TefcaConstants.ExchangePurposeCodes.All"/>.
 ///
+/// The SAN is read exactly as written, following HL7 SSRAA 3.0.0 "Normalization of URI values in JWTs":
+/// no <see cref="Uri"/> parsing, no case folding, no percent-decoding, no path canonicalization.
+/// The raw string is split by hand: the query is the text after the first <c>?</c> up to <c>#</c>,
+/// the path is the text between the authority and <c>?</c>/<c>#</c>. Query parameter names,
+/// values and path segments are compared ordinally with the exchange purpose codes.
+/// A trailing slash before the query does not change which code is extracted; equality of the
+/// SAN with the JWT <c>iss</c> is checked elsewhere as an exact string comparison.
+///
 /// <a href="https://rce.sequoiaproject.org/wp-content/uploads/2026/02/SOP-Facilitated-FHIR-Implementation-2.0-Draft-508.pdf#page=14">
 /// SOP v2.0 — Section 6.11 Registration #5a</a>
 /// </summary>
@@ -120,9 +128,9 @@ public static class ExchangePurposeSanReader
         var path = GetPath(sanUri);
         string? found = null;
 
-        foreach (var rawSegment in path.Split('/', StringSplitOptions.RemoveEmptyEntries))
+        // Raw segments, compared ordinally; no percent-decoding or dot-segment removal.
+        foreach (var segment in path.Split('/', StringSplitOptions.RemoveEmptyEntries))
         {
-            var segment = Unescape(rawSegment);
             if (!ValidExchangePurposes.Contains(segment))
             {
                 continue;
@@ -148,6 +156,7 @@ public static class ExchangePurposeSanReader
     {
         if (string.IsNullOrWhiteSpace(queryParameterName))
         {
+            // Normally caught at startup by TefcaValidationOptionsValidator.
             return Missing("no exchange purpose query parameter name is configured");
         }
 
@@ -157,13 +166,14 @@ public static class ExchangePurposeSanReader
         foreach (var pair in query.Split('&', StringSplitOptions.RemoveEmptyEntries))
         {
             var equalsIndex = pair.IndexOf('=');
-            var name = UnescapeQuery(equalsIndex < 0 ? pair : pair.Substring(0, equalsIndex));
+            // Raw text, compared ordinally; no percent-decoding of name or value.
+            var name = equalsIndex < 0 ? pair : pair.Substring(0, equalsIndex);
             if (!string.Equals(name, queryParameterName, StringComparison.Ordinal))
             {
                 continue;
             }
 
-            var candidate = equalsIndex < 0 ? string.Empty : UnescapeQuery(pair.Substring(equalsIndex + 1));
+            var candidate = equalsIndex < 0 ? string.Empty : pair.Substring(equalsIndex + 1);
             if (value != null && !string.Equals(value, candidate, StringComparison.Ordinal))
             {
                 return new ExchangePurposeReadResult(
@@ -225,20 +235,5 @@ public static class ExchangePurposeSanReader
 
         var queryIndex = withoutFragment.IndexOf('?');
         return queryIndex < 0 ? string.Empty : withoutFragment.Substring(queryIndex + 1);
-    }
-
-    private static string UnescapeQuery(string value)
-        => Unescape(value.Replace('+', ' '));
-
-    private static string Unescape(string value)
-    {
-        try
-        {
-            return Uri.UnescapeDataString(value);
-        }
-        catch (UriFormatException)
-        {
-            return value;
-        }
     }
 }
