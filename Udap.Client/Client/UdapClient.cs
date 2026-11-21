@@ -502,13 +502,14 @@ namespace Udap.Client
             }
 
             UdapDynamicClientRegistrationDocument? resultDocument;
+            var (signingCertificates, intermediates) = SplitSigningAndIntermediateCertificates(x509Certificates);
 
-            foreach (var clientCert in x509Certificates)
+            foreach (var clientCert in signingCertificates)
             {
                 _logger.LogDebug("Using certificate {CertificateSubjectName} [ {CertificateThumbprint} ]", clientCert.SubjectName.Name, clientCert.Thumbprint);
 
                 var builder = UdapDcrBuilderForAuthorizationCode
-                    .Create(clientCert)
+                    .Create(BuildX5cCertificates(clientCert, intermediates))
                     .WithAudience(this.UdapServerMetadata?.RegistrationEndpoint)
                     .WithExpiration(TimeSpan.FromMinutes(5))
                     .WithJwtId()
@@ -604,8 +605,9 @@ namespace Udap.Client
             }
 
             UdapDynamicClientRegistrationDocument? resultDocument;
+            var (signingCertificates, intermediates) = SplitSigningAndIntermediateCertificates(x509Certificates);
 
-            foreach (var clientCert in x509Certificates)
+            foreach (var clientCert in signingCertificates)
             {
                 _logger.LogDebug("Using certificate {CertificateSubjectName} [{CertificateThumbprint}]", clientCert.SubjectName.Name, clientCert.Thumbprint);
 
@@ -633,7 +635,7 @@ namespace Udap.Client
 
                 var signedSoftwareStatement =
                     SignedSoftwareStatementBuilder<UdapDynamicClientRegistrationDocument>
-                        .Create(clientCert, document)
+                        .Create(BuildX5cCertificates(clientCert, intermediates), document)
                         .Build();
 
                 var requestBody = new UdapRegisterRequest
@@ -682,6 +684,39 @@ namespace Udap.Client
             };
 
             return resultDocument;
+        }
+
+        /// <summary>
+        /// Separates the certificates a caller passes to the Register methods into signing (end-entity)
+        /// certificates, each tried in turn, and CA certificates, which are never used to sign but supply
+        /// the issuing intermediate placed after the signing certificate in the x5c header.
+        /// </summary>
+        private static (List<X509Certificate2> SigningCertificates, List<X509Certificate2> Intermediates)
+            SplitSigningAndIntermediateCertificates(List<X509Certificate2> certificates)
+        {
+            var intermediates = certificates.Where(X5cChain.IsCertificateAuthority).ToList();
+            var signingCertificates = certificates.Where(c => !X5cChain.IsCertificateAuthority(c)).ToList();
+
+            if (signingCertificates.Count == 0)
+            {
+                throw new ArgumentException("No end-entity client certificate provided; only CA certificates were passed.", nameof(certificates));
+            }
+
+            return (signingCertificates, intermediates);
+        }
+
+        private List<X509Certificate2> BuildX5cCertificates(X509Certificate2 signingCertificate, List<X509Certificate2> intermediates)
+        {
+            var x5c = X5cChain.Build(signingCertificate, intermediates);
+
+            if (x5c.Count == 1)
+            {
+                _logger.LogDebug(
+                    "No issuing intermediate supplied for certificate {CertificateThumbprint}; the x5c header carries only the signing certificate",
+                    signingCertificate.Thumbprint);
+            }
+
+            return x5c;
         }
 
         /// <inheritdoc />

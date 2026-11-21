@@ -25,6 +25,7 @@ public class UdapCertificationsAndEndorsementBuilder
     private readonly DateTime _nowUtc;
     private readonly UdapCertificationAndEndorsementDocument _document;
     private X509Certificate2? _certificate;
+    private List<X509Certificate2>? _certificates;
 
     /// <summary>
     /// Let implementer bypass fluent interface and access Document directly
@@ -53,6 +54,18 @@ public class UdapCertificationsAndEndorsementBuilder
     public static UdapCertificationsAndEndorsementBuilder Create(string certificationName, X509Certificate2 cert)
     {
         return new UdapCertificationsAndEndorsementBuilder(certificationName, cert);
+    }
+
+    /// <summary>
+    /// Create a builder for registration with an ordered certificate chain.
+    /// </summary>
+    /// <param name="certificationName">Short name for certification</param>
+    /// <param name="certs">Certificate chain where the first certificate is the signing certificate,
+    /// followed by the intermediate that issued it. All of them are placed in the x5c header.</param>
+    /// <returns></returns>
+    public static UdapCertificationsAndEndorsementBuilder Create(string certificationName, List<X509Certificate2> certs)
+    {
+        return new UdapCertificationsAndEndorsementBuilder(certificationName).WithCertificates(certs);
     }
 
     /// <summary>
@@ -634,9 +647,30 @@ public UdapCertificationsAndEndorsementBuilder WithDeveloperAddress(string? addr
     public UdapCertificationsAndEndorsementBuilder WithCertificate(X509Certificate2 certificate)
     {
         _certificate = certificate;
+        _certificates = null;
 
         _document.Issuer = certificate.GetNameInfo(X509NameType.UrlName, false);
         _document.Subject = certificate.GetNameInfo(X509NameType.UrlName, false);
+
+        return this;
+    }
+
+    /// <summary>
+    /// Set an ordered certificate chain. The first certificate signs the statement and supplies the
+    /// issuer and subject; every certificate is placed in the x5c header in the order given, so pass the
+    /// signing certificate followed by the intermediate that issued it.
+    /// </summary>
+    /// <param name="certificates">Certificate chain where the first certificate is the signing certificate.</param>
+    /// <returns></returns>
+    public UdapCertificationsAndEndorsementBuilder WithCertificates(List<X509Certificate2> certificates)
+    {
+        if (certificates == null || certificates.Count == 0)
+        {
+            throw new ArgumentException("At least one certificate is required.", nameof(certificates));
+        }
+
+        WithCertificate(certificates[0]);
+        _certificates = certificates;
 
         return this;
     }
@@ -665,7 +699,7 @@ public UdapCertificationsAndEndorsementBuilder WithDeveloperAddress(string? addr
         }
 
         return SignedSoftwareStatementBuilder<UdapCertificationAndEndorsementDocument>
-            .Create(_certificate, Document)
+            .Create(_certificates ?? [_certificate], Document)
             .Build(signingAlgorithm);
     }
 }

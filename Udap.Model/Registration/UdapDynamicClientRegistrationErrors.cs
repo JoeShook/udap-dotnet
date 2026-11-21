@@ -30,6 +30,7 @@ public static class UdapDynamicClientRegistrationErrorDescriptions
     public const string ExpExpired = "software_statement exp is expired";
     public const string ExpExceedsMaxLifetime = "software_statement exp exceeds the maximum lifetime of {0} seconds from iat";
     public const string CannotFindorParseX5c = "software_statement x5c cannot find or parse";
+    public const string X5cMissingIssuingIntermediate = "software_statement x5c must contain the signing certificate followed by the intermediate that issued it";
     public const string IssuedAtMissing = "software_statement iat is missing";
     public const string IssuedAtInFuture = "software_statement iat is in the future";
     public const string FailedTokenValidation = "Failed JsonWebTokenHandler.ValidateToken";

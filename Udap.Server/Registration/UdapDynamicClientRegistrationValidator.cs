@@ -347,7 +347,9 @@ public class UdapDynamicClientRegistrationValidator : IUdapDynamicClientRegistra
 
         _logger.LogDebug("Validating chain. x5c {X5c}", jwtHeader.X5c);
 
-        if (!await ValidateChainAsync(context, jsonWebToken, jwtHeader, intermediateCertificates, anchorCertificates, anchors))
+        var chainValidationResult = await ValidateChainAsync(context, jsonWebToken, jwtHeader, intermediateCertificates, anchorCertificates, anchors);
+
+        if (chainValidationResult == null)
         {
             _logger.LogWarning("{Error}::{Description}",
                 UdapDynamicClientRegistrationErrors.UnapprovedSoftwareStatement,
@@ -372,6 +374,19 @@ public class UdapDynamicClientRegistrationValidator : IUdapDynamicClientRegistra
         }
 
         _logger.LogDebug("Chain Validated");
+
+        if (_serverSettings.RequireIssuingIntermediateInX5c &&
+            !X5cIssuingIntermediate.IsPresent(Getx5c(jwtHeader), chainValidationResult))
+        {
+            _logger.LogWarning("{Error}::{Description} Client Thumbprint: {Thumbprint}",
+                UdapDynamicClientRegistrationErrors.InvalidSoftwareStatement,
+                UdapDynamicClientRegistrationErrorDescriptions.X5cMissingIssuingIntermediate,
+                publicCert.Thumbprint);
+
+            return new UdapDynamicClientRegistrationValidationResult(
+                UdapDynamicClientRegistrationErrors.InvalidSoftwareStatement,
+                UdapDynamicClientRegistrationErrorDescriptions.X5cMissingIssuingIntermediate);
+        }
 
         var (org, dataHolder) = ResolveOrgAndDataHolder(_httpContextAccessor.HttpContext, aud);
         context.Organization = org;
@@ -745,7 +760,11 @@ public class UdapDynamicClientRegistrationValidator : IUdapDynamicClientRegistra
         return new UdapDynamicClientRegistrationValidationResult(string.Empty);
     }
 
-    private async Task<bool> ValidateChainAsync(
+    /// <summary>
+    /// Validates the trust chain of the first x5c certificate. The chain is built from the server's stored
+    /// intermediates and AIA, never from the other x5c entries. Returns the validation result when trusted, otherwise null.
+    /// </summary>
+    private async Task<ChainValidationResult?> ValidateChainAsync(
         UdapDynamicClientRegistrationContext context,
         JsonWebToken jwtSecurityToken,
         JwtHeader jwtHeader,
@@ -755,7 +774,6 @@ public class UdapDynamicClientRegistrationValidator : IUdapDynamicClientRegistra
     {
         var x5cArray = Getx5c(jwtHeader);
 
-        // TODO: no test cases for x5c with intermediate certificates.
         if (x5cArray != null)
         {
 #if NET9_0_OR_GREATER
@@ -777,7 +795,7 @@ public class UdapDynamicClientRegistrationValidator : IUdapDynamicClientRegistra
                 {
                     _logger.LogError("Missing chain elements");
 
-                    return false;
+                    return null;
                 }
 
                 context.Issuer = jwtSecurityToken.Issuer;
@@ -785,14 +803,14 @@ public class UdapDynamicClientRegistrationValidator : IUdapDynamicClientRegistra
                 context.CommunityName = result.CommunityName;
                 context.CertificateExpiration = result.ChainElements.First().Certificate.NotAfter.ToUniversalTime();
 
-                return true;
+                return result;
             }
         }
 
         _logger.LogDebug("JWT payload: {EncodedPayload}", jwtSecurityToken.EncodedPayload);
         _logger.LogDebug("x5c: {X5c}", jwtHeader.X5c);
 
-        return false;
+        return null;
     }
 
     private string[]? _x5cArray;

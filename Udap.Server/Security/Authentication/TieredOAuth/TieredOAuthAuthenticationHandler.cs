@@ -431,21 +431,21 @@ public class TieredOAuthAuthenticationHandler : OAuthHandler<TieredOAuthAuthenti
         await _certificateStore.Resolve(Context.RequestAborted);
 
         var communityCertificates = communityParam == null
-            ? _certificateStore.IssuedCertificates.Select(ic => ic.Certificate).ToList()
-            : _certificateStore.IssuedCertificates.Where(ic => ic.Community == communityParam).Select(ic => ic.Certificate).ToList();
+            ? _certificateStore.IssuedCertificates.ToList()
+            : _certificateStore.IssuedCertificates.Where(ic => ic.Community == communityParam).ToList();
 
         // Sign with the certificate this server registered with: the IdP only accepts a client assertion
         // whose certificate carries the issuer (URI SAN) the client registered.
         var signingCertificate = (tieredClient.ClientUriSan == null
                                      ? null
-                                     : communityCertificates.FirstOrDefault(c => c.HasUriSubjectAltName(tieredClient.ClientUriSan)))
+                                     : communityCertificates.FirstOrDefault(c => c.Certificate.HasUriSubjectAltName(tieredClient.ClientUriSan)))
                                  ?? communityCertificates.First();
 
-        // Sign request for token
+        // Sign request for token. The x5c header carries the signing certificate followed by its issuing intermediate.
         var tokenRequestBuilder = AccessTokenRequestForAuthorizationCodeBuilder.Create(
             tieredClientId,
             tieredClient.TokenEndpoint,
-            signingCertificate,
+            signingCertificate.GetX5cCertificates(),
 
             resourceHolderRedirectUrl,
             code);
@@ -561,12 +561,14 @@ public class TieredOAuthAuthenticationHandler : OAuthHandler<TieredOAuthAuthenti
             var document = await _udapClient.RegisterTieredClient(
                 resourceHolderRedirectUrl,
 
-                communityParam == null 
-                    ? 
-                    new List<X509Certificate2>(){ _certificateStore.IssuedCertificates.First().Certificate } 
+                // Each signing certificate is followed by its issuing intermediate(s); UdapClient signs only with
+                // the end-entity certificates and places the intermediate after the signer in the x5c header.
+                communityParam == null
+                    ?
+                    _certificateStore.IssuedCertificates.First().GetX5cCertificates()
                     :
                     _certificateStore.IssuedCertificates.Where(ic => ic.Community == communityParam)
-                        .Select(ic => ic.Certificate),
+                        .SelectMany(ic => ic.GetX5cCertificates()),
 
                 OptionsMonitor.CurrentValue.Scope.ToSpaceSeparatedString(),
                 Context.RequestAborted);

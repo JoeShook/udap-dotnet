@@ -189,7 +189,12 @@ public class FileCertificateStore : ICertificateStore
                             }
                             else
                             {
-                                IssuedCertificates.Add(new IssuedCertificate(x509Cert, community.Name));
+                                IssuedCertificates.Add(IssuedCertificateFactory.Create(
+                                    x509Cert,
+                                    community.Name,
+                                    certificates,
+                                    intermediates.Select(i => X509Certificate2.CreateFromPem(i.Certificate)),
+                                    _logger));
                             }
                         }
                     }
