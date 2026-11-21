@@ -59,6 +59,15 @@
     <None Include="..\Udap.PKI.Generator\certstores\surefhirlabs_community\issued\fhirlabs.net.client.pfx" Link="CertStore\issued\fhirlabs.net.client.pfx">
       <CopyToOutputDirectory>Always</CopyToOutputDirectory>
     </None>
+    <None Include="..\Udap.PKI.Generator\certstores\TEFCA_Community\TEFCA_Test_CA.cer" Link="CertStore\anchors\TEFCA_Test_CA.cer">
+      <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+    </None>
+    <None Include="..\Udap.PKI.Generator\certstores\TEFCA_Community\intermediates\TEFCA_Test_Intermediate.cer" Link="CertStore\intermediates\TEFCA_Test_Intermediate.cer">
+      <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+    </None>
+    <None Include="..\Udap.PKI.Generator\certstores\TEFCA_Community\issued\fhirlabs.net.tefca.client.pfx" Link="CertStore\issued\fhirlabs.net.tefca.client.pfx">
+      <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+    </None>
     
     <None Include="..\Udap.PKI.Generator\certstores\surefhirlabs_community\issued\fhirlabs.net.ecdsa.client.pfx" Link="CertStore\issued\fhirlabs.net.ecdsa.client.pfx">
       <CopyToOutputDirectory>Always</CopyToOutputDirectory>

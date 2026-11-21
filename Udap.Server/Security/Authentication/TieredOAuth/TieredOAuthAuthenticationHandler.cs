@@ -561,8 +561,8 @@ public class TieredOAuthAuthenticationHandler : OAuthHandler<TieredOAuthAuthenti
             var document = await _udapClient.RegisterTieredClient(
                 resourceHolderRedirectUrl,
 
-                // Each signing certificate is followed by its issuing intermediate(s); UdapClient signs only with
-                // the end-entity certificates and places the intermediate after the signer in the x5c header.
+                // Each signing certificate is followed by its issuing intermediate(s); UdapClient places the
+                // intermediate after the signing certificate in the x5c header.
                 communityParam == null
                     ?
                     _certificateStore.IssuedCertificates.First().GetX5cCertificates()

@@ -45,6 +45,7 @@ public static class ServiceCollectionExtensions
         services.Configure(configure);
         services.AddSingleton<ICommunityRegistrationValidator, TefcaRegistrationValidator>();
         services.AddSingleton<ICommunityTokenValidator, TefcaTokenValidator>();
+        services.AddSingleton<ICommunityX5cPolicy, TefcaX5cPolicy>();
 
         return services;
     }
