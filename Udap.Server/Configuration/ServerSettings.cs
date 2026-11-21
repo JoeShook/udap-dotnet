@@ -17,28 +17,37 @@ public class ServerSettings
 {
     /// <summary>
     /// Specifies which version of the HL7 UDAP Security IG (SSRAA) this server enforces.
-    /// Default is <see cref="SsraaVersion.V2_0"/> for new deployments.
-    /// Set to <see cref="SsraaVersion.V1_1"/> to allow PKCE and state to remain optional.
+    /// Default is <see cref="SsraaVersion.V3_0"/>.
+    /// V2_0 and V3_0 require PKCE and state and compare URI values in JWTs (software statement and client
+    /// assertion <c>aud</c>) as exact, case-sensitive strings. V3_0 also rejects a FHIR base URL ending in "/".
+    /// Set to <see cref="SsraaVersion.V1_1"/> to allow PKCE and state to remain optional and to keep the
+    /// lenient URI comparison.
     /// </summary>
     [JsonPropertyName("SsraaVersion")]
     [JsonConverter(typeof(JsonStringEnumConverter))]
-    public SsraaVersion SsraaVersion { get; set; } = SsraaVersion.V2_0;
+    public SsraaVersion SsraaVersion { get; set; } = SsraaVersion.V3_0;
 
     /// <summary>
     /// Effective PKCE requirement. When <see cref="RequirePkce"/> is explicitly set (true or false),
     /// that value is used. Otherwise falls back to <see cref="SsraaVersion"/> policy:
-    /// V2_0 requires PKCE, V1_1 does not.
+    /// V2_0 and later require PKCE, V1_1 does not.
     /// </summary>
     [JsonIgnore]
-    public bool EffectiveRequirePkce => RequirePkce ?? (SsraaVersion == SsraaVersion.V2_0);
+    public bool EffectiveRequirePkce => RequirePkce ?? SsraaVersion.RequiresPkceAndState();
 
     /// <summary>
     /// Effective state parameter requirement. When <see cref="ForceStateParamOnAuthorizationCode"/>
     /// is explicitly set (true or false), that value is used. Otherwise falls back to
-    /// <see cref="SsraaVersion"/> policy: V2_0 requires state, V1_1 does not.
+    /// <see cref="SsraaVersion"/> policy: V2_0 and later require state, V1_1 does not.
     /// </summary>
     [JsonIgnore]
-    public bool EffectiveForceState => ForceStateParamOnAuthorizationCode ?? (SsraaVersion == SsraaVersion.V2_0);
+    public bool EffectiveForceState => ForceStateParamOnAuthorizationCode ?? SsraaVersion.RequiresPkceAndState();
+
+    /// <summary>
+    /// True when URI values in JWTs are compared exactly (V2_0 and later).
+    /// </summary>
+    [JsonIgnore]
+    public bool EffectiveExactUriComparison => SsraaVersion.RequiresExactUriComparison();
 
     [JsonPropertyName("DefaultSystemScopes")]
     public string? DefaultSystemScopes { get; set; }

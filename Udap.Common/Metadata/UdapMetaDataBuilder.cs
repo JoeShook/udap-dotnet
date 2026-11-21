@@ -192,6 +192,17 @@ public class UdapMetaDataBuilder<TUdapMetadataOptions, TUdapMetadata>
 
         var (iss, sub) = ResolveIssuer(baseUrl, certificate);
 
+        // SSRAA 3.0.0: a FHIR base URL has no trailing slash. The iss is the certificate SAN verbatim, so a SAN
+        // ending in "/" cannot be advertised; fix the certificate rather than trimming the iss.
+        if (options.SsraaVersion.ForbidsBaseUrlTrailingSlash() && iss.EndsWith('/'))
+        {
+            _logger.LogError(
+                "Cannot sign UDAP metadata: the FHIR base URL (signing certificate URI SAN) {Issuer} ends in '/', which SSRAA {SsraaVersion} forbids. " +
+                "Issue a certificate whose SAN has no trailing slash, or set SsraaVersion to V2_0 or V1_1 in the UDAP metadata options",
+                iss, options.SsraaVersion);
+            return null;
+        }
+
         var jwtPayload = new JwtPayLoadExtension(
             new List<Claim>
             {

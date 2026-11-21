@@ -252,12 +252,7 @@ public class UdapDynamicClientRegistrationValidator : IUdapDynamicClientRegistra
                 $"{UdapDynamicClientRegistrationErrorDescriptions.InvalidAud}: {aud}"));
         }
 
-        var endpoint = new Uri(_httpContextAccessor.HttpContext!.Request.GetDisplayUrl());
-
-        if (Uri.Compare(endpoint, aud,
-                UriComponents.Host | UriComponents.PathAndQuery | UriComponents.Port,
-                UriFormat.SafeUnescaped, StringComparison.OrdinalIgnoreCase)
-            != 0)
+        if (!AudienceMatchesRegistrationEndpoint(document.Audience!, aud))
         {
             _logger.LogWarning("{Error}::{Description}",
                 UdapDynamicClientRegistrationErrors.InvalidSoftwareStatement,
@@ -550,6 +545,42 @@ public class UdapDynamicClientRegistrationValidator : IUdapDynamicClientRegistra
         _logger.LogDebug("Validation success");
 
         return await Task.FromResult(new UdapDynamicClientRegistrationValidationResult(document));
+    }
+
+    /// <summary>
+    /// SSRAA 2.0 and later: the software statement <c>aud</c> must equal the registration endpoint exactly
+    /// (case-sensitive, no normalization). It is compared against each URL a client may have been told to use
+    /// (see <see cref="AdvertisedEndpointUris"/>). SSRAA 1.1 keeps the lenient comparison: host, port, path and
+    /// query compared case-insensitively.
+    /// </summary>
+    internal bool AudienceMatchesRegistrationEndpoint(string audience, Uri aud)
+    {
+        var httpContext = _httpContextAccessor.HttpContext!;
+
+        if (_serverSettings.SsraaVersion.RequiresExactUriComparison())
+        {
+            var endpoints = AdvertisedEndpointUris.Resolve(
+                httpContext,
+                Constants.ProtocolRoutePaths.Register,
+                Duende.IdentityModel.OidcConstants.Discovery.RegistrationEndpoint);
+
+            if (endpoints.Contains(audience, StringComparer.Ordinal))
+            {
+                return true;
+            }
+
+            _logger.LogWarning(
+                "Software statement aud {Aud} does not exactly match the registration endpoint ({Endpoints}); SSRAA {SsraaVersion} compares URIs as case-sensitive strings",
+                audience, string.Join(", ", endpoints), _serverSettings.SsraaVersion);
+
+            return false;
+        }
+
+        var endpoint = new Uri(httpContext.Request.GetDisplayUrl());
+
+        return Uri.Compare(endpoint, aud,
+                   UriComponents.Host | UriComponents.PathAndQuery | UriComponents.Port,
+                   UriFormat.SafeUnescaped, StringComparison.OrdinalIgnoreCase) == 0;
     }
 
     // Extracts org/dataholder from:

@@ -106,6 +106,7 @@ public class UdapJwtSecretValidator : ISecretValidator
         }
 
         var tokenHandler = new JsonWebTokenHandler() { MaximumTokenSizeInBytes = _options.InputLengthRestrictions.Jwt };
+        var exactUriComparison = _serverSettings.SsraaVersion.RequiresExactUriComparison();
 
         var tokenValidationParameters = new TokenValidationParameters
         {
@@ -116,8 +117,13 @@ public class UdapJwtSecretValidator : ISecretValidator
             ValidateIssuer = true,
 
             ValidateAudience = true,
-            ValidAudience = _httpContextAccessor.HttpContext?.Request.GetDisplayUrl(),
-            
+            // Audiences are compared ordinally. SSRAA 2.0 and later also forbid ignoring a trailing slash, and
+            // accept the token endpoint as the server advertises it as well as the request URL (reverse proxies).
+            ValidAudiences = exactUriComparison
+                ? AdvertisedEndpointUris.Resolve(_httpContextAccessor.HttpContext, Constants.ProtocolRoutePaths.Token)
+                : [_httpContextAccessor.HttpContext?.Request.GetDisplayUrl() ?? string.Empty],
+            IgnoreTrailingSlashWhenValidatingAudience = !exactUriComparison,
+
             RequireSignedTokens = true,
             RequireExpirationTime = true,
             
