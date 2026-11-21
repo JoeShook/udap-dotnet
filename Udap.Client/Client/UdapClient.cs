@@ -357,6 +357,23 @@ namespace Udap.Client
 
                 }
 
+                if (_discoveryPolicy.SsraaVersion.HasValue)
+                {
+                    _clientDiscoveryValidator.SsraaVersion = _discoveryPolicy.SsraaVersion.Value;
+                }
+
+                // SSRAA 3.0.0: a FHIR base URL has no trailing slash. Fail before fetching rather than trimming it.
+                var ssraaVersion = _clientDiscoveryValidator.SsraaVersion;
+                var fhirBaseUrl = baseUrl.Contains(UdapConstants.Discovery.DiscoveryEndpoint)
+                    ? baseUrl.Substring(0, baseUrl.IndexOf(UdapConstants.Discovery.DiscoveryEndpoint, StringComparison.Ordinal)).RemoveTrailingSlash()
+                    : baseUrl;
+                if (ssraaVersion.ForbidsBaseUrlTrailingSlash() && fhirBaseUrl.EndsWith('/'))
+                {
+                    var message = $"The FHIR base URL must not end in '/' (SSRAA {ssraaVersion}). baseUrl: {fhirBaseUrl}";
+                    NotifyTokenError(message);
+                    throw new ArgumentException(message, nameof(baseUrl));
+                }
+
                 var disco = await _httpClient.GetUdapDiscoveryDocument(
                     new UdapDiscoveryDocumentRequest()
                     {
