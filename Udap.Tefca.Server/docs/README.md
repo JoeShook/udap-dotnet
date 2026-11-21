@@ -54,7 +54,7 @@ builder.Services.AddUdapTefcaValidation(options =>
 });
 ```
 
-Listing the certification URI for the community in `ServerSettings.CommunityCertificationsRequired` (see [Udap.Server](../../Udap.Server/docs/README.md)) has the same effect.
+Listing the certification URI for a TEFCA community in `ServerSettings.CommunityCertificationsRequired` (see [Udap.Server](../../Udap.Server/docs/README.md)) has the same effect. The TEFCA checks below run only in the communities configured in `TefcaValidationOptions.Communities`; a non-TEFCA community that requires the same URI gets only the generic certification checks.
 
 When required, the registration is rejected unless the request includes a certification that passes the generic UDAP checks (signature with the `x5c` key, chain to an anchor of the client's community, `iss`/`sub`, `aud` when present, `exp`, `certification_uris`) and the TEFCA checks in `TefcaBasicAppCertificationValidator`:
 

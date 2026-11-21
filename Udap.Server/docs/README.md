@@ -182,7 +182,7 @@ For a listed community, `UdapCertificationsRequiredValidator` rejects a registra
 
 A missing or untrusted certification fails with `unapproved_software_statement`; an invalid one with `invalid_software_statement`. Accepted certifications are placed in `UdapDynamicClientRegistrationContext.Items[UdapCertificationsRequiredValidator.ValidatedCertificationsItemKey]`.
 
-Profile-specific rules for a certification program are added by registering an `IUdapCertificationProfileValidator` for its URI; it runs after the generic checks and can also declare its certification required for a community (`IsRequiredForCommunity`). `Udap.Tefca.Server` registers one for the TEFCA Basic App Certification.
+Profile-specific rules for a certification program are added by registering an `IUdapCertificationProfileValidator` for its URI; it runs after the generic checks, only in communities where its `AppliesToCommunity` returns true, and can also declare its certification required for a community (`IsRequiredForCommunity`). `Udap.Tefca.Server` registers one for the TEFCA Basic App Certification.
 
 ## Client Storage During Registration
 

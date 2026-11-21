@@ -317,9 +317,62 @@ public class CertificationsRequiredValidatorTests
         AssertError(result, UdapDynamicClientRegistrationErrors.InvalidSoftwareStatement, "home_community_id");
     }
 
+    [Fact]
+    public async Task NonTefcaCommunity_RequiringBasicAppUri_GetsGenericChecksOnly()
+    {
+        const string otherCommunity = "udap://other.example.com";
+        var validator = CreateValidator(RequireBasicAppIn(otherCommunity));
+
+        // Fails every TEFCA rule, but is a valid generic certification chained to the other community's anchor.
+        var certification = BasicAppCertification(
+            signer: Pki.UntrustedClient,
+            name: "Some Other Certification",
+            omitExchangePurposes: true,
+            homeCommunityId: null);
+
+        var result = await validator.ValidateAsync(
+            CreateContextForCommunity(otherCommunity, 2, ClientUri, certification));
+
+        Assert.Null(result);
+    }
+
+    [Fact]
+    public async Task NonTefcaCommunity_RequiringBasicAppUri_StillRejectsExpiredCertification()
+    {
+        const string otherCommunity = "udap://other.example.com";
+        var validator = CreateValidator(RequireBasicAppIn(otherCommunity));
+        var certification = BasicAppCertification(signer: Pki.UntrustedClient, expiration: TimeSpan.FromMinutes(-10));
+
+        var result = await validator.ValidateAsync(
+            CreateContextForCommunity(otherCommunity, 2, ClientUri, certification));
+
+        AssertError(result, UdapDynamicClientRegistrationErrors.InvalidSoftwareStatement, "expired");
+    }
+
+    [Fact]
+    public void BasicAppProfile_AppliesOnlyToTefcaCommunities()
+    {
+        var profileValidator = new TefcaBasicAppCertificationValidator(Options.Create(new TefcaValidationOptions()));
+
+        Assert.True(profileValidator.AppliesToCommunity(Community));
+        Assert.False(profileValidator.AppliesToCommunity("udap://other.example.com"));
+    }
+
     #endregion
 
     #region Helpers
+
+    private static ServerSettings RequireBasicAppIn(string communityName) => new()
+    {
+        CommunityCertificationsRequired =
+        [
+            new UdapCertificationRequirement
+            {
+                Community = communityName,
+                CertificationUris = [TefcaConstants.Certification.BasicAppCertificationUri]
+            }
+        ]
+    };
 
     private static ServerSettings RequireBasicApp() => new()
     {
@@ -384,13 +437,20 @@ public class CertificationsRequiredValidatorTests
         => CreateContextForIssuer(ClientUri, certifications);
 
     private static UdapDynamicClientRegistrationContext CreateContextForIssuer(string issuer, params string[] certifications)
+        => CreateContextForCommunity(Community, 1, issuer, certifications);
+
+    private static UdapDynamicClientRegistrationContext CreateContextForCommunity(
+        string communityName,
+        long communityId,
+        string issuer,
+        params string[] certifications)
     {
         return new UdapDynamicClientRegistrationContext
         {
             Request = new UdapRegisterRequest("software-statement", UdapConstants.UdapVersionsSupportedValue, certifications),
             Issuer = issuer,
-            CommunityName = Community,
-            CommunityId = 1,
+            CommunityName = communityName,
+            CommunityId = communityId,
             Document = new UdapDynamicClientRegistrationDocument { Audience = RegistrationEndpoint }
         };
     }
