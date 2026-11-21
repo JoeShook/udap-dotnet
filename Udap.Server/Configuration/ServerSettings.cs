@@ -136,6 +136,19 @@ public class ServerSettings
     /// forward it downstream. Set to false to keep the pre-0.9.7 token shape.
     /// </summary>
     public bool IncludePurposeOfUseClaims { get; set; } = true;
+
+    /// <summary>
+    /// Certifications required at registration, per community. Empty by default, so no certification
+    /// is required. For a community listed here, a registration is rejected unless its <c>certifications</c>
+    /// array holds a valid certification (signature, <c>x5c</c> chain to an anchor of the client's community,
+    /// <c>iss</c>/<c>sub</c>, <c>exp</c>) whose <c>certification_uris</c> includes each required URI.
+    /// A missing or untrusted certification is rejected with <c>unapproved_software_statement</c>; an invalid
+    /// one with <c>invalid_software_statement</c>.
+    /// Keep this in step with the <c>udap_certifications_required</c> the resource server advertises.
+    ///
+    /// <a href="https://www.udap.org/udap-certifications-and-endorsements-stu1.html#section-6">UDAP Certifications and Endorsements section 6</a>
+    /// </summary>
+    public List<UdapCertificationRequirement> CommunityCertificationsRequired { get; set; } = [];
 }
 
 
