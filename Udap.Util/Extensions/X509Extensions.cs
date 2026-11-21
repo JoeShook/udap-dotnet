@@ -293,6 +293,31 @@ public static class X509Extensions
             .Any(san => string.Equals(san.Item2, uri, StringComparison.Ordinal));
     }
 
+    /// <summary>
+    /// Returns every <c>organizationalUnitName</c> (OID 2.5.4.11) value in the certificate subject,
+    /// in the order they appear. A subject may carry several OU attributes, including inside a
+    /// multi-valued RDN.
+    /// </summary>
+    public static IReadOnlyList<string> GetSubjectOrganizationalUnits(this X509Certificate2 cert)
+    {
+        var subject = X509Name.GetInstance(Asn1Object.FromByteArray(cert.SubjectName.RawData));
+
+        return subject.GetValueList(X509Name.OU).ToList();
+    }
+
+    /// <summary>
+    /// True when at least one <c>organizationalUnitName</c> in the certificate subject equals one of
+    /// <paramref name="acceptedOrganizationalUnits"/>. Values are compared case-insensitively, matching
+    /// the caseIgnoreMatch equality rule X.520 defines for organizationalUnitName.
+    /// </summary>
+    public static bool HasSubjectOrganizationalUnit(this X509Certificate2 cert, IEnumerable<string> acceptedOrganizationalUnits)
+    {
+        var accepted = acceptedOrganizationalUnits as ICollection<string> ?? acceptedOrganizationalUnits.ToList();
+
+        return cert.GetSubjectOrganizationalUnits()
+            .Any(ou => accepted.Any(a => string.Equals(ou, a, StringComparison.OrdinalIgnoreCase)));
+    }
+
     public static string ResolveUriSubjAltName(this X509Certificate2 cert, string baseUrl)
     {
         var sans = cert.GetSubjectAltNames(n => n.TagNo == (int)GeneralNameType.URI);

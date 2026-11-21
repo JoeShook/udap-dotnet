@@ -207,6 +207,31 @@ public class UdapClientDiscoveryValidator : IUdapClientEvents
     }
 
     /// <summary>
+    /// Checks that the server's metadata signing certificate (<c>x5c[0]</c>, read by
+    /// <see cref="ValidateJwtToken"/>) carries at least one subject organizational unit from
+    /// <paramref name="acceptedOrganizationalUnits"/>. Passes when the collection is null or empty.
+    /// </summary>
+    /// <param name="acceptedOrganizationalUnits">Accepted <c>organizationalUnitName</c> values; one match is enough.</param>
+    /// <returns><c>true</c> if no OU is required or the certificate carries an accepted OU; otherwise <c>false</c>.</returns>
+    public virtual bool ValidateSigningCertificateOrganizationalUnit(ICollection<string>? acceptedOrganizationalUnits)
+    {
+        if (acceptedOrganizationalUnits == null || acceptedOrganizationalUnits.Count == 0)
+        {
+            return true;
+        }
+
+        if (_publicCertificate != null && _publicCertificate.HasSubjectOrganizationalUnit(acceptedOrganizationalUnits))
+        {
+            return true;
+        }
+
+        NotifyTokenError(
+            $"Metadata signing certificate subject must include an organizational unit (OU) of: {string.Join(", ", acceptedOrganizationalUnits)}");
+
+        return false;
+    }
+
+    /// <summary>
     /// Validates the X.509 trust chain of the server's signing certificate using the trust anchor store registered in DI.
     /// </summary>
     /// <param name="community">An optional UDAP community identifier used to select the appropriate trust anchors.</param>

@@ -11,12 +11,16 @@ using Microsoft.Extensions.Options;
 using Udap.Model.Registration;
 using Udap.Server.Registration;
 using Udap.Tefca.Model;
+using Udap.Util.Extensions;
 
 namespace Udap.Tefca.Server;
 
 /// <summary>
 /// Validates that a TEFCA community registration uses a SAN URI containing
 /// a valid Exchange Purpose (XP) code from the TEFCA Exchange Purposes SOP.
+/// When <see cref="TefcaValidationOptions.RequiredCertificateOrganizationalUnits"/> has an entry
+/// for the community, the software statement's <c>x5c[0]</c> must also carry one of the configured
+/// subject organizational units.
 ///
 /// <a href="https://rce.sequoiaproject.org/wp-content/uploads/2026/02/SOP-Facilitated-FHIR-Implementation-2.0-Draft-508.pdf#page=14">
 /// SOP v2.0 — Section 6.11 Registration #5a</a>
@@ -46,6 +50,18 @@ public class TefcaRegistrationValidator : ICommunityRegistrationValidator
     public Task<UdapDynamicClientRegistrationValidationResult?> ValidateAsync(
         UdapDynamicClientRegistrationContext context)
     {
+        var requiredOrganizationalUnits = _options.GetRequiredOrganizationalUnits(context.CommunityName);
+
+        if (requiredOrganizationalUnits != null
+            && (context.ClientCertificate == null
+                || !context.ClientCertificate.HasSubjectOrganizationalUnit(requiredOrganizationalUnits)))
+        {
+            return Task.FromResult<UdapDynamicClientRegistrationValidationResult?>(
+                new UdapDynamicClientRegistrationValidationResult(
+                    UdapDynamicClientRegistrationErrors.UnapprovedSoftwareStatement,
+                    $"TEFCA certificate subject must include an organizational unit (OU) of: {string.Join(", ", requiredOrganizationalUnits)}"));
+        }
+
         var issuer = context.Issuer;
 
         if (string.IsNullOrEmpty(issuer))

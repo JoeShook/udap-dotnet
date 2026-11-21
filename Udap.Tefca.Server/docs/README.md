@@ -60,6 +60,40 @@ builder.Services.AddUdapTefcaValidation(options =>
 
 When enabled, token requests for clients registered with `T-TREAT` or `T-TRTMNT` fail with `invalid_grant` if `organization_id` is missing or `organization_name` contains no 9-10 digit identifier.
 
+### Certificate OU policy binding (opt-in)
+
+[DirectTrust Certificate Profiles v2.1](https://directtrust.org/standards/certificate-profiles), Worksheet 4-4 (TEFCA RCE (UDAP)) and its validation profile require the subject `organizationalUnitName` `RCE-FHIR` on production TEFCA FHIR certificates and `RCE-FHIR-TEST` on validation certificates. The same CAs issue other certificates that chain to the same anchors; the OU is what binds a certificate to TEFCA Facilitated FHIR. Enforcement is opt-in, per community:
+
+```csharp
+builder.Services.AddUdapTefcaValidation(options =>
+{
+    options.RequiredCertificateOrganizationalUnits[TefcaConstants.CommunityUri] =
+        [TefcaConstants.OrganizationalUnits.Production];      // "RCE-FHIR"
+
+    // A validation environment instead:
+    // options.RequiredCertificateOrganizationalUnits["urn:oid:..."] =
+    //     [TefcaConstants.OrganizationalUnits.Validation];   // "RCE-FHIR-TEST"
+});
+```
+
+For a community with an entry, the client certificate must carry at least one subject OU equal to one of the listed values (compared case-insensitively; a certificate may carry several OUs):
+
+- **Registration**: the software statement's `x5c[0]`; otherwise `unapproved_software_statement`.
+- **Token endpoint**: the client assertion's `x5c[0]`; otherwise `invalid_client`.
+
+Communities without an entry are not checked. The keys must also be in `Communities`: the TEFCA validators only run for those communities, so an OU entry for a community that is not in `Communities` is ignored.
+
+On the client side, `Udap.Client` applies the same check to the server's metadata signing certificate. `DiscoveryPolicy.RequiredSigningCertificateOrganizationalUnits` is keyed by community the same way, and is checked only when the `community` passed to `ValidateResource` has an entry, so one client can discover TEFCA and non-TEFCA servers with the same policy:
+
+```csharp
+var policy = DiscoveryPolicy.DefaultMetadataServerPolicy();
+policy.RequiredSigningCertificateOrganizationalUnits[TefcaConstants.CommunityUri] =
+    new List<string> { TefcaConstants.OrganizationalUnits.Production };
+
+await udapClient.ValidateResource(baseUrl, TefcaConstants.CommunityUri, policy); // OU enforced
+await udapClient.ValidateResource(otherUrl, "udap://other-community", policy);  // not checked
+```
+
 ## SSRAA vs TEFCA comparison
 
 | Rule | SSRAA | TEFCA |

@@ -73,4 +73,33 @@ public class DiscoveryPolicy
     /// Specifies if a key set is required. Defaults to true.
     /// </summary>
     public bool RequireKeySet { get; set; } = true;
+
+    /// <summary>
+    /// Optional certificate policy binding for the server's metadata signing certificate, keyed by community.
+    /// When the <c>community</c> passed to discovery has a non-empty entry, <c>x5c[0]</c> of the signed metadata
+    /// must carry at least one subject <c>organizationalUnitName</c> equal to one of that entry's values
+    /// (compared case-insensitively), or discovery fails. Discoveries for other communities, or without a
+    /// community, are not checked. Empty by default (no check). For example, a TEFCA client maps the TEFCA
+    /// community to <c>RCE-FHIR</c> in production and <c>RCE-FHIR-TEST</c> in validation environments.
+    /// </summary>
+    public IDictionary<string, ICollection<string>> RequiredSigningCertificateOrganizationalUnits { get; set; } =
+        new Dictionary<string, ICollection<string>>(StringComparer.Ordinal);
+
+    /// <summary>
+    /// The organizational units the metadata signing certificate must carry (one is enough) for
+    /// <paramref name="community"/>, or <c>null</c> when that community has no OU policy.
+    /// </summary>
+    public ICollection<string>? GetRequiredSigningCertificateOrganizationalUnits(string? community)
+    {
+        if (community == null
+            || RequiredSigningCertificateOrganizationalUnits == null
+            || !RequiredSigningCertificateOrganizationalUnits.TryGetValue(community, out var units)
+            || units == null
+            || units.Count == 0)
+        {
+            return null;
+        }
+
+        return units;
+    }
 }
