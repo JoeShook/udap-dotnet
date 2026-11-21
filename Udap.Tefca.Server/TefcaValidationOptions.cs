@@ -36,4 +36,17 @@ public class TefcaValidationOptions
     /// <a href="https://rce.sequoiaproject.org/wp-content/uploads/2026/07/Treatment-XP-SOP-v2.0_7.1.2026_508.pdf#page=8">Treatment XP SOP v2.0 — Section 6.2</a>
     /// </summary>
     public bool EnforceTreatmentOrganizationIdentifiers { get; set; }
+
+    /// <summary>
+    /// When true (the default), the <c>x5c</c> header of a software statement or client assertion in a TEFCA
+    /// community must carry the client certificate followed by the intermediate that issued it, per the
+    /// Facilitated FHIR SOP v2.0 Section 6.1. The server builds the chain from the <c>x5c</c> intermediates and
+    /// the community's configured intermediates and never downloads an intermediate from an AIA URL. A JWT whose
+    /// <c>x5c</c> lacks the issuing intermediate is rejected: <c>invalid_software_statement</c> at registration,
+    /// <c>invalid_client</c> at the token endpoint. CRL checking is unchanged.
+    ///
+    /// Set to false to accept TEFCA clients that send only their certificate (for example during a transition);
+    /// the chain is then completed from configured intermediates and AIA, as for other communities.
+    /// </summary>
+    public bool RequireIssuingIntermediateInX5c { get; set; } = true;
 }

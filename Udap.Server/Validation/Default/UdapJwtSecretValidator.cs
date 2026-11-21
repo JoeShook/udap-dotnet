@@ -22,6 +22,7 @@ using System.Text.Json;
 using Udap.Common.Certificates;
 using Udap.Common.Extensions;
 using Udap.Model;
+using Udap.Model.Statement;
 using Udap.Server.Configuration;
 using Udap.Server.Extensions;
 using Udap.Server.Storage;
@@ -45,8 +46,25 @@ public class UdapJwtSecretValidator : ISecretValidator
     private readonly IHttpContextAccessor _httpContextAccessor;
     private readonly ServerSettings _serverSettings;
     private readonly ILogger _logger;
+    private readonly IEnumerable<ICommunityX5cPolicy> _x5cPolicies = [];
 
     private const string Purpose = nameof(UdapJwtSecretValidator);
+
+    public UdapJwtSecretValidator(
+        IIssuerNameService issuerNameService,
+        IReplayCache replayCache,
+        IServerUrls urls,
+        IdentityServerOptions options,
+        TrustChainValidator trustChainValidator,
+        IUdapClientRegistrationStore clientStore,
+        IHttpContextAccessor httpContextAccessor,
+        ServerSettings serverSettings,
+        ILogger<UdapJwtSecretValidator> logger,
+        IEnumerable<ICommunityX5cPolicy> x5cPolicies)
+        : this(issuerNameService, replayCache, urls, options, trustChainValidator, clientStore, httpContextAccessor, serverSettings, logger)
+    {
+        _x5cPolicies = x5cPolicies;
+    }
 
     public UdapJwtSecretValidator(
         IIssuerNameService issuerNameService,
@@ -292,20 +310,96 @@ public class UdapJwtSecretValidator : ISecretValidator
             return fail;
         }
 
+        // Communities an ICommunityX5cPolicy claims build the chain from the x5c intermediates and the
+        // community's configured intermediates only, never from AIA, and x5c must carry the issuing intermediate.
+        var communityName = await GetCommunityNameAsync(secretList, parsedSecret.Id, ct);
+
+        // With an x5c policy registered, a client whose community cannot be resolved might belong to a policy
+        // community, so it is rejected rather than validated without the policy. Servers without a policy skip this.
+        if (_x5cPolicies.Any() && string.IsNullOrEmpty(communityName))
+        {
+            _logger.LogError(
+                "Cannot resolve the community of client_id: {ClientId} from its registration; rejecting the client assertion because a community x5c policy is configured",
+                parsedSecret.Id);
+            SetErrorDescription("The client's community cannot be determined from its registration. Register again");
+            return fail;
+        }
+
+        var issuingIntermediateRequired = X5cIssuingIntermediate.IsRequired(_x5cPolicies, communityName);
+        var intermediates = new X509Certificate2Collection(certChainList.ToArray());
+        List<string>? x5c = null;
+
+        if (issuingIntermediateRequired)
+        {
+            jwtToken.TryGetHeaderValue(JwtHeaderParameterNames.X5c, out x5c);
+            var x5cIntermediates = X5cIssuingIntermediate.ReadIntermediates(x5c);
+
+            if (X5cChain.FindIssuer(endCertificate, x5cIntermediates) == null)
+            {
+                return FailMissingIssuingIntermediate(parsedSecret.Id, communityName, fail);
+            }
+
+            intermediates.AddRange(x5cIntermediates);
+        }
+
         //
         // PKI chain validation, including CRL checking
         //
-        if (!await _trustChainValidator.IsTrustedCertificateAsync(
-                parsedSecret.Id,
-                endCertificate,
-                new X509Certificate2Collection(certChainList.ToArray()),
-                new X509Certificate2Collection(certChainList.ToRootCertArray())))
+        var chainValidationResult = await _trustChainValidator.IsTrustedCertificateAsync(
+            parsedSecret.Id,
+            endCertificate,
+            intermediates,
+            new X509Certificate2Collection(certChainList.ToRootCertArray()),
+            anchors: null,
+            allowAiaDownload: !issuingIntermediateRequired,
+            ct);
+
+        if (!chainValidationResult.IsValid)
         {
             SetErrorDescription("Certificate chain validation failed");
             return fail;
         }
 
+        if (issuingIntermediateRequired && !X5cIssuingIntermediate.IsPresent(x5c, chainValidationResult))
+        {
+            return FailMissingIssuingIntermediate(parsedSecret.Id, communityName, fail);
+        }
+
         return success;
+    }
+
+    private SecretValidationResult FailMissingIssuingIntermediate(string clientId, string? communityName, SecretValidationResult fail)
+    {
+        _logger.LogError(
+            "Client assertion x5c header does not contain the intermediate that issued the client certificate for client_id: {ClientId} in community {Community}",
+            clientId, communityName);
+        SetErrorDescription("Client assertion x5c must contain the client certificate followed by the intermediate that issued it");
+        return fail;
+    }
+
+    private async Task<string?> GetCommunityNameAsync(IReadOnlyCollection<Secret> secretList, string clientId, CancellationToken ct)
+    {
+        if (!_x5cPolicies.Any())
+        {
+            return null;
+        }
+
+        var communityId = secretList.FirstOrDefault(s => s.Type == UdapServerConstants.SecretTypes.UDAP_COMMUNITY)?.Value;
+
+        if (string.IsNullOrEmpty(communityId))
+        {
+            return null;
+        }
+
+        try
+        {
+            return await _clientStore.GetCommunityName(communityId, ct);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "Could not resolve the community name of community id {CommunityId} for client_id: {ClientId}", communityId, clientId);
+            return null;
+        }
     }
 
     /// <summary>

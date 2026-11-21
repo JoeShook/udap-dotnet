@@ -183,12 +183,45 @@ namespace Udap.Common.Certificates
         /// <param name="anchors">Optional <see cref="Anchor"/> models to resolve a <see cref="ChainValidationResult.CommunityId"/>.</param>
         /// <param name="cancellationToken">A token to cancel the operation.</param>
         /// <returns>A <see cref="ChainValidationResult"/> containing the validation outcome, chain elements, and community identifier.</returns>
-        public async Task<ChainValidationResult> IsTrustedCertificateAsync(
+        public Task<ChainValidationResult> IsTrustedCertificateAsync(
             string clientName,
             X509Certificate2 certificate,
             X509Certificate2Collection? intermediateCertificates,
             X509Certificate2Collection anchorCertificates,
             IEnumerable<Anchor>? anchors = null,
+            CancellationToken cancellationToken = default)
+        {
+            return IsTrustedCertificateAsync(
+                clientName,
+                certificate,
+                intermediateCertificates,
+                anchorCertificates,
+                anchors,
+                allowAiaDownload: true,
+                cancellationToken);
+        }
+
+        /// <summary>
+        /// Validates whether the specified certificate is trusted, as
+        /// <see cref="IsTrustedCertificateAsync(string, X509Certificate2, X509Certificate2Collection?, X509Certificate2Collection, IEnumerable{Anchor}?, CancellationToken)"/>
+        /// does, and controls whether missing intermediates may be downloaded from Authority Information Access (AIA) URLs.
+        /// </summary>
+        /// <param name="clientName">A display name for the client, used in log messages.</param>
+        /// <param name="certificate">The end-entity certificate to validate.</param>
+        /// <param name="intermediateCertificates">Optional intermediate certificates to include in chain building.</param>
+        /// <param name="anchorCertificates">The trust anchor (root CA) certificates to validate against.</param>
+        /// <param name="anchors">Optional <see cref="Anchor"/> models to resolve a <see cref="ChainValidationResult.CommunityId"/>.</param>
+        /// <param name="allowAiaDownload">When false, the chain is built only from <paramref name="intermediateCertificates"/>
+        /// and <paramref name="anchorCertificates"/>; no intermediate is fetched from an AIA URL. CRL checking is unaffected.</param>
+        /// <param name="cancellationToken">A token to cancel the operation.</param>
+        /// <returns>A <see cref="ChainValidationResult"/> containing the validation outcome, chain elements, and community identifier.</returns>
+        public async Task<ChainValidationResult> IsTrustedCertificateAsync(
+            string clientName,
+            X509Certificate2 certificate,
+            X509Certificate2Collection? intermediateCertificates,
+            X509Certificate2Collection anchorCertificates,
+            IEnumerable<Anchor>? anchors,
+            bool allowAiaDownload,
             CancellationToken cancellationToken = default)
         {
             var roots = new X509Certificate2Collection(anchorCertificates);
@@ -228,7 +261,7 @@ namespace Udap.Common.Certificates
                 }
 
                 // Build the chain
-                var bcChain = await BuildChainAsync(bcLeaf, bcIntermediates, bcAnchors, cancellationToken);
+                var bcChain = await BuildChainAsync(bcLeaf, bcIntermediates, bcAnchors, allowAiaDownload, cancellationToken);
 
                 // Map back to .NET certs and build chain element info
                 var chainElements = new List<ChainElementInfo>();
@@ -356,6 +389,7 @@ namespace Udap.Common.Certificates
             BcX509Certificate leaf,
             List<BcX509Certificate> intermediates,
             List<BcX509Certificate> anchors,
+            bool allowAiaDownload,
             CancellationToken cancellationToken)
         {
             var chain = new List<BcX509Certificate> { leaf };
@@ -393,7 +427,7 @@ namespace Udap.Common.Certificates
                 issuer = FindIssuer(current, intermediates);
 
                 // If not found, try AIA chasing
-                if (issuer == null && (_downloadCache != null || _httpClient != null))
+                if (issuer == null && allowAiaDownload && (_downloadCache != null || _httpClient != null))
                 {
                     issuer = await ChaseAiaAsync(current, aiaDownloads, cancellationToken);
 
