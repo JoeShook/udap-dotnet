@@ -95,15 +95,18 @@ public class TefcaTokenValidator : ICommunityTokenValidator
                 "TEFCA client has no registered SAN URI"));
         }
 
-        var hashIndex = context.SanUri.LastIndexOf('#');
-        if (hashIndex < 0 || hashIndex == context.SanUri.Length - 1)
+        // Same reader as TefcaRegistrationValidator so both agree on the client's exchange purpose.
+        var exchangePurpose = ExchangePurposeSanReader.Read(context.SanUri, _options);
+        if (!exchangePurpose.IsValid)
         {
             return Task.FromResult(AuthorizationExtensionValidationResult.Failure(
                 "invalid_grant",
-                "TEFCA client's registered SAN URI does not contain an exchange purpose"));
+                exchangePurpose.Status == ExchangePurposeReadStatus.Missing
+                    ? "TEFCA client's registered SAN URI does not contain an exchange purpose"
+                    : $"TEFCA client's registered {exchangePurpose.ErrorDescription}"));
         }
 
-        var registeredXp = context.SanUri.Substring(hashIndex + 1);
+        var registeredXp = exchangePurpose.Code!;
 
         // IAS + client_credentials requires tefca_ias AEO (SOP v2.0 Section 6.11, IAS Queries #3)
         if (string.Equals(registeredXp, TefcaConstants.ExchangePurposeCodes.IndividualAccessServices, StringComparison.Ordinal)
