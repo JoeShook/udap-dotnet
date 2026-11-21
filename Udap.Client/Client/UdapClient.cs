@@ -394,6 +394,12 @@ namespace Udap.Client
                         throw new UnauthorizedAccessException("Failed Trust Chain Validation");
                     }
 
+                    if (!_clientDiscoveryValidator.ValidateSigningCertificateOrganizationalUnit(
+                            _discoveryPolicy.RequiredSigningCertificateOrganizationalUnits))
+                    {
+                        throw new UnauthorizedAccessException("Failed Signing Certificate Organizational Unit Validation");
+                    }
+
                     // Signed metadata takes precedence over the plain JSON (UDAP Security IG 2.3): from here
                     // on, registration and token requests go to the endpoints the server signed.
                     var signedEndpoints = SignedMetadataEndpoints.Resolve(

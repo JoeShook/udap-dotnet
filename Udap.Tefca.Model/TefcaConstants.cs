@@ -122,6 +122,19 @@ public static class TefcaConstants
     }
 
     /// <summary>
+    /// Subject <c>organizationalUnitName</c> values that bind a certificate to TEFCA Facilitated FHIR,
+    /// per DirectTrust Certificate Profiles v2.1, Worksheet 4-4 (TEFCA RCE (UDAP)) and its validation profile.
+    /// </summary>
+    public static class OrganizationalUnits
+    {
+        /// <summary>OU carried by production TEFCA Facilitated FHIR certificates.</summary>
+        public const string Production = "RCE-FHIR";
+
+        /// <summary>OU carried by TEFCA Facilitated FHIR validation (test) certificates.</summary>
+        public const string Validation = "RCE-FHIR-TEST";
+    }
+
+    /// <summary>
     /// TEFCA community URI used in UDAP metadata discovery.
     /// </summary>
     public const string CommunityUri = "urn:oid:2.16.840.1.113883.3.7204.1.5";
