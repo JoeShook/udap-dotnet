@@ -51,17 +51,27 @@ Registration and token validation read the exchange purpose with the same reader
 |---------------------------|-----------------|-------|
 | `Fragment` (default) | `urn:oid:2.999#T-TRTMNT` | Text after the last `#` |
 | `PathSegment` | `https://example.com/fhir/T-TRTMNT` | Any path segment that is a valid XP code; two different codes are rejected |
-| `QueryParameter` | `https://example.com/fhir?xp=T-TRTMNT` | Parameter name from `ExchangePurposeQueryParameter` (default `xp`, case-sensitive) |
+| `QueryParameter` | `https://example.com/fhir?<your-parameter-name>=T-TRTMNT` | Parameter name from `ExchangePurposeQueryParameter`; **no default**, the deployment must set it |
 
 ```csharp
 builder.Services.AddUdapTefcaValidation(options =>
 {
     options.ExchangePurposeLocation = ExchangePurposeLocation.QueryParameter;
-    options.ExchangePurposeQueryParameter = "xp";
+    options.ExchangePurposeQueryParameter = "<your-parameter-name>"; // the name your community's client SAN uses
 });
 ```
 
+The SDK does not guess a query parameter name because the TEFCA client SAN format is not settled. If `QueryParameter` is selected without a name, `TefcaValidationOptionsValidator` fails options validation and the host does not start (`ValidateOnStart`).
+
 Only the selected location is read. Codes not in `TefcaConstants.ExchangePurposeCodes.All` are rejected at both registration and token time.
+
+The SAN is read exactly as written, following HL7 SSRAA 3.0.0 "Normalization of URI values in JWTs" (URI values are compared as case-sensitive strings, with no transformation or canonicalization):
+
+- No `System.Uri` parsing: no host lowercasing, default-port removal, percent-decoding or path canonicalization.
+- The query is the raw text after the first `?` up to `#`. Parameter names match exactly (ordinal, case-sensitive). Values are taken verbatim and must equal an exchange purpose code exactly, so `T%2DTRTMNT` is rejected.
+- A parameter repeated with different values is ambiguous and rejected.
+- Path segments are compared raw and ordinally.
+- `…/Organization?<name>=T-TRTMNT` and `…/Organization/?<name>=T-TRTMNT` yield the same exchange purpose. The trailing slash only matters elsewhere: SAN/`iss` equality is still an exact string comparison.
 
 ### IAS conditional logic
 

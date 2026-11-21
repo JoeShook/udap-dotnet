@@ -26,8 +26,9 @@ public enum ExchangePurposeLocation
     PathSegment = 1,
 
     /// <summary>
-    /// A named query parameter (see <see cref="TefcaValidationOptions.ExchangePurposeQueryParameter"/>),
-    /// e.g. <c>https://example.com/fhir?xp=T-TRTMNT</c>.
+    /// A named query parameter (see <see cref="TefcaValidationOptions.ExchangePurposeQueryParameter"/>,
+    /// which has no default and must be configured), e.g.
+    /// <c>https://example.com/fhir?&lt;your-parameter-name&gt;=T-TRTMNT</c>.
     /// </summary>
     QueryParameter = 2
 }

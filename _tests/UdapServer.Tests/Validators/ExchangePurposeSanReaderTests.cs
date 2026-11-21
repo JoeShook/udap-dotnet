@@ -7,6 +7,7 @@
 // */
 #endregion
 
+using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Options;
 using Microsoft.IdentityModel.JsonWebTokens;
 using Microsoft.IdentityModel.Tokens;
@@ -23,21 +24,27 @@ namespace UdapServer.Tests.Validators;
 
 public class ExchangePurposeSanReaderTests
 {
+    /// <summary>
+    /// Arbitrary test name. The TEFCA client SAN format is not settled, so the SDK has no
+    /// default parameter name and tests must not imply one.
+    /// </summary>
+    private const string ParameterName = "name";
+
     #region Fragment (default)
 
     [Fact]
-    public void Options_DefaultLocation_IsFragment()
+    public void Options_DefaultLocation_IsFragment_AndNoQueryParameterName()
     {
         var options = new TefcaValidationOptions();
 
         Assert.Equal(ExchangePurposeLocation.Fragment, options.ExchangePurposeLocation);
-        Assert.Equal("xp", options.ExchangePurposeQueryParameter);
+        Assert.Null(options.ExchangePurposeQueryParameter);
     }
 
     [Theory]
     [InlineData("urn:oid:2.999#T-TRTMNT", "T-TRTMNT")]
     [InlineData("https://example.com/fhir#T-TREAT", "T-TREAT")]
-    [InlineData("https://example.com/fhir?xp=T-PYMNT#T-IAS", "T-IAS")]
+    [InlineData("https://example.com/fhir?name=T-PYMNT#T-IAS", "T-IAS")]
     public void Fragment_ValidCode_IsRead(string sanUri, string expected)
     {
         var result = ExchangePurposeSanReader.Read(sanUri, ExchangePurposeLocation.Fragment);
@@ -50,7 +57,7 @@ public class ExchangePurposeSanReaderTests
     [InlineData("urn:oid:2.999")]
     [InlineData("urn:oid:2.999#")]
     [InlineData("https://example.com/fhir/T-TRTMNT")]
-    [InlineData("https://example.com/fhir?xp=T-TRTMNT")]
+    [InlineData("https://example.com/fhir?name=T-TRTMNT")]
     [InlineData("")]
     [InlineData(null)]
     public void Fragment_NoFragment_IsMissing(string? sanUri)
@@ -82,7 +89,7 @@ public class ExchangePurposeSanReaderTests
     [InlineData("https://example.com/fhir/T-TRTMNT", "T-TRTMNT")]
     [InlineData("https://example.com/T-TREAT/fhir", "T-TREAT")]
     [InlineData("https://example.com/fhir/T-IAS/", "T-IAS")]
-    [InlineData("https://example.com/fhir/T-PYMNT?xp=T-HCO#T-PH", "T-PYMNT")]
+    [InlineData("https://example.com/fhir/T-PYMNT?name=T-HCO#T-PH", "T-PYMNT")]
     [InlineData("https://example.com/fhir/T-HCO/T-HCO", "T-HCO")]
     [InlineData("urn:oid:2.999/T-TRTMNT", "T-TRTMNT")]
     public void PathSegment_ValidCode_IsRead(string sanUri, string expected)
@@ -95,10 +102,13 @@ public class ExchangePurposeSanReaderTests
 
     [Theory]
     [InlineData("urn:oid:2.999#T-TRTMNT")]
-    [InlineData("https://example.com/fhir?xp=T-TRTMNT")]
+    [InlineData("https://example.com/fhir?name=T-TRTMNT")]
     [InlineData("https://example.com/fhir/INVALID")]
     [InlineData("https://example.com/fhir/T-HCO-QM")]
     [InlineData("https://T-TRTMNT/fhir")]
+    [InlineData("https://example.com/fhir/T%2DTRTMNT")]
+    [InlineData("https://example.com/fhir/t-trtmnt")]
+    [InlineData("https://example.com/fhir/T-TRTMNT;v=1")]
     [InlineData("https://example.com")]
     public void PathSegment_NoCodeInPath_IsMissing(string sanUri)
     {
@@ -123,14 +133,14 @@ public class ExchangePurposeSanReaderTests
     #region Query parameter
 
     [Theory]
-    [InlineData("https://example.com/fhir?xp=T-TRTMNT", "T-TRTMNT")]
-    [InlineData("https://example.com/fhir?a=1&xp=T-TREAT&b=2", "T-TREAT")]
-    [InlineData("https://example.com/fhir?xp=T-IAS#T-PH", "T-IAS")]
-    [InlineData("https://example.com/fhir?xp=T-IAS&xp=T-IAS", "T-IAS")]
-    [InlineData("urn:oid:2.999?xp=T-PYMNT", "T-PYMNT")]
+    [InlineData("https://example.com/fhir?name=T-TRTMNT", "T-TRTMNT")]
+    [InlineData("https://example.com/fhir?a=1&name=T-TREAT&b=2", "T-TREAT")]
+    [InlineData("https://example.com/fhir?name=T-IAS#T-PH", "T-IAS")]
+    [InlineData("https://example.com/fhir?name=T-IAS&name=T-IAS", "T-IAS")]
+    [InlineData("urn:oid:2.999?name=T-PYMNT", "T-PYMNT")]
     public void QueryParameter_ValidCode_IsRead(string sanUri, string expected)
     {
-        var result = ExchangePurposeSanReader.Read(sanUri, ExchangePurposeLocation.QueryParameter, "xp");
+        var result = ExchangePurposeSanReader.Read(sanUri, ExchangePurposeLocation.QueryParameter, ParameterName);
 
         Assert.True(result.IsValid);
         Assert.Equal(expected, result.Code);
@@ -142,10 +152,10 @@ public class ExchangePurposeSanReaderTests
         var options = new TefcaValidationOptions
         {
             ExchangePurposeLocation = ExchangePurposeLocation.QueryParameter,
-            ExchangePurposeQueryParameter = "purpose"
+            ExchangePurposeQueryParameter = "other_name"
         };
 
-        var result = ExchangePurposeSanReader.Read("https://example.com/fhir?xp=T-PH&purpose=T-HCO", options);
+        var result = ExchangePurposeSanReader.Read("https://example.com/fhir?name=T-PH&other_name=T-HCO", options);
 
         Assert.True(result.IsValid);
         Assert.Equal("T-HCO", result.Code);
@@ -155,23 +165,60 @@ public class ExchangePurposeSanReaderTests
     [InlineData("urn:oid:2.999#T-TRTMNT")]
     [InlineData("https://example.com/fhir/T-TRTMNT")]
     [InlineData("https://example.com/fhir?other=T-TRTMNT")]
-    [InlineData("https://example.com/fhir?XP=T-TRTMNT")]
-    [InlineData("https://example.com/fhir?xp=")]
-    [InlineData("https://example.com/fhir?xp")]
-    [InlineData("https://example.com/fhir#?xp=T-TRTMNT")]
+    [InlineData("https://example.com/fhir?NAME=T-TRTMNT")]
+    [InlineData("https://example.com/fhir?Name=T-TRTMNT")]
+    [InlineData("https://example.com/fhir?n%61me=T-TRTMNT")]
+    [InlineData("https://example.com/fhir?name=")]
+    [InlineData("https://example.com/fhir?name")]
+    [InlineData("https://example.com/fhir#?name=T-TRTMNT")]
+    [InlineData("https://example.com/fhir#name=T-TRTMNT")]
     public void QueryParameter_NoParameter_IsMissing(string sanUri)
     {
-        var result = ExchangePurposeSanReader.Read(sanUri, ExchangePurposeLocation.QueryParameter, "xp");
+        var result = ExchangePurposeSanReader.Read(sanUri, ExchangePurposeLocation.QueryParameter, ParameterName);
 
         Assert.False(result.IsValid);
         Assert.Equal(ExchangePurposeReadStatus.Missing, result.Status);
+    }
+
+    [Theory]
+    [InlineData("https://example.com/Organization?name=T-TRTMNT")]
+    [InlineData("https://example.com/Organization/?name=T-TRTMNT")]
+    public void QueryParameter_TrailingSlashBeforeQuery_ReadsSameCode(string sanUri)
+    {
+        // Extraction only; SAN / iss equality elsewhere remains an exact string compare.
+        var result = ExchangePurposeSanReader.Read(sanUri, ExchangePurposeLocation.QueryParameter, ParameterName);
+
+        Assert.True(result.IsValid);
+        Assert.Equal("T-TRTMNT", result.Code);
+    }
+
+    [Theory]
+    [InlineData("https://example.com/fhir?name=T%2DTRTMNT", "T%2DTRTMNT")]
+    [InlineData("https://example.com/fhir?name=T-TRTMNT%20", "T-TRTMNT%20")]
+    [InlineData("https://example.com/fhir?name=T+TRTMNT", "T+TRTMNT")]
+    [InlineData("https://example.com/fhir?name=t-trtmnt", "t-trtmnt")]
+    public void QueryParameter_ValueIsNotDecodedOrNormalized_IsInvalid(string sanUri, string verbatim)
+    {
+        var result = ExchangePurposeSanReader.Read(sanUri, ExchangePurposeLocation.QueryParameter, ParameterName);
+
+        Assert.Equal(ExchangePurposeReadStatus.Invalid, result.Status);
+        Assert.Equal(verbatim, result.Code);
+    }
+
+    [Fact]
+    public void QueryParameter_EncodedAndPlainDuplicates_AreAmbiguous()
+    {
+        var result = ExchangePurposeSanReader.Read(
+            "https://example.com/fhir?name=T-TRTMNT&name=T%2DTRTMNT", ExchangePurposeLocation.QueryParameter, ParameterName);
+
+        Assert.Equal(ExchangePurposeReadStatus.Ambiguous, result.Status);
     }
 
     [Fact]
     public void QueryParameter_UnknownCode_IsInvalid()
     {
         var result = ExchangePurposeSanReader.Read(
-            "https://example.com/fhir?xp=INVALID", ExchangePurposeLocation.QueryParameter, "xp");
+            "https://example.com/fhir?name=INVALID", ExchangePurposeLocation.QueryParameter, ParameterName);
 
         Assert.Equal(ExchangePurposeReadStatus.Invalid, result.Status);
         Assert.Equal("INVALID", result.Code);
@@ -181,7 +228,7 @@ public class ExchangePurposeSanReaderTests
     public void QueryParameter_RepeatedWithDifferentValues_IsAmbiguous()
     {
         var result = ExchangePurposeSanReader.Read(
-            "https://example.com/fhir?xp=T-TREAT&xp=T-PYMNT", ExchangePurposeLocation.QueryParameter, "xp");
+            "https://example.com/fhir?name=T-TREAT&name=T-PYMNT", ExchangePurposeLocation.QueryParameter, ParameterName);
 
         Assert.Equal(ExchangePurposeReadStatus.Ambiguous, result.Status);
     }
@@ -193,7 +240,7 @@ public class ExchangePurposeSanReaderTests
     public void QueryParameter_NoNameConfigured_IsMissing(string? name)
     {
         var result = ExchangePurposeSanReader.Read(
-            "https://example.com/fhir?xp=T-TREAT", ExchangePurposeLocation.QueryParameter, name);
+            "https://example.com/fhir?name=T-TREAT", ExchangePurposeLocation.QueryParameter, name);
 
         Assert.Equal(ExchangePurposeReadStatus.Missing, result.Status);
     }
@@ -208,7 +255,7 @@ public class ExchangePurposeSanReaderTests
         {
             yield return [ExchangePurposeLocation.Fragment, $"urn:oid:2.999#{code}", code];
             yield return [ExchangePurposeLocation.PathSegment, $"https://example.com/fhir/{code}", code];
-            yield return [ExchangePurposeLocation.QueryParameter, $"https://example.com/fhir?xp={code}", code];
+            yield return [ExchangePurposeLocation.QueryParameter, $"https://example.com/fhir?name={code}", code];
         }
     }
 
@@ -216,7 +263,7 @@ public class ExchangePurposeSanReaderTests
     [MemberData(nameof(AllCodesAtAllLocations))]
     public void EveryKnownCode_IsRead(ExchangePurposeLocation location, string sanUri, string expected)
     {
-        var result = ExchangePurposeSanReader.Read(sanUri, location, "xp");
+        var result = ExchangePurposeSanReader.Read(sanUri, location, ParameterName);
 
         Assert.True(result.IsValid);
         Assert.Equal(expected, result.Code);
@@ -236,9 +283,9 @@ public class ExchangePurposeSanReaderTests
             "https://example.com/fhir/T-TRTMNT",
             "https://example.com/fhir/INVALID",
             "https://example.com/T-TREAT/T-PYMNT",
-            "https://example.com/fhir?xp=T-TRTMNT",
-            "https://example.com/fhir?xp=INVALID",
-            "https://example.com/fhir?xp=T-TREAT&xp=T-PYMNT",
+            "https://example.com/fhir?name=T-TRTMNT",
+            "https://example.com/fhir?name=INVALID",
+            "https://example.com/fhir?name=T-TREAT&name=T-PYMNT",
         };
 
         foreach (var location in Enum.GetValues<ExchangePurposeLocation>())
@@ -254,7 +301,11 @@ public class ExchangePurposeSanReaderTests
     [MemberData(nameof(SanUrisForEveryLocation))]
     public async Task RegistrationAndToken_AgreeOnSanUri(ExchangePurposeLocation location, string sanUri)
     {
-        var options = Options.Create(new TefcaValidationOptions { ExchangePurposeLocation = location });
+        var options = Options.Create(new TefcaValidationOptions
+        {
+            ExchangePurposeLocation = location,
+            ExchangePurposeQueryParameter = ParameterName
+        });
         var expected = ExchangePurposeSanReader.Read(sanUri, options.Value);
 
         var registrationResult = await new TefcaRegistrationValidator(options)
@@ -272,12 +323,16 @@ public class ExchangePurposeSanReaderTests
     [Theory]
     [InlineData(ExchangePurposeLocation.Fragment, "urn:oid:2.999#T-TRTMNT")]
     [InlineData(ExchangePurposeLocation.PathSegment, "https://example.com/fhir/T-TRTMNT")]
-    [InlineData(ExchangePurposeLocation.QueryParameter, "https://example.com/fhir?xp=T-TRTMNT")]
+    [InlineData(ExchangePurposeLocation.QueryParameter, "https://example.com/fhir?name=T-TRTMNT")]
     public async Task SelectedLocation_AcceptsOnlyThatForm(ExchangePurposeLocation selected, string sanUri)
     {
         foreach (var location in Enum.GetValues<ExchangePurposeLocation>())
         {
-            var options = Options.Create(new TefcaValidationOptions { ExchangePurposeLocation = location });
+            var options = Options.Create(new TefcaValidationOptions
+            {
+                ExchangePurposeLocation = location,
+                ExchangePurposeQueryParameter = ParameterName
+            });
 
             var registrationResult = await new TefcaRegistrationValidator(options)
                 .ValidateAsync(CreateRegistrationContext(sanUri));
@@ -313,11 +368,12 @@ public class ExchangePurposeSanReaderTests
     {
         var options = Options.Create(new TefcaValidationOptions
         {
-            ExchangePurposeLocation = ExchangePurposeLocation.QueryParameter
+            ExchangePurposeLocation = ExchangePurposeLocation.QueryParameter,
+            ExchangePurposeQueryParameter = ParameterName
         });
 
         var result = await new TefcaTokenValidator(options).ValidateAsync(
-            CreateTokenContext("https://example.com/fhir?xp=T-IAS", "T-IAS"));
+            CreateTokenContext("https://example.com/fhir?name=T-IAS", "T-IAS"));
 
         Assert.False(result.IsValid);
         Assert.Contains("tefca_ias", result.ErrorDescription);
@@ -337,6 +393,69 @@ public class ExchangePurposeSanReaderTests
         Assert.NotNull(result);
         Assert.True(result.IsError);
         Assert.Contains("path", result.ErrorDescription);
+    }
+
+    #endregion
+
+    #region Options validation
+
+    [Theory]
+    [InlineData(null)]
+    [InlineData("")]
+    [InlineData("  ")]
+    public void OptionsValidation_QueryParameterWithoutName_Fails(string? name)
+    {
+        var services = new ServiceCollection();
+        services.AddUdapTefcaValidation(options =>
+        {
+            options.ExchangePurposeLocation = ExchangePurposeLocation.QueryParameter;
+            options.ExchangePurposeQueryParameter = name;
+        });
+
+        var provider = services.BuildServiceProvider();
+
+        var ex = Assert.Throws<OptionsValidationException>(
+            () => provider.GetRequiredService<IOptions<TefcaValidationOptions>>().Value);
+        Assert.Contains(nameof(TefcaValidationOptions.ExchangePurposeQueryParameter), ex.Message);
+    }
+
+    [Fact]
+    public void OptionsValidation_QueryParameterWithoutName_ValidatorReportsFailure()
+    {
+        var result = new TefcaValidationOptionsValidator().Validate(
+            null,
+            new TefcaValidationOptions { ExchangePurposeLocation = ExchangePurposeLocation.QueryParameter });
+
+        Assert.True(result.Failed);
+    }
+
+    [Fact]
+    public void OptionsValidation_RegistersValidateOnStart()
+    {
+        var services = new ServiceCollection();
+        services.AddUdapTefcaValidation();
+
+        // ValidateOnStart registers a startup validator so a host fails to start on bad options.
+        Assert.Contains(services, d => d.ServiceType.Name == "IStartupValidator");
+    }
+
+    [Theory]
+    [InlineData(ExchangePurposeLocation.Fragment, null)]
+    [InlineData(ExchangePurposeLocation.PathSegment, null)]
+    [InlineData(ExchangePurposeLocation.QueryParameter, ParameterName)]
+    public void OptionsValidation_ValidConfiguration_Succeeds(ExchangePurposeLocation location, string? name)
+    {
+        var services = new ServiceCollection();
+        services.AddUdapTefcaValidation(options =>
+        {
+            options.ExchangePurposeLocation = location;
+            options.ExchangePurposeQueryParameter = name;
+        });
+
+        var provider = services.BuildServiceProvider();
+        var options = provider.GetRequiredService<IOptions<TefcaValidationOptions>>().Value;
+
+        Assert.Equal(location, options.ExchangePurposeLocation);
     }
 
     #endregion
