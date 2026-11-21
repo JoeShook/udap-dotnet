@@ -51,6 +51,11 @@ public static class UdapConfigurationServiceCollectionExtensions
         builder.Services.TryAddTransient<IUdapDynamicClientRegistrationProcessor, UdapDynamicClientRegistrationProcessor>();
         builder.Services.TryAddSingleton<TrustChainValidator>();
 
+        // Applies only to communities with required certifications (ServerSettings.CommunityCertificationsRequired
+        // or an IUdapCertificationProfileValidator that requires its certification), so it is a no-op by default.
+        builder.Services.TryAddEnumerable(
+            ServiceDescriptor.Scoped<ICommunityRegistrationValidator, UdapCertificationsRequiredValidator>());
+
         if (!builder.Services.Any(sd => sd.ServiceType == typeof(UdapCertificateCacheMarker)))
         {
             builder.Services.AddFusionCache(CertificateDownloadCache.CacheName);

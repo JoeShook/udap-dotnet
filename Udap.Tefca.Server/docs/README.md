@@ -43,6 +43,27 @@ The allowed `purpose_of_use` codes come from the [TEFCA SOP: Exchange Purposes v
 
 At dynamic client registration time, `TefcaRegistrationValidator` validates that the client certificate's SAN URI contains a valid TEFCA Exchange Purpose code in the fragment (e.g., `https://example.com/fhir#T-TREAT`).
 
+### TEFCA Basic App Certification (opt-in)
+
+SOP v2.0 Section 6.11 Registration #6 has the registration request carry a TEFCA Basic App Certification (`https://rce.sequoiaproject.org/udap/profiles/basic-app-certification`) in its `certifications` array. Enforcement is opt-in:
+
+```csharp
+builder.Services.AddUdapTefcaValidation(options =>
+{
+    options.RequireBasicAppCertification = true;
+});
+```
+
+Listing the certification URI for a TEFCA community in `ServerSettings.CommunityCertificationsRequired` (see [Udap.Server](../../Udap.Server/docs/README.md)) has the same effect. The TEFCA checks below run only in the communities configured in `TefcaValidationOptions.Communities`; a non-TEFCA community that requires the same URI gets only the generic certification checks.
+
+When required, the registration is rejected unless the request includes a certification that passes the generic UDAP checks (signature with the `x5c` key, chain to an anchor of the client's community, `iss`/`sub`, `aud` when present, `exp`, `certification_uris`) and the TEFCA checks in `TefcaBasicAppCertificationValidator`:
+
+- `certification_name` is `TEFCA Basic App Certification`
+- `exchange_purposes` is an array of exactly one exchange purpose that matches the exchange purpose in the client's SAN URI; both `T-TREAT` and the code-system-qualified `urn:oid:2.16.840.1.113883.3.7204.1.5.2.1#T-TREAT` are accepted
+- `home_community_id` is present in `urn:oid:<OID>` form
+
+A missing or untrusted certification fails with `unapproved_software_statement`; an invalid one with `invalid_software_statement`.
+
 ### IAS conditional logic
 
 When a client is registered with exchange purpose `T-IAS` and requests a `client_credentials` token, the `tefca_ias` authorization extension object must be present in the request (SOP v2.0 Section 6.11). Whenever a `tefca_ias` extension is present, it must carry an `id_token` (SOP v2.0 Table 4).
