@@ -73,4 +73,13 @@ public class DiscoveryPolicy
     /// Specifies if a key set is required. Defaults to true.
     /// </summary>
     public bool RequireKeySet { get; set; } = true;
+
+    /// <summary>
+    /// The SSRAA IG version whose URI rules apply when <see cref="UdapClient"/> validates the signed metadata.
+    /// When null (the default) the <see cref="UdapClientDiscoveryValidator.SsraaVersion"/> setting is used,
+    /// which defaults to <see cref="Udap.Model.SsraaVersion.V3_0"/>: the signed metadata <c>iss</c> must equal the
+    /// base URL exactly, and the base URL must not end in "/". Set to <see cref="Udap.Model.SsraaVersion.V1_1"/>
+    /// for the previous lenient comparison (case-insensitive, trailing slash ignored).
+    /// </summary>
+    public SsraaVersion? SsraaVersion { get; set; }
 }

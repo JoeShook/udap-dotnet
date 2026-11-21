@@ -482,13 +482,12 @@ public class TieredOAuthAuthenticationHandler : OAuthHandler<TieredOAuthAuthenti
         var idp = idpUri.OriginalString;
         if (communityParam != null)
         {
-            if (idp.Contains($":{idpUri.Port}"))
+            // Drop the query verbatim. Rebuilding the URL from Uri parts would add a "/" to a host-only
+            // base URL, which SSRAA 3.0.0 forbids and which then fails the exact iss comparison.
+            var queryStart = idp.IndexOf('?');
+            if (queryStart >= 0)
             {
-                idp = $"{idpUri.Scheme}{Uri.SchemeDelimiter}{idpUri.Host}:{idpUri.Port}{idpUri.LocalPath}";
-            }
-            else
-            {
-                idp = $"{idpUri.Scheme}{Uri.SchemeDelimiter}{idpUri.Host}{idpUri.LocalPath}";
+                idp = idp[..queryStart];
             }
         }
         

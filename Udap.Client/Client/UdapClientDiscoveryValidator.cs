@@ -58,6 +58,19 @@ public class UdapClientDiscoveryValidator : IUdapClientEvents
     public UdapMetadata? UdapServerMetadata { get; set; }
 
     /// <summary>
+    /// The SSRAA IG version whose URI rules <see cref="ValidateJwtToken"/> applies. Default is
+    /// <see cref="Udap.Model.SsraaVersion.V3_0"/>.
+    /// <list type="bullet">
+    /// <item>V2_0 and V3_0: the signed metadata <c>iss</c> must equal the base URL and a certificate URI SAN as
+    /// exact, case-sensitive strings (no trailing slash or case normalization).</item>
+    /// <item>V3_0: the base URL must not end in "/".</item>
+    /// <item>V1_1: the previous lenient comparison (case-insensitive, trailing slash ignored).</item>
+    /// </list>
+    /// <see cref="UdapClient"/> sets this from <see cref="DiscoveryPolicy.SsraaVersion"/> when that is set.
+    /// </summary>
+    public SsraaVersion SsraaVersion { get; set; } = SsraaVersion.V3_0;
+
+    /// <summary>
     /// The result of the most recent trust chain validation, including the matching
     /// <see cref="Anchor"/> and community. Populated by <see cref="ValidateTrustChain(string?, ITrustAnchorStore?)"/>.
     /// </summary>
@@ -72,6 +85,15 @@ public class UdapClientDiscoveryValidator : IUdapClientEvents
     public virtual async Task<bool> ValidateJwtToken(UdapMetadata udapServerMetaData, string baseUrl)
     {
         var tokenHandler = new JsonWebTokenHandler();
+        var ssraaVersion = SsraaVersion;
+        var exactUriComparison = ssraaVersion.RequiresExactUriComparison();
+
+        if (ssraaVersion.ForbidsBaseUrlTrailingSlash() && baseUrl.EndsWith('/'))
+        {
+            NotifyTokenError(
+                $"The FHIR base URL must not end in '/' (SSRAA {ssraaVersion}). baseUrl: {baseUrl}");
+            return false;
+        }
 
         if (udapServerMetaData.SignedMetadata == null)
         {
@@ -93,7 +115,12 @@ public class UdapClientDiscoveryValidator : IUdapClientEvents
             .Select(n => new Uri(n.Item2).OriginalString)
             .ToList();
 
-        DenormalizeSubjectAltNames(subjectAltNames);
+        if (!exactUriComparison)
+        {
+            // SSRAA 1.1 only: accept a domain-only SAN with or without a trailing slash.
+            // SSRAA 2.0 and later compare URI values in JWTs exactly, so the iss must equal a SAN verbatim.
+            DenormalizeSubjectAltNames(subjectAltNames);
+        }
 
         var validatedToken = await ValidateToken(udapServerMetaData, tokenHandler, subjectAltNames.ToArray(), jwt);
 
@@ -103,7 +130,15 @@ public class UdapClientDiscoveryValidator : IUdapClientEvents
             return false;
         }
 
-        if (!baseUrl.TrimEnd('/').Equals(jwt?.Issuer.TrimEnd('/'), StringComparison.OrdinalIgnoreCase))
+        if (exactUriComparison)
+        {
+            if (!string.Equals(baseUrl, jwt?.Issuer, StringComparison.Ordinal))
+            {
+                NotifyTokenError($"JWT iss does not match baseUrl. SSRAA {ssraaVersion} compares URIs as exact, case-sensitive strings. iss: {jwt?.Issuer}  baseUrl: {baseUrl}");
+                return false;
+            }
+        }
+        else if (!baseUrl.TrimEnd('/').Equals(jwt?.Issuer.TrimEnd('/'), StringComparison.OrdinalIgnoreCase))
         {
             NotifyTokenError($"JWT iss does not match baseUrl. iss: {jwt?.Issuer.TrimEnd('/')}  baseUrl: {baseUrl.TrimEnd('/')}");
             return false;
