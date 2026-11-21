@@ -32,6 +32,9 @@ namespace Udap.Tefca.Server;
 /// 7. Optionally (see <see cref="TefcaValidationOptions.EnforceTreatmentOrganizationIdentifiers"/>),
 ///    Treatment token requests must carry the NPI/TIN in <c>organization_name</c> and an
 ///    <c>organization_id</c> per the Treatment XP Implementation SOP v2.0 Section 6.2.
+/// 8. Unless <see cref="TefcaValidationOptions.RejectUserScopes"/> is turned off, token
+///    requests carrying <c>user/</c> scopes are rejected with <c>invalid_scope</c>
+///    (Section 6.11 Registration #10).
 ///
 /// <a href="https://rce.sequoiaproject.org/wp-content/uploads/2026/02/SOP-Facilitated-FHIR-Implementation-2.0-Draft-508.pdf#page=15">
 /// SOP v2.0 — Table 2 and IAS Queries</a>
@@ -88,6 +91,20 @@ public class TefcaTokenValidator : ICommunityTokenValidator
     public Task<AuthorizationExtensionValidationResult> ValidateAsync(
         UdapAuthorizationExtensionValidationContext context)
     {
+        // SOP v2.0 Section 6.11 Registration #10: TEFCA flows do not use user scopes;
+        // reject them with invalid_scope rather than silently correcting.
+        if (_options.RejectUserScopes)
+        {
+            var userScopes = TefcaScopeRules.FindUserScopes(context.RequestedScopes);
+
+            if (userScopes.Count > 0)
+            {
+                return Task.FromResult(AuthorizationExtensionValidationResult.Failure(
+                    "invalid_scope",
+                    TefcaScopeRules.Describe(userScopes)));
+            }
+        }
+
         if (string.IsNullOrEmpty(context.SanUri))
         {
             return Task.FromResult(AuthorizationExtensionValidationResult.Failure(

@@ -107,7 +107,8 @@ public class UdapCustomTokenRequestValidator : ICustomTokenRequestValidator
             Extensions = extensions,
             CommunityId = communityId,
             GrantType = request.GrantType,
-            SanUri = sanUri
+            SanUri = sanUri,
+            RequestedScopes = GetRequestedScopes(request)
         };
 
         var result = await _extensionValidator.ValidateAsync(extensionContext);
@@ -247,6 +248,17 @@ public class UdapCustomTokenRequestValidator : ICustomTokenRequestValidator
 
         EnsureBareClientClaims(request);
         request.ClientClaims.Add(new Claim(UdapConstants.JwtClaimTypes.UdapCommunity, communityName));
+    }
+
+    /// <summary>
+    /// The raw scope values of the token request. <c>ValidatedResources</c> covers every grant
+    /// type (for <c>authorization_code</c> it carries the scopes bound to the code);
+    /// <c>RequestedScopes</c> is the fallback.
+    /// </summary>
+    private static IReadOnlyCollection<string>? GetRequestedScopes(ValidatedTokenRequest request)
+    {
+        var scopes = request.ValidatedResources?.RawScopeValues ?? request.RequestedScopes;
+        return scopes?.ToList();
     }
 
     private static bool IsUdapClient(ValidatedTokenRequest request)
