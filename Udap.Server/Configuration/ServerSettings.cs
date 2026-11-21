@@ -96,15 +96,6 @@ public class ServerSettings
     /// </summary>
     public int ClientAssertionMaxLifetimeSeconds { get; set; } = 300;
 
-    /// <summary>
-    /// When true, a software statement at registration and a client assertion at the token endpoint are
-    /// rejected unless their <c>x5c</c> header carries the signing certificate followed by the intermediate
-    /// that issued it, as TEFCA Facilitated FHIR requires. The intermediate is compared with the issuer found
-    /// while validating the trust chain. A certificate issued directly by a self-signed trust anchor has no
-    /// intermediate and is not affected. Default is false: only the first <c>x5c</c> certificate is required.
-    /// </summary>
-    public bool RequireIssuingIntermediateInX5c { get; set; }
-
 
     public bool AlwaysIncludeUserClaimsInIdToken { get; set; }
 

@@ -502,7 +502,7 @@ namespace Udap.Client
             }
 
             UdapDynamicClientRegistrationDocument? resultDocument;
-            var (signingCertificates, intermediates) = SplitSigningAndIntermediateCertificates(x509Certificates);
+            var (signingCertificates, intermediates) = SplitCertificates(x509Certificates);
 
             foreach (var clientCert in signingCertificates)
             {
@@ -605,7 +605,7 @@ namespace Udap.Client
             }
 
             UdapDynamicClientRegistrationDocument? resultDocument;
-            var (signingCertificates, intermediates) = SplitSigningAndIntermediateCertificates(x509Certificates);
+            var (signingCertificates, intermediates) = SplitCertificates(x509Certificates);
 
             foreach (var clientCert in signingCertificates)
             {
@@ -687,24 +687,28 @@ namespace Udap.Client
         }
 
         /// <summary>
-        /// Separates the certificates a caller passes to the Register methods into signing (end-entity)
-        /// certificates, each tried in turn, and CA certificates, which are never used to sign but supply
-        /// the issuing intermediate placed after the signing certificate in the x5c header.
+        /// Picks the certificates the Register methods try as signers, in order, and the CA certificates that can
+        /// supply a signer's issuing intermediate. When the list holds at least one end-entity certificate, the
+        /// end-entity certificates sign and the CA certificates only supply intermediates. A list of CA certificates
+        /// only is tried as before: every certificate in turn, with no intermediates added.
         /// </summary>
         private static (List<X509Certificate2> SigningCertificates, List<X509Certificate2> Intermediates)
-            SplitSigningAndIntermediateCertificates(List<X509Certificate2> certificates)
+            SplitCertificates(List<X509Certificate2> certificates)
         {
-            var intermediates = certificates.Where(X5cChain.IsCertificateAuthority).ToList();
-            var signingCertificates = certificates.Where(c => !X5cChain.IsCertificateAuthority(c)).ToList();
+            var endEntityCertificates = certificates.Where(c => !X5cChain.IsCertificateAuthority(c)).ToList();
 
-            if (signingCertificates.Count == 0)
+            if (endEntityCertificates.Count == 0)
             {
-                throw new ArgumentException("No end-entity client certificate provided; only CA certificates were passed.", nameof(certificates));
+                return (certificates, []);
             }
 
-            return (signingCertificates, intermediates);
+            return (endEntityCertificates, certificates.Where(X5cChain.IsCertificateAuthority).ToList());
         }
 
+        /// <summary>
+        /// The x5c certificates for <paramref name="signingCertificate"/>: the certificate followed by the
+        /// intermediate(s) that issued it, taken from the CA certificates the caller passed alongside it.
+        /// </summary>
         private List<X509Certificate2> BuildX5cCertificates(X509Certificate2 signingCertificate, List<X509Certificate2> intermediates)
         {
             var x5c = X5cChain.Build(signingCertificate, intermediates);
