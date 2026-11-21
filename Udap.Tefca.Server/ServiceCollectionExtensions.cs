@@ -8,6 +8,7 @@
 #endregion
 
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.DependencyInjection.Extensions;
 using Udap.Server.Registration;
 using Udap.Server.Validation;
 
@@ -45,6 +46,8 @@ public static class ServiceCollectionExtensions
         services.Configure(configure);
         services.AddSingleton<ICommunityRegistrationValidator, TefcaRegistrationValidator>();
         services.AddSingleton<ICommunityTokenValidator, TefcaTokenValidator>();
+        services.TryAddEnumerable(
+            ServiceDescriptor.Singleton<IUdapCertificationProfileValidator, TefcaBasicAppCertificationValidator>());
 
         return services;
     }

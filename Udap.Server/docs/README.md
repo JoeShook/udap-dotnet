@@ -157,6 +157,33 @@ builder.Services.AddSingleton<ICommunityTokenValidator, MyValidator>();
 
 See the [`Udap.Ssraa.Server`](../../Udap.Ssraa.Server/docs/README.md) and [`Udap.Tefca.Server`](../../Udap.Tefca.Server/docs/README.md) READMEs for detailed documentation on each profile.
 
+## Required Certifications
+
+A resource server can advertise `udap_certifications_required` for a community. To have registration enforce it, list the same certification URIs for the community in `ServerSettings.CommunityCertificationsRequired`. The list is empty by default, so no certification is required unless you configure one.
+
+```json
+"ServerSettings": {
+  "CommunityCertificationsRequired": [
+    {
+      "Community": "udap://fhirlabs.net",
+      "CertificationUris": [ "https://www.example.com/udap/profiles/example-certification" ]
+    }
+  ]
+}
+```
+
+For a listed community, `UdapCertificationsRequiredValidator` rejects a registration unless, for each required URI, the request's `certifications` array holds a certification ([UDAP Certifications and Endorsements](https://www.udap.org/udap-certifications-and-endorsements-stu1.html) section 6) that:
+
+- verifies with the key of `cert1` in its `x5c` header, and whose `iss` matches a uriName SAN of that certificate
+- has `sub` equal to the client's identifying URI, and an `aud`, when present, naming this registration endpoint
+- is unexpired (`exp` is required)
+- lists the URI in `certification_uris`
+- chains to a trust anchor of the client's community
+
+A missing or untrusted certification fails with `unapproved_software_statement`; an invalid one with `invalid_software_statement`. Accepted certifications are placed in `UdapDynamicClientRegistrationContext.Items[UdapCertificationsRequiredValidator.ValidatedCertificationsItemKey]`.
+
+Profile-specific rules for a certification program are added by registering an `IUdapCertificationProfileValidator` for its URI; it runs after the generic checks and can also declare its certification required for a community (`IsRequiredForCommunity`). `Udap.Tefca.Server` registers one for the TEFCA Basic App Certification.
+
 ## Client Storage During Registration
 
 When a client registers via UDAP Dynamic Client Registration, the server creates a Duende IdentityServer `Client` entity with UDAP-specific secrets and properties. Knowing what is stored (and when it is updated) helps with admin tooling and certificate lifecycle management.

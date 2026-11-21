@@ -36,4 +36,15 @@ public class TefcaValidationOptions
     /// <a href="https://rce.sequoiaproject.org/wp-content/uploads/2026/07/Treatment-XP-SOP-v2.0_7.1.2026_508.pdf#page=8">Treatment XP SOP v2.0 — Section 6.2</a>
     /// </summary>
     public bool EnforceTreatmentOrganizationIdentifiers { get; set; }
+
+    /// <summary>
+    /// When true, registrations in the <see cref="Communities"/> must include a valid
+    /// TEFCA Basic App Certification (<see cref="Udap.Tefca.Model.TefcaConstants.Certification.BasicAppCertificationUri"/>)
+    /// in their <c>certifications</c> array. Off by default so existing deployments keep working.
+    /// The certification is also validated whenever the Basic App Certification URI is listed in
+    /// <c>ServerSettings.CommunityCertificationsRequired</c>.
+    ///
+    /// <a href="https://rce.sequoiaproject.org/wp-content/uploads/2026/02/SOP-Facilitated-FHIR-Implementation-2.0-Draft-508.pdf#page=14">SOP v2.0 — Section 6.11 Registration #6</a>
+    /// </summary>
+    public bool RequireBasicAppCertification { get; set; }
 }
