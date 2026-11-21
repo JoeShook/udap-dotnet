@@ -43,6 +43,26 @@ The allowed `purpose_of_use` codes come from the [TEFCA SOP: Exchange Purposes v
 
 At dynamic client registration time, `TefcaRegistrationValidator` validates that the client certificate's SAN URI contains a valid TEFCA Exchange Purpose code in the fragment (e.g., `https://example.com/fhir#T-TREAT`).
 
+### Exchange purpose location in the SAN URI
+
+Registration and token validation read the exchange purpose with the same reader (`ExchangePurposeSanReader`), so they always agree on a client's exchange purpose. [SOP v2.0](https://rce.sequoiaproject.org/wp-content/uploads/2026/02/SOP-Facilitated-FHIR-Implementation-2.0-Draft-508.pdf#page=14) Section 6.11 (Registration #5a) places the exchange purpose in the SAN URI path, and the exact client SAN format is still being settled, so the location is configurable:
+
+| `ExchangePurposeLocation` | Example SAN URI | Notes |
+|---------------------------|-----------------|-------|
+| `Fragment` (default) | `urn:oid:2.999#T-TRTMNT` | Text after the last `#` |
+| `PathSegment` | `https://example.com/fhir/T-TRTMNT` | Any path segment that is a valid XP code; two different codes are rejected |
+| `QueryParameter` | `https://example.com/fhir?xp=T-TRTMNT` | Parameter name from `ExchangePurposeQueryParameter` (default `xp`, case-sensitive) |
+
+```csharp
+builder.Services.AddUdapTefcaValidation(options =>
+{
+    options.ExchangePurposeLocation = ExchangePurposeLocation.QueryParameter;
+    options.ExchangePurposeQueryParameter = "xp";
+});
+```
+
+Only the selected location is read. Codes not in `TefcaConstants.ExchangePurposeCodes.All` are rejected at both registration and token time.
+
 ### IAS conditional logic
 
 When a client is registered with exchange purpose `T-IAS` and requests a `client_credentials` token, the `tefca_ias` authorization extension object must be present in the request (SOP v2.0 Section 6.11). Whenever a `tefca_ias` extension is present, it must carry an `id_token` (SOP v2.0 Table 4).
