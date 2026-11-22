@@ -36,4 +36,25 @@ public class TefcaValidationOptions
     /// <a href="https://rce.sequoiaproject.org/wp-content/uploads/2026/07/Treatment-XP-SOP-v2.0_7.1.2026_508.pdf#page=8">Treatment XP SOP v2.0 — Section 6.2</a>
     /// </summary>
     public bool EnforceTreatmentOrganizationIdentifiers { get; set; }
+
+    /// <summary>
+    /// Where the exchange purpose code is read from in the client certificate's SAN URI, for both
+    /// registration and token validation. Defaults to <see cref="Server.ExchangePurposeLocation.Fragment"/>
+    /// (e.g. <c>urn:oid:2.999#T-TRTMNT</c>). SOP v2.0 Section 6.11 (Registration #5a) places the
+    /// exchange purpose in the SAN URI path; select <see cref="Server.ExchangePurposeLocation.PathSegment"/>
+    /// or <see cref="Server.ExchangePurposeLocation.QueryParameter"/> once the community's SAN format is settled.
+    ///
+    /// <a href="https://rce.sequoiaproject.org/wp-content/uploads/2026/02/SOP-Facilitated-FHIR-Implementation-2.0-Draft-508.pdf#page=14">SOP v2.0 — Section 6.11 Registration #5a</a>
+    /// </summary>
+    public ExchangePurposeLocation ExchangePurposeLocation { get; set; } = ExchangePurposeLocation.Fragment;
+
+    /// <summary>
+    /// The query parameter that carries the exchange purpose code when
+    /// <see cref="ExchangePurposeLocation"/> is <see cref="Server.ExchangePurposeLocation.QueryParameter"/>.
+    /// There is no default: the TEFCA client SAN format is not settled, so the deployment must
+    /// configure the name, and startup fails options validation when it is missing.
+    /// The name is matched exactly (ordinal, case-sensitive) against the raw SAN text, and the value
+    /// is taken verbatim (no percent-decoding), per HL7 SSRAA 3.0.0 "Normalization of URI values in JWTs".
+    /// </summary>
+    public string? ExchangePurposeQueryParameter { get; set; }
 }

@@ -43,6 +43,36 @@ The allowed `purpose_of_use` codes come from the [TEFCA SOP: Exchange Purposes v
 
 At dynamic client registration time, `TefcaRegistrationValidator` validates that the client certificate's SAN URI contains a valid TEFCA Exchange Purpose code in the fragment (e.g., `https://example.com/fhir#T-TREAT`).
 
+### Exchange purpose location in the SAN URI
+
+Registration and token validation read the exchange purpose with the same reader (`ExchangePurposeSanReader`), so they always agree on a client's exchange purpose. [SOP v2.0](https://rce.sequoiaproject.org/wp-content/uploads/2026/02/SOP-Facilitated-FHIR-Implementation-2.0-Draft-508.pdf#page=14) Section 6.11 (Registration #5a) places the exchange purpose in the SAN URI path, and the exact client SAN format is still being settled, so the location is configurable:
+
+| `ExchangePurposeLocation` | Example SAN URI | Notes |
+|---------------------------|-----------------|-------|
+| `Fragment` (default) | `urn:oid:2.999#T-TRTMNT` | Text after the last `#` |
+| `PathSegment` | `https://example.com/fhir/T-TRTMNT` | Any path segment that is a valid XP code; two different codes are rejected |
+| `QueryParameter` | `https://example.com/fhir?<your-parameter-name>=T-TRTMNT` | Parameter name from `ExchangePurposeQueryParameter`; **no default**, the deployment must set it |
+
+```csharp
+builder.Services.AddUdapTefcaValidation(options =>
+{
+    options.ExchangePurposeLocation = ExchangePurposeLocation.QueryParameter;
+    options.ExchangePurposeQueryParameter = "<your-parameter-name>"; // the name your community's client SAN uses
+});
+```
+
+The SDK does not guess a query parameter name because the TEFCA client SAN format is not settled. If `QueryParameter` is selected without a name, `TefcaValidationOptionsValidator` fails options validation and the host does not start (`ValidateOnStart`).
+
+Only the selected location is read. Codes not in `TefcaConstants.ExchangePurposeCodes.All` are rejected at both registration and token time.
+
+The SAN is read exactly as written, following HL7 SSRAA 3.0.0 "Normalization of URI values in JWTs" (URI values are compared as case-sensitive strings, with no transformation or canonicalization):
+
+- No `System.Uri` parsing: no host lowercasing, default-port removal, percent-decoding or path canonicalization.
+- The query is the raw text after the first `?` up to `#`. Parameter names match exactly (ordinal, case-sensitive). Values are taken verbatim and must equal an exchange purpose code exactly, so `T%2DTRTMNT` is rejected.
+- A parameter repeated with different values is ambiguous and rejected.
+- Path segments are compared raw and ordinally.
+- `…/Organization?<name>=T-TRTMNT` and `…/Organization/?<name>=T-TRTMNT` yield the same exchange purpose. The trailing slash only matters elsewhere: SAN/`iss` equality is still an exact string comparison.
+
 ### IAS conditional logic
 
 When a client is registered with exchange purpose `T-IAS` and requests a `client_credentials` token, the `tefca_ias` authorization extension object must be present in the request (SOP v2.0 Section 6.11). Whenever a `tefca_ias` extension is present, it must carry an `id_token` (SOP v2.0 Table 4).
