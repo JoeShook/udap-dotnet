@@ -8,15 +8,24 @@
 #endregion
 
 using System.Text.Json;
+using Duende.IdentityServer.Models;
+using Duende.IdentityServer.Validation;
+using Microsoft.AspNetCore.Http;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using Microsoft.IdentityModel.JsonWebTokens;
 using Microsoft.IdentityModel.Tokens;
+using NSubstitute;
 using Udap.Model;
 using Udap.Model.Registration;
 using Udap.Model.UdapAuthenticationExtensions;
+using Udap.Server.Configuration;
 using Udap.Server.Registration;
+using Udap.Server.Storage;
+using Udap.Server.Storage.Stores;
 using Udap.Server.Validation;
+using Udap.Server.Validation.Default;
 using Udap.Tefca.Model;
 using Udap.Tefca.Server;
 using Xunit;
@@ -564,16 +573,279 @@ public class TefcaCommunityValidatorTests
 
     #endregion
 
+    #region User scopes rejected (SOP v2.0 Section 6.11 Registration #10)
+
+    [Fact]
+    public void RejectUserScopes_DefaultsToTrue()
+    {
+        Assert.True(new TefcaValidationOptions().RejectUserScopes);
+    }
+
+    [Theory]
+    [InlineData("user/Patient.read")]
+    [InlineData("system/Patient.rs user/Observation.rs")]
+    [InlineData("openid user/*.read")]
+    public async Task Registration_UserScope_IsRejectedWithInvalidScope(string scope)
+    {
+        var validator = new TefcaRegistrationValidator(DefaultOptions);
+        var context = CreateRegistrationContext("urn:oid:2.999#T-TREAT", scope);
+
+        var result = await validator.ValidateAsync(context);
+
+        Assert.NotNull(result);
+        Assert.True(result.IsError);
+        Assert.Equal(UdapDynamicClientRegistrationErrors.InvalidScope, result.Error);
+        Assert.Contains("user/", result.ErrorDescription);
+    }
+
+    [Fact]
+    public async Task Registration_UserScope_ReadFromSoftwareStatementNotResolvedDocument()
+    {
+        // The registration validator rewrites Document.Scope to the scopes the server
+        // resolved, which can drop an unknown user/ scope. The original claim must win.
+        var validator = new TefcaRegistrationValidator(DefaultOptions);
+        var context = CreateRegistrationContext("urn:oid:2.999#T-TREAT", "system/Patient.rs user/Patient.rs");
+        context.Document!.Scope = "system/Patient.rs";
+
+        var result = await validator.ValidateAsync(context);
+
+        Assert.NotNull(result);
+        Assert.Equal(UdapDynamicClientRegistrationErrors.InvalidScope, result.Error);
+    }
+
+    [Fact]
+    public async Task Registration_UserScope_FallsBackToDocumentScope()
+    {
+        var validator = new TefcaRegistrationValidator(DefaultOptions);
+        var context = CreateRegistrationContext("urn:oid:2.999#T-TREAT");
+        context.Document = new UdapDynamicClientRegistrationDocument { Scope = "user/Patient.rs" };
+
+        var result = await validator.ValidateAsync(context);
+
+        Assert.NotNull(result);
+        Assert.Equal(UdapDynamicClientRegistrationErrors.InvalidScope, result.Error);
+    }
+
+    [Theory]
+    [InlineData("system/Patient.rs system/Observation.rs")]
+    [InlineData("openid fhirUser patient/Patient.rs")]
+    [InlineData("system/*.read")]
+    public async Task Registration_NoUserScope_Succeeds(string scope)
+    {
+        var validator = new TefcaRegistrationValidator(DefaultOptions);
+        var context = CreateRegistrationContext("urn:oid:2.999#T-TREAT", scope);
+
+        var result = await validator.ValidateAsync(context);
+
+        Assert.Null(result);
+    }
+
+    [Fact]
+    public async Task Registration_UserScope_OptionDisabled_Succeeds()
+    {
+        var validator = new TefcaRegistrationValidator(
+            Options.Create(new TefcaValidationOptions { RejectUserScopes = false }));
+        var context = CreateRegistrationContext("urn:oid:2.999#T-TREAT", "user/Patient.rs");
+
+        var result = await validator.ValidateAsync(context);
+
+        Assert.Null(result);
+    }
+
+    [Theory]
+    [InlineData("client_credentials")]
+    [InlineData("authorization_code")]
+    public async Task Token_UserScope_IsRejectedWithInvalidScope(string grantType)
+    {
+        var validator = new TefcaTokenValidator(DefaultOptions);
+        var context = CreateTokenContext(
+            sanUri: "urn:oid:2.999#T-TREAT",
+            purposeOfUse: $"urn:oid:{TefcaConstants.ExchangePurposeCodes.Oid}#T-TREAT",
+            grantType: grantType);
+        context.RequestedScopes = ["system/Patient.rs", "user/Patient.rs"];
+
+        var result = await validator.ValidateAsync(context);
+
+        Assert.False(result.IsValid);
+        Assert.Equal("invalid_scope", result.Error);
+        Assert.Contains("user/Patient.rs", result.ErrorDescription);
+    }
+
+    [Fact]
+    public async Task Token_NoUserScope_Succeeds()
+    {
+        var validator = new TefcaTokenValidator(DefaultOptions);
+        var context = CreateTokenContext(
+            sanUri: "urn:oid:2.999#T-TREAT",
+            purposeOfUse: $"urn:oid:{TefcaConstants.ExchangePurposeCodes.Oid}#T-TREAT");
+        context.RequestedScopes = ["system/Patient.rs", "system/Observation.rs"];
+
+        var result = await validator.ValidateAsync(context);
+
+        Assert.True(result.IsValid);
+    }
+
+    [Fact]
+    public async Task Token_UserScope_OptionDisabled_Succeeds()
+    {
+        var validator = new TefcaTokenValidator(
+            Options.Create(new TefcaValidationOptions { RejectUserScopes = false }));
+        var context = CreateTokenContext(
+            sanUri: "urn:oid:2.999#T-TREAT",
+            purposeOfUse: $"urn:oid:{TefcaConstants.ExchangePurposeCodes.Oid}#T-TREAT");
+        context.RequestedScopes = ["user/Patient.rs"];
+
+        var result = await validator.ValidateAsync(context);
+
+        Assert.True(result.IsValid);
+    }
+
+    [Fact]
+    public async Task Token_UserScope_TefcaCommunity_RejectedThroughExtensionValidator()
+    {
+        var validator = CreateExtensionValidatorWithTefca(out var tefcaCommunityId, out _);
+        var context = CreateTokenContext(
+            sanUri: "urn:oid:2.999#T-TREAT",
+            purposeOfUse: $"urn:oid:{TefcaConstants.ExchangePurposeCodes.Oid}#T-TREAT");
+        context.CommunityId = tefcaCommunityId;
+        context.CommunityName = null;
+        context.RequestedScopes = ["user/Patient.rs"];
+
+        var result = await validator.ValidateAsync(context);
+
+        Assert.False(result.IsValid);
+        Assert.Equal("invalid_scope", result.Error);
+    }
+
+    [Fact]
+    public async Task Token_UserScope_OtherCommunity_Unaffected()
+    {
+        var validator = CreateExtensionValidatorWithTefca(out _, out var otherCommunityId);
+        var context = CreateTokenContext(
+            sanUri: "urn:oid:2.999#T-TREAT",
+            purposeOfUse: null);
+        context.CommunityId = otherCommunityId;
+        context.CommunityName = null;
+        context.RequestedScopes = ["user/Patient.rs"];
+
+        var result = await validator.ValidateAsync(context);
+
+        Assert.True(result.IsValid);
+    }
+
+    [Fact]
+    public async Task CustomTokenRequestValidator_PassesRequestedScopesToCommunityValidators()
+    {
+        var extensionValidator = Substitute.For<IUdapAuthorizationExtensionValidator>();
+        UdapAuthorizationExtensionValidationContext? captured = null;
+        extensionValidator
+            .ValidateAsync(Arg.Do<UdapAuthorizationExtensionValidationContext>(c => captured = c))
+            .Returns(Task.FromResult(AuthorizationExtensionValidationResult.Failure(
+                "invalid_scope", "TEFCA does not permit user scopes: user/Patient.rs")));
+
+        var customValidator = new UdapCustomTokenRequestValidator(
+            extensionValidator,
+            Enumerable.Empty<IAuthorizationExtensionDeserializer>(),
+            Substitute.For<IHttpContextAccessor>(),
+            new ServerSettings(),
+            Substitute.For<IUdapClientRegistrationStore>(),
+            Substitute.For<ILogger<UdapCustomTokenRequestValidator>>());
+
+        var handler = new JsonWebTokenHandler();
+        var assertion = handler.CreateToken(new SecurityTokenDescriptor
+        {
+            Issuer = "test-client",
+            Claims = new Dictionary<string, object> { ["sub"] = "test-client" }
+        });
+
+        var request = new ValidatedTokenRequest
+        {
+            ClientId = "test-client",
+            GrantType = "client_credentials",
+            Client = new Client
+            {
+                ClientId = "test-client",
+                ClientSecrets =
+                {
+                    new Secret("urn:oid:2.999#T-TREAT") { Type = UdapServerConstants.SecretTypes.UDAP_SAN_URI_ISS_NAME },
+                    new Secret("1") { Type = UdapServerConstants.SecretTypes.UDAP_COMMUNITY }
+                }
+            },
+            Secret = new ParsedSecret { Credential = assertion },
+            ValidatedResources = new ResourceValidationResult
+            {
+                ParsedScopes =
+                {
+                    new ParsedScopeValue("system/Patient.rs"),
+                    new ParsedScopeValue("user/Patient.rs")
+                }
+            }
+        };
+
+        var context = new CustomTokenRequestValidationContext
+        {
+            Result = new TokenRequestValidationResult(request)
+        };
+
+        await customValidator.ValidateAsync(context, CancellationToken.None);
+
+        Assert.NotNull(captured);
+        Assert.NotNull(captured.RequestedScopes);
+        Assert.Contains("user/Patient.rs", captured.RequestedScopes);
+        Assert.Contains("system/Patient.rs", captured.RequestedScopes);
+        Assert.True(context.Result.IsError);
+        Assert.Equal("invalid_scope", context.Result.Error);
+    }
+
+    private static DefaultUdapAuthorizationExtensionValidator CreateExtensionValidatorWithTefca(
+        out string tefcaCommunityId,
+        out string otherCommunityId)
+    {
+        tefcaCommunityId = "1";
+        otherCommunityId = "2";
+
+        var clientStore = Substitute.For<IUdapClientRegistrationStore>();
+        clientStore.GetCommunityName(tefcaCommunityId)
+            .Returns(Task.FromResult<string?>(TefcaConstants.CommunityUri));
+        clientStore.GetCommunityName(otherCommunityId)
+            .Returns(Task.FromResult<string?>("udap://other-community"));
+
+        return new DefaultUdapAuthorizationExtensionValidator(
+            clientStore,
+            [new TefcaTokenValidator(DefaultOptions)],
+            Substitute.For<ILogger<DefaultUdapAuthorizationExtensionValidator>>());
+    }
+
+    #endregion
+
     #region Helpers
 
-    private static UdapDynamicClientRegistrationContext CreateRegistrationContext(string? issuer)
+    private static UdapDynamicClientRegistrationContext CreateRegistrationContext(string? issuer, string? scope = null)
     {
-        return new UdapDynamicClientRegistrationContext
+        var context = new UdapDynamicClientRegistrationContext
         {
             Request = new UdapRegisterRequest(),
             Issuer = issuer,
             CommunityName = TefcaConstants.CommunityUri
         };
+
+        if (scope != null)
+        {
+            var handler = new JsonWebTokenHandler();
+            context.JsonWebToken = handler.ReadJsonWebToken(
+                handler.CreateToken(new SecurityTokenDescriptor
+                {
+                    Issuer = issuer,
+                    Claims = new Dictionary<string, object>
+                    {
+                        ["sub"] = issuer ?? "test-client",
+                        [UdapConstants.RegistrationDocumentValues.Scope] = scope
+                    }
+                }));
+            context.Document = new UdapDynamicClientRegistrationDocument { Scope = scope };
+        }
+
+        return context;
     }
 
     private static UdapAuthorizationExtensionValidationContext CreateTokenContext(

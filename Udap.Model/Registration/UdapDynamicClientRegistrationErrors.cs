@@ -17,6 +17,13 @@ public static class UdapDynamicClientRegistrationErrors
     public const string InvalidClientMetadata = "invalid_client_metadata";
     public const string InvalidSoftwareStatement = "invalid_software_statement";
     public const string UnapprovedSoftwareStatement = "unapproved_software_statement";
+
+    /// <summary>
+    /// The requested scope is invalid, unknown, or not permitted. Defined by
+    /// <a href="https://datatracker.ietf.org/doc/html/rfc6749#section-5.2">rfc6749 section 5.2</a>;
+    /// trust community profiles may require it at registration as well.
+    /// </summary>
+    public const string InvalidScope = "invalid_scope";
 }
 
 public static class UdapDynamicClientRegistrationErrorDescriptions
