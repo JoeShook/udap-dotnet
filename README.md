@@ -78,6 +78,8 @@ UDAP is a PKI extension profile to OAuth 2.0. One or more PKIs can be hosted by 
 - **SSRAA** — validates against HL7 v3 PurposeOfUse value set (60+ codes)
 - **TEFCA** — validates against the 17 TEFCA Exchange Purpose (XP) codes (Exchange Purposes SOP v5.1), enforces single purpose_of_use, SAN URI matching
 
+The SSRAA 2.0 protocol rules (PKCE, `state`, `https` redirect URIs) are server-wide `ServerSettings` and apply to every community, so TEFCA communities get them too. Map each community to one profile: do not list a TEFCA community in `AddUdapSsraaValidation`. See [SSRAA 2.0 in TEFCA communities](Udap.Server/docs/README.md#ssraa-20-in-tefca-communities).
+
 </details>
 
 <details>

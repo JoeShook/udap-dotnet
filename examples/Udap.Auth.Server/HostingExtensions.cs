@@ -123,6 +123,11 @@ internal static class HostingExtensions
             options.Communities.Add("udap://fhirlabs.net");
         });
 
+        // TEFCA communities get the SSRAA 2.0 protocol rules (PKCE S256, state, https redirect URIs)
+        // from ServerSettings.SsraaVersion = V2_0, which applies to every community. The TEFCA community
+        // is deliberately not listed in AddUdapSsraaValidation above: the first registered validator
+        // that applies to a community supplies its purpose_of_use rules, and the HL7 v3 codes would
+        // reject the TEFCA Exchange Purpose codes.
         builder.Services.AddUdapTefcaExtensions();
         builder.Services.AddUdapTefcaValidation(options =>
         {

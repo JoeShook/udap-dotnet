@@ -21,6 +21,10 @@ builder.Services.AddUdapSsraaValidation(options =>
 });
 ```
 
+This package covers the SSRAA `purpose_of_use` value set and required extensions only. The SSRAA 2.0 protocol rules (PKCE, `state`, `https` redirect URIs, `jti`, token lifetimes) are server-wide [`ServerSettings`](../../Udap.Server/docs/README.md#ssraa-20-in-tefca-communities) in Udap.Server and apply to every community whether or not it is listed here.
+
+Do not list a TEFCA community here. TEFCA communities use `AddUdapTefcaValidation` from [Udap.Tefca.Server](../../Udap.Tefca.Server/docs/README.md), which allows TEFCA Exchange Purpose codes. When two validators apply to the same community, the first one registered supplies the allowed codes, so listing a TEFCA community here can make every TEFCA `purpose_of_use` fail.
+
 ## What it enforces
 
 | Rule | `client_credentials` | `authorization_code` |
