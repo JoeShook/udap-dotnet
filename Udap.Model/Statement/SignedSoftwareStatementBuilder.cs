@@ -41,6 +41,20 @@ public class SignedSoftwareStatementBuilder<T> where T : class, ISoftwareStateme
         return new SignedSoftwareStatementBuilder<T>(certificates, document);
     }
 
+    /// <summary>
+    /// Create a builder whose <c>x5c</c> header carries <paramref name="certificate"/> followed by the
+    /// intermediate(s) that issued it. The issuing chain is picked out of <paramref name="intermediates"/>
+    /// and ordered nearest issuer first; certificates that are not part of the chain and self-signed roots
+    /// are left out. See <see cref="X5cChain.Build"/>.
+    /// </summary>
+    /// <param name="certificate">The signing (leaf) certificate, with its private key.</param>
+    /// <param name="intermediates">Candidate CA certificates, for example those loaded alongside the signing certificate.</param>
+    /// <param name="document">The payload to sign.</param>
+    public static SignedSoftwareStatementBuilder<T> Create(X509Certificate2 certificate, IEnumerable<X509Certificate2>? intermediates, T document)
+    {
+        return new SignedSoftwareStatementBuilder<T>(X5cChain.Build(certificate, intermediates), document);
+    }
+
     //
     // No With items...
     // There are plenty of interesting scenarios like loading the x5c hierarchy where

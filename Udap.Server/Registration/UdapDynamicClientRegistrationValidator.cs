@@ -53,8 +53,24 @@ public class UdapDynamicClientRegistrationValidator : IUdapDynamicClientRegistra
     private readonly IHttpContextAccessor _httpContextAccessor;
     private readonly IScopeExpander _scopeExpander;
     private readonly IResourceStore _resourceStore;
+    private readonly IEnumerable<ICommunityX5cPolicy> _x5cPolicies = [];
 
     private const string Purpose = nameof(UdapDynamicClientRegistrationValidator);
+
+    public UdapDynamicClientRegistrationValidator(
+        TrustChainValidator trustChainValidator,
+        HttpClient httpClient,
+        IReplayCache replayCache,
+        ServerSettings serverSettings,
+        IHttpContextAccessor httpContextAccessor,
+        IScopeExpander scopeExpander,
+        IResourceStore resourceStore, //TODO use CachingResourceStore
+        ILogger<UdapDynamicClientRegistrationValidator> logger,
+        IEnumerable<ICommunityX5cPolicy> x5cPolicies)
+        : this(trustChainValidator, httpClient, replayCache, serverSettings, httpContextAccessor, scopeExpander, resourceStore, logger)
+    {
+        _x5cPolicies = x5cPolicies;
+    }
 
     public UdapDynamicClientRegistrationValidator(
         TrustChainValidator trustChainValidator,
@@ -347,7 +363,10 @@ public class UdapDynamicClientRegistrationValidator : IUdapDynamicClientRegistra
 
         _logger.LogDebug("Validating chain. x5c {X5c}", jwtHeader.X5c);
 
-        if (!await ValidateChainAsync(context, jsonWebToken, jwtHeader, intermediateCertificates, anchorCertificates, anchors))
+        var (chainValidationResult, issuingIntermediateRequired) =
+            await ValidateChainAsync(context, jsonWebToken, jwtHeader, intermediateCertificates, anchorCertificates, anchors);
+
+        if (chainValidationResult == null)
         {
             _logger.LogWarning("{Error}::{Description}",
                 UdapDynamicClientRegistrationErrors.UnapprovedSoftwareStatement,
@@ -372,6 +391,20 @@ public class UdapDynamicClientRegistrationValidator : IUdapDynamicClientRegistra
         }
 
         _logger.LogDebug("Chain Validated");
+
+        if (issuingIntermediateRequired &&
+            !X5cIssuingIntermediate.IsPresent(Getx5c(jwtHeader), chainValidationResult))
+        {
+            _logger.LogWarning("{Error}::{Description} Community: {Community} Client Thumbprint: {Thumbprint}",
+                UdapDynamicClientRegistrationErrors.InvalidSoftwareStatement,
+                UdapDynamicClientRegistrationErrorDescriptions.X5cMissingIssuingIntermediate,
+                chainValidationResult.CommunityName,
+                publicCert.Thumbprint);
+
+            return new UdapDynamicClientRegistrationValidationResult(
+                UdapDynamicClientRegistrationErrors.InvalidSoftwareStatement,
+                UdapDynamicClientRegistrationErrorDescriptions.X5cMissingIssuingIntermediate);
+        }
 
         var (org, dataHolder) = ResolveOrgAndDataHolder(_httpContextAccessor.HttpContext, aud);
         context.Organization = org;
@@ -745,7 +778,17 @@ public class UdapDynamicClientRegistrationValidator : IUdapDynamicClientRegistra
         return new UdapDynamicClientRegistrationValidationResult(string.Empty);
     }
 
-    private async Task<bool> ValidateChainAsync(
+    /// <summary>
+    /// Validates the trust chain of the first x5c certificate and returns the validation result when trusted, otherwise null.
+    /// <para>
+    /// Communities an <see cref="ICommunityX5cPolicy"/> claims are tried first: their chain is built from the other
+    /// x5c entries and the configured intermediates only, with no AIA download. When that chain is trusted,
+    /// <c>IssuingIntermediateRequired</c> is true and the caller checks that x5c carries the issuing intermediate.
+    /// All other communities are validated as before: from the configured intermediates and AIA, never from the
+    /// other x5c entries, and only against anchors that belong to at least one community the policies do not claim.
+    /// </para>
+    /// </summary>
+    private async Task<(ChainValidationResult? Result, bool IssuingIntermediateRequired)> ValidateChainAsync(
         UdapDynamicClientRegistrationContext context,
         JsonWebToken jwtSecurityToken,
         JwtHeader jwtHeader,
@@ -755,7 +798,6 @@ public class UdapDynamicClientRegistrationValidator : IUdapDynamicClientRegistra
     {
         var x5cArray = Getx5c(jwtHeader);
 
-        // TODO: no test cases for x5c with intermediate certificates.
         if (x5cArray != null)
         {
 #if NET9_0_OR_GREATER
@@ -763,21 +805,81 @@ public class UdapDynamicClientRegistrationValidator : IUdapDynamicClientRegistra
 #else
             var cert = new X509Certificate2(Convert.FromBase64String(x5cArray.First()));
 #endif
+            var clientName = context.Document?.ClientName ?? string.Empty;
+            var anchorList = anchors?.ToList();
+            var policyAnchors = anchorList?
+                .Where(a => X5cIssuingIntermediate.IsRequired(_x5cPolicies, a.Community))
+                .ToList() ?? [];
 
-            var result = await _trustChainValidator.IsTrustedCertificateAsync(
-                context.Document?.ClientName ?? string.Empty,
-                cert,
-                intermediateCertificates,
-                anchorCertificates,
-                anchors);
+            ChainValidationResult? result = null;
+            var issuingIntermediateRequired = false;
 
-            if (result.IsValid)
+            if (policyAnchors.Count != 0)
+            {
+                var policyThumbprints = policyAnchors.Select(a => a.Thumbprint).ToHashSet(StringComparer.OrdinalIgnoreCase);
+                var policyAnchorCertificates = new X509Certificate2Collection(
+                    anchorCertificates.Where(c => policyThumbprints.Contains(c.Thumbprint)).ToArray());
+
+                var policyIntermediates = X5cIssuingIntermediate.ReadIntermediates(x5cArray);
+                if (intermediateCertificates != null)
+                {
+                    policyIntermediates.AddRange(intermediateCertificates);
+                }
+
+                if (policyAnchorCertificates.Count != 0)
+                {
+                    var policyResult = await _trustChainValidator.IsTrustedCertificateAsync(
+                        clientName,
+                        cert,
+                        policyIntermediates,
+                        policyAnchorCertificates,
+                        policyAnchors,
+                        allowAiaDownload: false);
+
+                    if (policyResult.IsValid)
+                    {
+                        result = policyResult;
+                        issuingIntermediateRequired = true;
+                    }
+                }
+
+                if (result == null)
+                {
+                    // Anchors used only by policy communities are left out, so a chain completed through AIA
+                    // can never place the client in one of those communities.
+                    var otherAnchors = anchorList!.Except(policyAnchors).ToList();
+                    var otherThumbprints = otherAnchors.Select(a => a.Thumbprint).ToHashSet(StringComparer.OrdinalIgnoreCase);
+                    var otherAnchorCertificates = new X509Certificate2Collection(
+                        anchorCertificates.Where(c => otherThumbprints.Contains(c.Thumbprint) || !policyThumbprints.Contains(c.Thumbprint)).ToArray());
+
+                    if (otherAnchorCertificates.Count != 0)
+                    {
+                        result = await _trustChainValidator.IsTrustedCertificateAsync(
+                            clientName,
+                            cert,
+                            intermediateCertificates,
+                            otherAnchorCertificates,
+                            otherAnchors);
+                    }
+                }
+            }
+            else
+            {
+                result = await _trustChainValidator.IsTrustedCertificateAsync(
+                    clientName,
+                    cert,
+                    intermediateCertificates,
+                    anchorCertificates,
+                    anchors);
+            }
+
+            if (result is { IsValid: true })
             {
                 if (result.ChainElements.Count == 0)
                 {
                     _logger.LogError("Missing chain elements");
 
-                    return false;
+                    return (null, false);
                 }
 
                 context.Issuer = jwtSecurityToken.Issuer;
@@ -785,14 +887,14 @@ public class UdapDynamicClientRegistrationValidator : IUdapDynamicClientRegistra
                 context.CommunityName = result.CommunityName;
                 context.CertificateExpiration = result.ChainElements.First().Certificate.NotAfter.ToUniversalTime();
 
-                return true;
+                return (result, issuingIntermediateRequired);
             }
         }
 
         _logger.LogDebug("JWT payload: {EncodedPayload}", jwtSecurityToken.EncodedPayload);
         _logger.LogDebug("x5c: {X5c}", jwtHeader.X5c);
 
-        return false;
+        return (null, false);
     }
 
     private string[]? _x5cArray;

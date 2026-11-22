@@ -69,6 +69,8 @@ public class IssuedCertificateStore : IPrivateCertificateStore
         {
             _logger.LogInformation("Loading Community:: Name: '{CommunityName}'", community.Name);
 
+            var communityIntermediates = IssuedCertificateFactory.LoadCommunityIntermediates(community, _logger);
+
             foreach (var communityIssuer in community.IssuedCerts)
             {
                 if (communityIssuer.FilePath == null)
@@ -100,7 +102,8 @@ public class IssuedCertificateStore : IPrivateCertificateStore
                             !extension.CertificateAuthority)
                         {
                             _logger.LogInformation("Loading Certificate:: Thumbprint: {Thumbprint}  Subject: {SubjectName}", x509Cert.Thumbprint, x509Cert.SubjectName.Name);
-                            IssuedCertificates.Add(new IssuedCertificate(x509Cert, community.Name));
+                            IssuedCertificates.Add(IssuedCertificateFactory.Create(
+                                x509Cert, community.Name, certificates, communityIntermediates, _logger));
                         }
                     }
                 }

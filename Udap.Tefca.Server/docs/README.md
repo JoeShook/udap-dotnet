@@ -43,6 +43,23 @@ The allowed `purpose_of_use` codes come from the [TEFCA SOP: Exchange Purposes v
 
 At dynamic client registration time, `TefcaRegistrationValidator` validates that the client certificate's SAN URI contains a valid TEFCA Exchange Purpose code in the fragment (e.g., `https://example.com/fhir#T-TREAT`).
 
+### x5c: client certificate and issuing intermediate (on by default)
+
+The [Facilitated FHIR SOP v2.0](https://rce.sequoiaproject.org/wp-content/uploads/2026/02/SOP-Facilitated-FHIR-Implementation-2.0-Draft-508.pdf) Section 6.1 requires the `x5c` header to carry the client certificate followed by the intermediate that issued it. For TEFCA communities the server builds the chain from the `x5c` intermediates and the community's configured intermediates, never downloads an intermediate from an AIA URL, and rejects a software statement (`invalid_software_statement`) or client assertion (`invalid_client`) whose `x5c` lacks the issuing intermediate. CRL checking is unchanged. Other communities on the same server keep the base UDAP behaviour (leaf-only `x5c`, chain completed through AIA).
+
+To accept TEFCA clients that send only their certificate, for example during a transition:
+
+```csharp
+builder.Services.AddUdapTefcaValidation(options =>
+{
+    options.RequireIssuingIntermediateInX5c = false;
+});
+```
+
+At registration the server learns the client is in a TEFCA community by completing the chain offline. Configure the TEFCA intermediates for the community so a leaf-only client gets the specific `x5c` error; without them the client is reported as untrusted.
+
+At the token endpoint the community comes from the client's registration. When TEFCA validation is registered, a client assertion from a client whose community cannot be resolved is rejected with `invalid_client`, whatever its community.
+
 ### IAS conditional logic
 
 When a client is registered with exchange purpose `T-IAS` and requests a `client_credentials` token, the `tefca_ias` authorization extension object must be present in the request (SOP v2.0 Section 6.11). Whenever a `tefca_ias` extension is present, it must carry an `id_token` (SOP v2.0 Table 4).
