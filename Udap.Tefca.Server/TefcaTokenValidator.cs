@@ -7,6 +7,7 @@
 // */
 #endregion
 
+using System.Security.Cryptography.X509Certificates;
 using System.Text.Json;
 using System.Text.RegularExpressions;
 using Microsoft.Extensions.Options;
@@ -14,6 +15,7 @@ using Udap.Model;
 using Udap.Model.UdapAuthenticationExtensions;
 using Udap.Server.Validation;
 using Udap.Tefca.Model;
+using Udap.Util.Extensions;
 
 namespace Udap.Tefca.Server;
 
@@ -32,6 +34,9 @@ namespace Udap.Tefca.Server;
 /// 7. Optionally (see <see cref="TefcaValidationOptions.EnforceTreatmentOrganizationIdentifiers"/>),
 ///    Treatment token requests must carry the NPI/TIN in <c>organization_name</c> and an
 ///    <c>organization_id</c> per the Treatment XP Implementation SOP v2.0 Section 6.2.
+/// 8. Optionally (see <see cref="TefcaValidationOptions.RequiredCertificateOrganizationalUnits"/>),
+///    the client assertion's <c>x5c[0]</c> must carry one of the community's configured subject
+///    organizational units (for example <c>RCE-FHIR</c>); otherwise the request fails with <c>invalid_client</c>.
 ///
 /// <a href="https://rce.sequoiaproject.org/wp-content/uploads/2026/02/SOP-Facilitated-FHIR-Implementation-2.0-Draft-508.pdf#page=15">
 /// SOP v2.0 — Table 2 and IAS Queries</a>
@@ -88,6 +93,29 @@ public class TefcaTokenValidator : ICommunityTokenValidator
     public Task<AuthorizationExtensionValidationResult> ValidateAsync(
         UdapAuthorizationExtensionValidationContext context)
     {
+        var requiredOrganizationalUnits = _options.GetRequiredOrganizationalUnits(context.CommunityName);
+
+        if (requiredOrganizationalUnits != null)
+        {
+            X509Certificate2? clientCertificate;
+            try
+            {
+                clientCertificate = context.ClientAssertionToken.GetPublicCertificate();
+            }
+            catch (Exception)
+            {
+                clientCertificate = null;
+            }
+
+            if (clientCertificate == null
+                || !clientCertificate.HasSubjectOrganizationalUnit(requiredOrganizationalUnits))
+            {
+                return Task.FromResult(AuthorizationExtensionValidationResult.Failure(
+                    "invalid_client",
+                    $"TEFCA client assertion certificate subject must include an organizational unit (OU) of: {string.Join(", ", requiredOrganizationalUnits)}"));
+            }
+        }
+
         if (string.IsNullOrEmpty(context.SanUri))
         {
             return Task.FromResult(AuthorizationExtensionValidationResult.Failure(
